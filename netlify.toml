@@ -1,0 +1,126 @@
+[[redirects]]
+  from = "/api/databridge-port-tariff"
+  to = "https://calm-shortbread-55bcfc.netlify.app/api/databridge-port-tariff"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/api/get-bunker-prices"
+  to = "/.netlify/functions/get-bunker-prices"
+  status = 200
+  force = true
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+  external_node_modules = ["pdfjs-dist"]
+
+[functions."nlp-voyage-extract"]
+  included_files = ["wpi.csv"]
+
+[dev]
+  command = "npm run dev"
+  targetPort = 5173
+  port = 8889
+
+[build.environment]
+  NODE_ENV = "production"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+    Pragma = "no-cache"
+    Expires = "0"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Content-Security-Policy = "default-src * 'unsafe-inline' 'unsafe-eval'; script-src * 'unsafe-inline' 'unsafe-eval' blob:; worker-src * 'self' blob: data:; connect-src * wss: https:; img-src * data: blob:; style-src * 'unsafe-inline';"
+
+[[redirects]]
+  from = "/api/syncPull/*"
+  to = "/.netlify/functions/sync-pull/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/api/v1/vessel/live-profile"
+  to = "/.netlify/functions/vessel-live-profile"
+  status = 200
+
+[[redirects]]
+  from = "/api/v1/voyage/tracking/*"
+  to = "/.netlify/functions/voyage-tracking"
+  status = 200
+
+[[redirects]]
+  from = "/api/v1/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/api/project-chat"
+  to = "/.netlify/functions/project-chat"
+  status = 200
+
+[[redirects]]
+  from = "/project-chat"
+  to = "/.netlify/functions/project-chat"
+  status = 200
+
+[[redirects]]
+  from = "/api/agente-proyectos"
+  to = "/.netlify/functions/agente-proyectos"
+  status = 200
+
+[[redirects]]
+  from = "/api/dossiers"
+  to = "/.netlify/functions/dossiers"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/dossiers/*"
+  to = "/.netlify/functions/dossiers/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/route"
+  to = "/.netlify/functions/route"
+  status = 200
+
+[[redirects]]
+  from = "/components.js"
+  to = "/public/components.js"
+  status = 200
+
+[[redirects]]
+  from = "/databridge.html"
+  to = "/public/databridge.html"
+  status = 200
+
+[[redirects]]
+  from = "/assets/*"
+  to = "/assets/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

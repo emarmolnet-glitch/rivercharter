@@ -1,0 +1,450 @@
+import { sql } from "drizzle-orm";
+import {
+  boolean,
+  check,
+  doublePrecision,
+  index,
+  integer,
+  jsonb,
+  numeric,
+  pgEnum,
+  pgTable,
+  serial,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+  varchar,
+} from "drizzle-orm/pg-core";
+
+const createdAt = () => timestamp("created_at", { withTimezone: true }).defaultNow().notNull();
+const updatedAt = () => timestamp("updated_at", { withTimezone: true }).defaultNow().notNull();
+
+export const appConfig = pgTable("AppConfig", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: updatedAt(),
+});
+
+export const appState = pgTable(
+  "app_state",
+  {
+    key: text("key").primaryKey(),
+    currentSessionRef: text("current_session_ref"),
+    value: jsonb("value").default(sql`'{}'::jsonb`).notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    index("app_state_current_session_ref_idx").on(table.currentSessionRef),
+  ],
+);
+
+export const userSessions = pgTable(
+  "user_sessions",
+  {
+    sessionId: text("session_id").primaryKey(),
+    currentSessionRef: text("current_session_ref"),
+    sessionData: jsonb("session_data").default(sql`'{}'::jsonb`).notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    index("user_sessions_current_session_ref_idx").on(table.currentSessionRef),
+  ],
+);
+
+export const bunkerPricesLog = pgTable(
+  "bunker_prices_log",
+  {
+    id: serial("id").primaryKey(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    hubName: varchar("hub_name", { length: 120 }).notNull(),
+    fuelGrade: varchar("fuel_grade", { length: 16 }).notNull(),
+    price: numeric("price", { mode: "number" }).notNull(),
+    source: varchar("source", { length: 64 }).default("AUTO_BUNKERINDEX").notNull(),
+  },
+  (table) => [
+    index("bunker_prices_log_market_latest_idx").on(table.hubName, table.fuelGrade, table.createdAt),
+    check("bunker_prices_log_fuel_grade_check", sql`${table.fuelGrade} IN ('VLSFO', 'IFO380', 'MGO')`),
+    check("bunker_prices_log_price_positive_check", sql`${table.price} > 0`),
+    check("bunker_prices_log_source_not_blank_check", sql`BTRIM(${table.source}) <> ''`),
+  ],
+);
+
+export const pdaVesselConfirmations = pgTable("pda_vessel_confirmations", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  estimationId: text("estimation_id"),
+  vesselName: text("vessel_name").notNull(),
+  imoNumber: text("imo_number"),
+  pol: text("pol"),
+  pod: text("pod"),
+  previousVessel: jsonb("previous_vessel").notNull(),
+  actualVessel: jsonb("actual_vessel").notNull(),
+  operationalValidation: jsonb("operational_validation").notNull(),
+  financialBreakdown: jsonb("financial_breakdown").notNull(),
+  createdAt: createdAt(),
+});
+
+export const pdaEstimations = pgTable(
+  "pda_estimations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    calculationKey: text("calculation_key").notNull(),
+    estimationId: text("estimation_id"),
+    sessionId: text("session_id"),
+    pol: text("pol"),
+    pod: text("pod"),
+    pdaTotal: doublePrecision("pda_total").notNull(),
+    pdaPol: doublePrecision("pda_pol").notNull(),
+    pdaPod: doublePrecision("pda_pod").notNull(),
+    polBreakdown: jsonb("pol_breakdown").notNull(),
+    podBreakdown: jsonb("pod_breakdown").notNull(),
+    calculationMode: text("calculation_mode").default("parametric-estimator").notNull(),
+    currency: varchar("currency", { length: 3 }).default("USD").notNull(),
+    vesselName: text("vessel_name"),
+    imoNumber: text("imo_number"),
+    cargoQuantity: doublePrecision("cargo_quantity"),
+    calculationContext: jsonb("calculation_context").notNull(),
+    calculatedAt: timestamp("calculated_at", { withTimezone: true }).defaultNow().notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex("pda_estimations_calculation_key_uidx").on(table.calculationKey),
+    index("pda_estimations_estimation_updated_idx").on(table.estimationId, table.updatedAt),
+    index("pda_estimations_session_updated_idx").on(table.sessionId, table.updatedAt),
+    check("pda_estimations_values_nonnegative_check", sql`${table.pdaTotal} >= 0 AND ${table.pdaPol} >= 0 AND ${table.pdaPod} >= 0`),
+    check("pda_estimations_pol_breakdown_array_check", sql`jsonb_typeof(${table.polBreakdown}) = 'array'`),
+    check("pda_estimations_pod_breakdown_array_check", sql`jsonb_typeof(${table.podBreakdown}) = 'array'`),
+    check("pda_estimations_context_object_check", sql`jsonb_typeof(${table.calculationContext}) = 'object'`),
+  ],
+);
+
+export const sessionSync = pgTable(
+  "session_sync",
+  {
+    userId: text("user_id").primaryKey(),
+    syncId: text("sync_id").notNull(),
+    lastSyncData: jsonb("last_sync_data").notNull(),
+    lastActionModule: text("last_action_module").notNull(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    check("session_sync_payload_object_check", sql`jsonb_typeof(${table.lastSyncData}) = 'object'`),
+  ],
+);
+
+export const charterDossiers = pgTable(
+  "charter_dossiers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    accountKey: text("account_key").default("default-account").notNull(),
+    reference: text("reference").notNull(),
+    pol: text("pol"),
+    pod: text("pod"),
+    cargoName: text("cargo_name"),
+    cargoVolume: doublePrecision("cargo_volume"),
+    charterer: text("charterer"),
+    internalNotes: text("internal_notes"),
+    status: text("status").default("BORRADOR").notNull(),
+    sessionPayload: jsonb("session_payload").notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex("charter_dossiers_account_reference_uidx").on(table.accountKey, table.reference),
+    index("charter_dossiers_account_updated_idx").on(table.accountKey, table.updatedAt),
+    check("charter_dossiers_status_check", sql`${table.status} IN ('BORRADOR', 'COTIZADO', 'FIJADO')`),
+    check("charter_dossiers_payload_object_check", sql`jsonb_typeof(${table.sessionPayload}) = 'object'`),
+  ],
+);
+
+export const iaReports = pgTable("ia_reports", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  status: text("status").default("PENDING").notNull(),
+  progress: integer("progress").default(0).notNull(),
+  attemptCount: integer("attempt_count").default(0).notNull(),
+  requestPayload: jsonb("request_payload").notNull(),
+  reportData: jsonb("report_data"),
+  errorMessage: text("error_message"),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const dataBridgeVesselIngestions = pgTable("data_bridge_vessel_ingestions", {
+  id: serial("id").primaryKey(),
+  sourceFileName: text("source_file_name"),
+  sourceFileType: text("source_file_type").notNull(),
+  sourceProvider: text("source_provider"),
+  auditStatus: text("audit_status").default("PENDIENTE_AUDITORIA").notNull(),
+  vesselCount: integer("vessel_count").default(0).notNull(),
+  payload: jsonb("payload").notNull(),
+  rawText: text("raw_text"),
+  errorMessage: text("error_message"),
+  createdAt: createdAt(),
+});
+
+export const vesselsMaster = pgTable("vessels_master", {
+    id: serial("id").primaryKey(),
+    imoNumber: integer("imo_number").unique(),
+    vesselName: text("vessel_name"),
+    dwt: integer("dwt"),
+    mmsi: text("mmsi"),
+    latitude: doublePrecision("latitude"),
+    longitude: doublePrecision("longitude"),
+    vesselType: text("vessel_type"),
+    draftMeters: doublePrecision("draft_meters"),
+    flag: text("flag"),
+    callSign: text("call_sign"),
+    eta: timestamp("eta", { withTimezone: true, mode: "string" }),
+    lastPort: text("last_port"),
+    currentDestination: text("current_destination"),
+    yearBuilt: integer("year_built"),
+    grossTonnage: numeric("gross_tonnage", { mode: "number" }),
+    netTonnage: numeric("net_tonnage", { mode: "number" }),
+    loaMeters: numeric("loa_meters", { mode: "number" }),
+    beamMeters: numeric("beam_meters", { mode: "number" }),
+    ownerManager: text("owner_manager"),
+    hasGears: boolean("has_gears"),
+    processStatus: text("process_status"),
+    status: text("status"),
+    auditStatus: text("audit_status"),
+    sourceProvenance: text("source_provenance"),
+    origin: text("origen"),
+    source: text("source"),
+    sourcePayload: jsonb("source_payload"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    lastUpdatedAt: timestamp("fecha_ultima_actualizacion", { withTimezone: true }),
+  },
+  (table) => [
+    check(
+      "vessels_master_gross_tonnage_positive_check",
+      sql`${table.grossTonnage} IS NULL OR ${table.grossTonnage} > 0`,
+    ),
+    check(
+      "vessels_master_loa_meters_positive_check",
+      sql`${table.loaMeters} IS NULL OR ${table.loaMeters} > 0`,
+    ),
+    index("vessels_master_mmsi_lookup_idx").on(table.mmsi).where(sql`${table.mmsi} IS NOT NULL`),
+  ],
+);
+
+export const aisVessels = pgTable("ais_vessels", {
+  storageKey: text("storage_key").primaryKey(),
+  imoNumber: text("imo_number").notNull(),
+  mmsi: text("mmsi"),
+  vesselName: text("vessel_name"),
+  vesselType: text("vessel_type"),
+  latitude: doublePrecision("latitude").notNull(),
+  longitude: doublePrecision("longitude").notNull(),
+  source: text("source").notNull(),
+  auditStatus: text("audit_status").default("PENDING").notNull(),
+  rawData: jsonb("raw_data").notNull(),
+  firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull(),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const voyagesTracking = pgTable(
+  "voyages_tracking",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    contractRef: text("contract_ref").notNull(),
+    currentStatus: text("current_status").default("APPROACHING_POL").notNull(),
+    currentPhase: integer("current_phase").default(1).notNull(),
+    previousPortCode: text("previous_port_code"),
+    previousPortName: text("previous_port_name"),
+    previousPortLatitude: doublePrecision("previous_port_latitude"),
+    previousPortLongitude: doublePrecision("previous_port_longitude"),
+    polCode: text("pol_code"),
+    polName: text("pol_name").notNull(),
+    polLatitude: doublePrecision("pol_latitude").notNull(),
+    polLongitude: doublePrecision("pol_longitude").notNull(),
+    podCode: text("pod_code"),
+    podName: text("pod_name").notNull(),
+    podLatitude: doublePrecision("pod_latitude").notNull(),
+    podLongitude: doublePrecision("pod_longitude").notNull(),
+    laydaysStartAt: timestamp("laydays_start_at", { withTimezone: true }),
+    cancellingAt: timestamp("cancelling_at", { withTimezone: true }),
+    vesselName: text("vessel_name").notNull(),
+    imoNumber: text("imo_number"),
+    mmsi: text("mmsi"),
+    cargoName: text("cargo_name").notNull(),
+    cargoQuantityMt: numeric("cargo_quantity_mt", { mode: "number" }).default(0).notNull(),
+    loadedQuantityMt: numeric("loaded_quantity_mt", { mode: "number" }).default(0).notNull(),
+    dischargedQuantityMt: numeric("discharged_quantity_mt", { mode: "number" }).default(0).notNull(),
+    loadingRateMtDay: numeric("loading_rate_mt_day", { mode: "number" }),
+    actualLoadingRateMtDay: numeric("actual_loading_rate_mt_day", { mode: "number" }),
+    dischargeRateMtDay: numeric("discharge_rate_mt_day", { mode: "number" }),
+    actualDischargeRateMtDay: numeric("actual_discharge_rate_mt_day", { mode: "number" }),
+    aisLatitude: doublePrecision("ais_latitude"),
+    aisLongitude: doublePrecision("ais_longitude"),
+    aisUpdatedAt: timestamp("ais_updated_at", { withTimezone: true }),
+    remainingDistanceNm: numeric("remaining_distance_nm", { mode: "number" }),
+    averageSpeedKnots: numeric("average_speed_knots", { mode: "number" }),
+    dynamicEtaAt: timestamp("dynamic_eta_at", { withTimezone: true }),
+    routeProgressPct: numeric("route_progress_pct", { mode: "number" }).default(0).notNull(),
+    demurrageUsd: numeric("demurrage_usd", { mode: "number" }).default(0).notNull(),
+    portCostsUsd: numeric("port_costs_usd", { mode: "number" }).default(0).notNull(),
+    norPolTenderedAt: timestamp("nor_pol_tendered_at", { withTimezone: true }),
+    norPolAcceptedAt: timestamp("nor_pol_accepted_at", { withTimezone: true }),
+    laytimeStartedAt: timestamp("laytime_started_at", { withTimezone: true }),
+    norPodTenderedAt: timestamp("nor_pod_tendered_at", { withTimezone: true }),
+    norPodAcceptedAt: timestamp("nor_pod_accepted_at", { withTimezone: true }),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    ballastRoute: jsonb("ballast_route").default([]).notNull(),
+    ladenRoute: jsonb("laden_route").default([]).notNull(),
+    alerts: jsonb("alerts").default([]).notNull(),
+    milestones: jsonb("milestones").default([]).notNull(),
+    assetTrail: jsonb("asset_trail").default([]).notNull(),
+    commercialDetails: jsonb("commercial_details").default({}).notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex("voyages_tracking_contract_ref_unique_idx").on(sql`upper(${table.contractRef})`),
+    index("voyages_tracking_status_updated_idx").on(table.currentStatus, table.updatedAt),
+    check("voyages_tracking_phase_check", sql`${table.currentPhase} BETWEEN 1 AND 6`),
+    check("voyages_tracking_progress_check", sql`${table.routeProgressPct} BETWEEN 0 AND 100`),
+    check("voyages_tracking_ais_latitude_check", sql`${table.aisLatitude} IS NULL OR ${table.aisLatitude} BETWEEN -90 AND 90`),
+    check("voyages_tracking_ais_longitude_check", sql`${table.aisLongitude} IS NULL OR ${table.aisLongitude} BETWEEN -180 AND 180`),
+  ],
+);
+
+export const laytimeStatements = pgTable(
+  "laytime_statements",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    contractRef: text("contract_ref").notNull(),
+    operation: text("operation").notNull(),
+    quantityMt: numeric("quantity_mt", { mode: "number" }).notNull(),
+    rateMtDay: numeric("rate_mt_day", { mode: "number" }),
+    allowedHours: numeric("allowed_hours", { mode: "number" }),
+    laytimeRule: text("laytime_rule").default("SHINC").notNull(),
+    weatherPermitting: boolean("weather_permitting").default(true).notNull(),
+    onceOnDemurrage: boolean("once_on_demurrage").default(true).notNull(),
+    commencementDelayMinutes: integer("commencement_delay_minutes").default(0).notNull(),
+    portTimeZone: text("port_time_zone"),
+    demurrageRateUsdDay: numeric("demurrage_rate_usd_day", { mode: "number" }).notNull(),
+    norTenderedAt: timestamp("nor_tendered_at", { withTimezone: true }),
+    norAcceptedAt: timestamp("nor_accepted_at", { withTimezone: true }),
+    laytimeCommencedAt: timestamp("laytime_commenced_at", { withTimezone: true }),
+    operationStartedAt: timestamp("operation_started_at", { withTimezone: true }),
+    operationCompletedAt: timestamp("operation_completed_at", { withTimezone: true }),
+    statementAsOfAt: timestamp("statement_as_of_at", { withTimezone: true }).notNull(),
+    incidents: jsonb("incidents").default([]).notNull(),
+    calculation: jsonb("calculation").default({}).notNull(),
+    status: text("status").default("INCOMPLETE").notNull(),
+    allowedSeconds: numeric("allowed_seconds", { mode: "number" }).default(0).notNull(),
+    usedSeconds: numeric("used_seconds", { mode: "number" }).default(0).notNull(),
+    excludedSeconds: numeric("excluded_seconds", { mode: "number" }).default(0).notNull(),
+    balanceSeconds: numeric("balance_seconds", { mode: "number" }).default(0).notNull(),
+    demurrageUsd: numeric("demurrage_usd", { mode: "number" }).default(0).notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex("laytime_statements_contract_operation_unique_idx").on(sql`upper(${table.contractRef})`, table.operation),
+    index("laytime_statements_status_updated_idx").on(table.status, table.updatedAt),
+    check("laytime_statements_operation_check", sql`${table.operation} IN ('LOAD', 'DISCHARGE')`),
+    check("laytime_statements_rule_check", sql`${table.laytimeRule} IN ('SHINC', 'SHEX')`),
+    check("laytime_statements_quantity_check", sql`${table.quantityMt} > 0`),
+    check("laytime_statements_demurrage_rate_check", sql`${table.demurrageRateUsdDay} >= 0`),
+    check("laytime_statements_incidents_check", sql`jsonb_typeof(${table.incidents}) = 'array'`),
+    check("laytime_statements_calculation_check", sql`jsonb_typeof(${table.calculation}) = 'object'`),
+  ],
+);
+
+export const dataBridgeVesselSyncs = pgTable("databridge_vessel_syncs", {
+  syncId: uuid("sync_id").primaryKey(),
+  persistedImoNumbers: jsonb("persisted_imo_numbers").default(sql`'[]'::jsonb`).notNull(),
+  rejectedCount: integer("rejected_count").default(0).notNull(),
+  createdAt: createdAt(),
+});
+
+export const pipelineInbox = pgTable("pipeline_inbox", {
+  id: serial("id").primaryKey(),
+  syncId: text("sync_id"),
+  imoNumber: text("imo_number"),
+  vesselName: text("vessel_name"),
+  source: text("source").default("CORE_PRO").notNull(),
+  status: text("status").default("PENDING").notNull(),
+  payload: jsonb("payload").notNull(),
+  errorMessage: text("error_message"),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const clientApiUsage = pgTable("client_api_usage", {
+  id: serial("id").primaryKey(),
+  tenantId: varchar("tenant_id", { length: 255 }).notNull(),
+  serviceUsed: varchar("service_used", { length: 100 }).notNull(),
+  creditsConsumed: integer("credits_consumed").notNull(),
+  voyageReference: varchar("voyage_reference", { length: 255 }),
+  createdAt: createdAt(),
+});
+
+export const forwarderProjects = pgTable("forwarder_projects", {
+  id: serial("id").primaryKey(),
+  projectRef: varchar("project_ref", { length: 255 }).unique(),
+  projectTitle: varchar("project_title", { length: 255 }),
+  description: text("description"),
+  clientName: varchar("client_name", { length: 255 }),
+  status: varchar("status", { length: 50 }).default("Borrador"),
+  globalMarginPercentage: numeric("global_margin_percentage").default("15"),
+  documents: jsonb("documents").default([]),
+  items: jsonb("items").default([]),
+  landOrigin: varchar("land_origin", { length: 255 }),
+  landDestination: varchar("land_destination", { length: 255 }),
+  landDistance: numeric("land_distance"),
+  landFreightCost: numeric("land_freight_cost"),
+  routeAndChartering: jsonb("route_and_chartering").default({}),
+  valorTotalMercanciaUsd: numeric("valor_total_mercancia_usd"),
+  landFreightSale: numeric("land_freight_sale"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const contactRoleEnum = pgEnum("ContactRole", [
+  "OWNER",
+  "BROKER",
+  "AGENT",
+  "LOGISTICS",
+  "CHARTERER",
+  "SHIPMANAGEMENT",
+]);
+
+export const marketContacts = pgTable("Market_Contacts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  companyName: text("company_name").notNull(),
+  contactName: text("contact_name"),
+  email: text("email"),
+  phone: text("phone"),
+  emails: text("emails").array().default(sql`'{}'::text[]`),
+  phones: text("phones").array().default(sql`'{}'::text[]`),
+  country: text("country"),
+  contactRole: contactRoleEnum("contact_role").default("BROKER").notNull(),
+  notes: text("notes"),
+  linkedImos: text("linked_imos").array().default(sql`'{}'::text[]`),
+  createdAt: timestamp("createdAt").defaultNow(),
+  updatedAt: timestamp("updatedAt").defaultNow(),
+});
+
+export const multimodalOperations = pgTable("multimodal_operations", {
+  id: serial("id").primaryKey(),
+  referencia: varchar("referencia", { length: 100 }).notNull(),
+  modalidad: varchar("modalidad", { length: 100 }).notNull(),
+  costeApi: numeric("coste_api", { precision: 12, scale: 2 }).notNull(),
+  ventaAgencia: numeric("venta_agencia", { precision: 12, scale: 2 }).notNull(),
+  feePlataforma: numeric("fee_plataforma", { precision: 12, scale: 2 }).default("50.00").notNull(),
+  estado: varchar("estado", { length: 50 }).default("Cotizado").notNull(),
+  metadata: jsonb("metadata").default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+

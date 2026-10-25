@@ -1,0 +1,10 @@
+/* Bordes espaciales forzados para módulos */
+div[class*="module"], 
+div[class*="container"], 
+div[id*="container"],
+.section {
+    border: 2px solid #0b1320 !important;
+    box-shadow: 0 4px 10px rgba(11, 19, 32, 0.3) !important;
+    border-radius: 8px !important;
+    margin: 10px !important;
+}

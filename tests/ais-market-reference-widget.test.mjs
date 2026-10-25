@@ -1,0 +1,127 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import test from 'node:test';
+
+const [widgetSource, widgetStyles, indexSource] = await Promise.all([
+  readFile(new URL('../AisMarketReferenceWidget.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../ais-market-reference-widget.css', import.meta.url), 'utf8'),
+  readFile(new URL('../index.html', import.meta.url), 'utf8'),
+]);
+const aisPricingSource = indexSource.slice(
+  indexSource.indexOf('function calculateAndDisplayAisFreight()'),
+  indexSource.indexOf('window.applyAisFreightOptionToEstimator = function'),
+);
+
+test('AIS market widget consumes strictly validated live engine rates', () => {
+  assert.match(widgetSource, /export type AisMarketRate = number &/);
+  assert.match(widgetSource, /window\.aisMarketFreightRates/);
+  assert.match(widgetSource, /AIS_MARKET_RATES_UPDATED/);
+  assert.match(widgetSource, /AIS_RATE_ELEMENT_IDS\.fair/);
+  assert.doesNotMatch(widgetSource, /rate:\s*(?:39\.83|42\.75|50\.18)/);
+  assert.match(indexSource, /fair: rateJusto,[\s\S]*?standard: rateStandard,[\s\S]*?offmarket: rateOffMarket/);
+  assert.match(indexSource, /new CustomEvent\('AIS_MARKET_RATES_UPDATED'/);
+});
+
+test('AIS market pricing uses configurable margins without bunker double counting', () => {
+  assert.match(indexSource, /const DEFAULT_AIS_MARKET_BASE_MARGINS = Object\.freeze\(\{[\s\S]*?fair: 1\.05,[\s\S]*?standard: 1\.12,[\s\S]*?offmarket: 1\.25/);
+  assert.match(indexSource, /window\.aisMarketPricingConfig\?\.baseMargins/);
+  assert.match(aisPricingSource, /const baseMargins = resolveAisMarketBaseMargins\(\)/);
+  assert.match(aisPricingSource, /ensureAisBreakEvenFloor\(baseMargins\.fair \* supplyFactor \* portMultiplier\)/);
+  assert.match(aisPricingSource, /ensureAisBreakEvenFloor\(baseMargins\.standard \* supplyFactor \* portMultiplier\)/);
+  assert.match(aisPricingSource, /ensureAisBreakEvenFloor\(baseMargins\.offmarket \* supplyFactor \* portMultiplier\)/);
+  assert.match(aisPricingSource, /const rateJusto = baseBE \* coeffJusto/);
+  assert.match(aisPricingSource, /const rateStandard = baseBE \* coeffStandard/);
+  assert.match(aisPricingSource, /const rateOffMarket = baseBE \* coeffOffMarket/);
+  assert.doesNotMatch(aisPricingSource, /bunkerMultiplier|bunkerPriceRatio|avgBunkerPrice/);
+  assert.doesNotMatch(aisPricingSource, /getElementById\('price-(?:sea|port)'\)/);
+  assert.doesNotMatch(aisPricingSource, /Math\.max\(baseBE \*/);
+});
+
+test('AIS rate application starts from owner purchase and propagates through the central margin rule', () => {
+  assert.match(widgetSource, /const OWNER_FREIGHT_INPUT_ID = 'freight-rate';/);
+  assert.match(widgetSource, /const CHARTERER_FREIGHT_INPUT_ID = 'freight-sell';/);
+  assert.match(widgetSource, /getElementById\(OWNER_FREIGHT_INPUT_ID\)/);
+  assert.match(widgetSource, /ownerFreightInput\.value = rate\.toFixed\(2\)/);
+  assert.match(widgetSource, /window\.syncChartererFreightFromOwner\(rate\)/);
+  assert.match(indexSource, /function syncChartererFreightFromOwner\(ownerFreight\)/);
+  assert.match(indexSource, /calcularPrecioObjetivo\(ownerRate, chartererMarginPercent\)/);
+  assert.match(indexSource, /delete chartererFreightInput\.dataset\.marginSynced/);
+  assert.doesNotMatch(widgetSource, /ownerFreight\s*\*\s*\(1\s*\+/);
+  assert.doesNotMatch(widgetSource, /State\.(?:costBunkers|costOpex|costPda|costTotal|breakEven)\s*=/);
+});
+
+test('AIS propagation emits input and change for owner and charterer fields', () => {
+  assert.match(widgetSource, /new Event\('input', \{ bubbles: true \}\)/);
+  assert.match(widgetSource, /new Event\('change', \{ bubbles: true \}\)/);
+  assert.match(widgetSource, /emitReactiveEvents\(ownerFreightInput\)/);
+  assert.match(widgetSource, /emitReactiveEvents\(chartererFreightInput\)/);
+});
+
+test('AIS widget title is rendered as a compact horizontal header', () => {
+  assert.match(widgetSource, /title\.textContent = 'Referencia de Mercado AIS';/);
+  assert.match(widgetSource, /header\.append\(title, eyebrow\)/);
+  assert.match(widgetStyles, /\.ais-market-reference-widget__header\s*\{[\s\S]*?display: flex;/);
+  assert.match(widgetStyles, /writing-mode: horizontal-tb;/);
+  assert.match(widgetStyles, /white-space: nowrap;/);
+});
+
+test('AIS widget uses the calculator card surface instead of dark stacked blocks', () => {
+  assert.match(widgetStyles, /\.ais-market-reference-widget\s*\{[\s\S]*?background: #f8fafc;/);
+  assert.match(widgetStyles, /\.ais-market-reference-widget__scenario\s*\{[\s\S]*?background: #ffffff;/);
+  assert.match(widgetStyles, /border: 1px solid #cbd5e1;/);
+  assert.doesNotMatch(widgetStyles, /linear-gradient\(145deg/);
+});
+
+test('commercial negotiation mounts the isolated AIS widget module', () => {
+  assert.match(indexSource, /<script type="module" src="\.\/AisMarketReferenceWidget\.ts"><\/script>/);
+  assert.match(indexSource, /<aside id="ais-market-reference-widget"><\/aside>/);
+});
+
+test('AIS market rates remain pending until AIS data or an active vessel confirms availability', () => {
+  assert.match(widgetSource, /function hasConfirmedAisData\(\): boolean/);
+  assert.match(widgetSource, /hasTrustedMatchingState = \['density-filter', 'matching-validation'\]\.includes\(matchingSource\)/);
+  assert.match(widgetSource, /hasSharedDensityFleet = \(window\.getDensityMapSourceVessels\?\.\(\)\.length \|\| 0\) > 0/);
+  assert.match(widgetSource, /const activeVessel = window\.GlobalStore\?\.activeVessel \|\| window\.activeVessel/);
+  assert.match(widgetSource, /return hasActiveVessel \|\| \(Number\(window\.GlobalStore\?\.nearbyCount\) > 0/);
+  assert.match(widgetSource, /window\.GlobalStore\?\.hasAisData === true \|\| hasTrustedMatchingState \|\| hasSharedDensityFleet/);
+  assert.match(widgetSource, /Number\(window\.GlobalStore\?\.nearbyCount\) > 0/);
+  assert.match(widgetSource, /AIS_MARKET_AVAILABILITY_CHANGED/);
+  assert.match(widgetSource, /rate\.textContent = '--\.--\$'/);
+  assert.match(widgetSource, /#renderPending\(\): void/);
+  assert.match(widgetSource, /applyButton\.disabled = true/);
+  assert.match(indexSource, /hasAisData: false/);
+  assert.match(indexSource, /setAisDataAvailability\?\.\(true,[\s\S]*manual-sweep-complete/);
+  assert.match(indexSource, /const hasActiveVessel = Boolean\(selectedActiveVessel && typeof selectedActiveVessel === 'object'\)/);
+  assert.match(indexSource, /const hasAisData = renderFleet\.length > 0;/);
+  assert.match(indexSource, /if \(nearbyCount <= 0 && !hasActiveVessel\) \{[\s\S]*renderPendingAisMarketReference\(\);[\s\S]*return;/);
+});
+
+test('AIS market pricing reads the active vessel profile directly from unified state', () => {
+  assert.doesNotMatch(indexSource, /resolveAisActiveVesselProfile/);
+  assert.match(aisPricingSource, /const unifiedActiveVesselProfile = \[/);
+  assert.match(aisPricingSource, /selectedActiveVessel\?\.pricingProfile/);
+  assert.match(aisPricingSource, /const fallbackVesselProfile = window\.GlobalStore\?\.vesselClassContext\?\.profile/);
+  assert.match(aisPricingSource, /selectedActiveVessel\?\.riskCoefficient/);
+  assert.match(aisPricingSource, /const activeVesselProfile = \{/);
+  assert.match(aisPricingSource, /const compatibleCount = compatibleVessels\.length > 0 \? compatibleVessels\.length : \(hasActiveVessel \? 1 : 0\)/);
+});
+
+test('validated AIS candidates flow through GlobalStore into the calculator market reference', () => {
+  assert.match(indexSource, /setFilteredVessels\(newFilteredVessels, metadata = \{\}\)[\s\S]*this\.setAisMatchingState\(this\.filteredVessels, this\.filteredVessels, null,[\s\S]*source: 'density-filter'/);
+  assert.match(indexSource, /MATCHING_EXECUTION_SUCCESS[\s\S]*const eligibleMatches = Array\.isArray\(event\?\.detail\?\.eligibleMatches\)[\s\S]*const committedEligibleVessels = eligibleMatches\.map[\s\S]*setAisMatchingState\?\.\(committedEligibleVessels, committedEligibleVessels, null,[\s\S]*source: 'matching-validation'/);
+  assert.match(indexSource, /this\.nearbyCount = this\.nearbyVessels\.length[\s\S]*new CustomEvent\('ais:matching-state-updated'/);
+  assert.match(indexSource, /const hasCommittedMatchingState = renderFleet\.length > 0/);
+  assert.match(indexSource, /const shouldUseCommittedMatchingState = true/);
+  assert.ok(indexSource.indexOf('const shouldUseCommittedMatchingState') < indexSource.indexOf('let nearbyCount = renderFleet.length'));
+  assert.match(indexSource, /window\.addEventListener\('ais:matching-state-updated',[\s\S]*source === 'calculator-proximity'[\s\S]*calculateAndDisplayAisFreight\(\)/);
+});
+
+test('cost structure exposes an AIS-independent reactive break-even indicator', () => {
+  assert.match(indexSource, /id="base-cost-break-even-card"/);
+  assert.match(indexSource, /id="res-cost-base-break-even"/);
+  assert.match(indexSource, /baseCostBreakEvenEl\.innerText = `\$\$\{breakEvenArmadorDisplay\.toFixed\(2\)\} \/MT`/);
+  assert.ok(
+    indexSource.indexOf("baseCostBreakEvenEl.innerText")
+      < indexSource.indexOf('calculateAndDisplayAisFreight();', indexSource.indexOf("baseCostBreakEvenEl.innerText")),
+  );
+});

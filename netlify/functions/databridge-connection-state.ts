@@ -1,0 +1,95 @@
+import { eq } from "drizzle-orm";
+import { db, ensureApplicationSchema } from "../../db/index.js";
+import { appConfig } from "../../db/schema.js";
+import { createCorsHeaders } from "./_shared/cors.js";
+import { createResponseCacheHeaders, getOrSetCachedJson } from "./_shared/response-cache.js";
+
+const DATA_BRIDGE_CONNECTION_CONFIG_KEY = "databridge_connection_state";
+const baseHeaders = {
+  "content-type": "application/json; charset=utf-8",
+  "cache-control": "no-store",
+};
+
+type PersistedConnectionState = {
+  connected?: unknown;
+  verifiedAt?: unknown;
+  lastCheckedAt?: unknown;
+};
+
+function normalizeConnectionState(value: string | null | undefined) {
+  if (!value) return { connected: false, verifiedAt: null, lastCheckedAt: null };
+  try {
+    const parsed = JSON.parse(value) as PersistedConnectionState;
+    return {
+      connected: parsed?.connected === true,
+      verifiedAt: typeof parsed?.verifiedAt === "string" ? parsed.verifiedAt : null,
+      lastCheckedAt: typeof parsed?.lastCheckedAt === "string" ? parsed.lastCheckedAt : null,
+    };
+  } catch {
+    return { connected: false, verifiedAt: null, lastCheckedAt: null };
+  }
+}
+
+async function loadFreshDataBridgeConnectionState(req: Request) {
+  const headers = {
+    ...baseHeaders,
+    ...createCorsHeaders(req, "GET, OPTIONS"),
+  };
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers });
+  if (req.method !== "GET") {
+    return Response.json({ success: false, error: "Method not allowed" }, { status: 405, headers });
+  }
+
+  try {
+    await ensureApplicationSchema();
+    const [row] = await db
+      .select({ value: appConfig.value, updatedAt: appConfig.updatedAt })
+      .from(appConfig)
+      .where(eq(appConfig.key, DATA_BRIDGE_CONNECTION_CONFIG_KEY))
+      .limit(1);
+    const state = normalizeConnectionState(row?.value);
+    return Response.json({
+      success: true,
+      connection: {
+        ...state,
+        persistedAt: row?.updatedAt?.toISOString?.() || null,
+      },
+    }, { headers });
+  } catch (error) {
+    console.error("[databridge-connection-state] Failed to read persisted state.", error);
+    return Response.json({ success: false, error: "Connection state is unavailable" }, { status: 500, headers });
+  }
+}
+
+export default async (req: Request) => {
+  if (req.method !== "GET") return loadFreshDataBridgeConnectionState(req);
+  const forceRefresh = new URL(req.url).searchParams.has("refresh");
+  if (forceRefresh) return loadFreshDataBridgeConnectionState(req);
+  try {
+    const cached = await getOrSetCachedJson({
+      namespace: "databridge-connection-state-v1",
+      key: { scope: "current" },
+      ttlMs: 10 * 1000,
+      staleTtlMs: 60 * 1000,
+      producer: async () => {
+        const response = await loadFreshDataBridgeConnectionState(req);
+        const body = await response.json();
+        if (response.status >= 500) throw new Error("Data Bridge state origin unavailable");
+        return { body, status: response.status };
+      },
+    });
+    return Response.json(cached.value.body, {
+      status: cached.value.status,
+      headers: {
+        ...createResponseCacheHeaders(cached, 10, 60),
+        ...createCorsHeaders(req, "GET, OPTIONS"),
+      },
+    });
+  } catch (error) {
+    console.error("[databridge-connection-state] Cache and origin unavailable.", error instanceof Error ? error.message : String(error));
+    return Response.json({ success: false, error: "Connection state is temporarily unavailable" }, {
+      status: 503,
+      headers: { "cache-control": "no-store", ...createCorsHeaders(req, "GET, OPTIONS") },
+    });
+  }
+};

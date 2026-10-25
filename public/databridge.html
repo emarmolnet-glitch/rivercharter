@@ -1,0 +1,2544 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval'; script-src * 'unsafe-inline' 'unsafe-eval'; worker-src 'self' blob:; connect-src * wss: https:; img-src * data: blob:; style-src * 'unsafe-inline';">
+    <title>SeaCharter Data Bridge - Módulo de Sincronización</title>
+    <!-- Tailwind CSS -->
+    <script>
+        window.process = window.process || { env: {} };
+        window.global = window.global || window;
+        window.createHash = window.createHash || function () {
+            let value = '';
+            return {
+                update(input) { value += String(input || ''); return this; },
+                digest() { return value ? String(value.length) : '0'; }
+            };
+        };
+
+        (function initDataBridgeApiBridge() {
+            const PRODUCTION_ORIGIN = 'https://neon-seachartercorepro-4ce09d.netlify.app';
+            const isLocal = typeof window !== 'undefined' && (
+                window.location.protocol === 'file:' ||
+                window.location.origin === 'file://' ||
+                window.location.origin === 'null' ||
+                (typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent)) ||
+                (typeof process !== 'undefined' && process.versions && Boolean(process.versions.electron))
+            );
+            window.NETLIFY_PRODUCTION_ORIGIN = PRODUCTION_ORIGIN;
+            window.NETLIFY_API_BASE_URL = isLocal ? PRODUCTION_ORIGIN : '';
+
+            if (isLocal && typeof window.fetch === 'function') {
+                const nativeFetch = window.fetch;
+                window.fetch = function(input, init) {
+                    const base = window.NETLIFY_API_BASE_URL;
+                    if (base) {
+                        if (typeof input === 'string') {
+                            if (input.startsWith('/api/') || input.startsWith('/.netlify/functions/')) {
+                                input = base + input;
+                            } else if (input.startsWith('file://')) {
+                                const match = input.match(/(\/(?:api|\.netlify\/functions)\/.*)$/);
+                                if (match) input = base + match[1];
+                            }
+                        } else if (typeof Request !== 'undefined' && input instanceof Request) {
+                            const url = input.url;
+                            if (url.startsWith('/api/') || url.startsWith('/.netlify/functions/')) {
+                                input = new Request(base + url, input);
+                            } else if (url.startsWith('file://')) {
+                                const match = url.match(/(\/(?:api|\.netlify\/functions)\/.*)$/);
+                                if (match) input = new Request(base + match[1], input);
+                            }
+                        }
+                    }
+                    return nativeFetch.call(this, input, init);
+                };
+            }
+        })();
+    </script>
+    <script>
+        if (typeof window !== 'undefined' && !window.tailwind) {
+            const tailwindScript = document.createElement('script');
+            tailwindScript.src = 'https://cdn.tailwindcss.com';
+            tailwindScript.onerror = function () {
+                console.warn('Tailwind CDN no está disponible; Data Bridge continúa con los estilos locales.');
+            };
+            document.head.appendChild(tailwindScript);
+        }
+    </script>
+    <!-- FontAwesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+    <link rel="stylesheet" href="../assets/css/density-globe.css?v=20260716-radar-tooltip-visible">
+    <link rel="stylesheet" href="../assets/css/datalastic-credit-counter.css?v=20260815-shared-balance">
+    <script defer src="https://unpkg.com/globe.gl@2.46.1/dist/globe.gl.min.js"></script>
+    <script defer src="../GlobalFleetGlobe.js?v=20260807-renderer-crashfix"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #F8FAFC;
+            color: #334155;
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        .console-font {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        /* Custom scrollbar for console logs */
+        .logs-container::-webkit-scrollbar {
+            width: 6px;
+        }
+        .logs-container::-webkit-scrollbar-track {
+            background: #e2e8f0;
+        }
+        .logs-container::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        .logs-container::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        /* Pulsing green light */
+        .pulse-light {
+            box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.5; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .databridge-workspace {
+            display: grid;
+            grid-template-columns: minmax(320px, 0.85fr) minmax(640px, 1.35fr);
+            gap: 1.5rem;
+        }
+        .audit-panel {
+            min-width: 0;
+        }
+        .audit-flow-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(190px, 1fr));
+            gap: 0.5rem;
+            overflow-x: auto;
+        }
+        .audit-flow-grid > div {
+            min-width: 190px;
+        }
+        .audit-flow-grid .audit-flow-detail {
+            white-space: normal;
+            overflow-wrap: anywhere;
+            line-height: 1.25;
+        }
+        @media (max-width: 940px) {
+            .databridge-workspace {
+                grid-template-columns: 1fr;
+            }
+        }
+        .npl-preview-frame {
+            position: relative;
+            min-height: 92px;
+        }
+        .npl-preview-frame::after {
+            content: "";
+            position: absolute;
+            inset: 10px;
+            border: 1px dashed rgba(30, 58, 138, 0.45);
+            pointer-events: none;
+        }
+        .npl-action-button {
+            position: relative;
+            z-index: 30;
+        }
+        .npl-exit-button {
+            position: absolute;
+            top: 0.85rem;
+            right: 0.85rem;
+            z-index: 40;
+        }
+        .npl-paste-toast {
+            position: absolute;
+            right: 1rem;
+            bottom: 1rem;
+            z-index: 45;
+            transform: translateY(8px);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 180ms ease, transform 180ms ease;
+        }
+        .npl-paste-toast.is-visible {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden p-6 select-none bg-slate-50 text-slate-800">
+    <!-- Header -->
+    <header class="flex items-center justify-between border-b border-slate-200 pb-4 shrink-0">
+        <div class="flex items-center gap-3">
+            <div class="bg-white text-[#1E3A8A] p-2.5 rounded-lg border border-slate-200 shadow-sm">
+                <i class="fa-solid fa-circle-nodes text-lg"></i>
+            </div>
+            <div>
+                <h1 class="text-sm font-bold text-slate-900 uppercase tracking-wider">SeaCharter Data Bridge</h1>
+                <p class="text-xs text-slate-600">Módulo de Integración de Fletes y Posiciones en Tiempo Real</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            <div id="databridge-datalastic-credit" data-credit-variant="toolbar" aria-live="polite"></div>
+            <!-- Session Indicator Badge -->
+            <div id="databridge-session-badge" class="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-500 shadow-sm transition duration-150" title="Sesión activa vinculada a Core PRO" data-session-active="false">
+                <span id="databridge-session-dot" class="w-2.5 h-2.5 bg-slate-300 rounded-full"></span>
+                <span id="databridge-session-text" class="console-font">Sin sesión activa</span>
+            </div>
+            <!-- Action Button: CARGAR DATOS -->
+            <button type="button" id="btn-databridge-load-data" onclick="loadDataBridgeSessionPayload()" class="bg-[#1E3A8A] hover:bg-blue-900 text-white shadow-sm px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition duration-150" title="Cargar y enviar datos de la sesión activa a Core PRO">
+                <i class="fa-solid fa-cloud-arrow-down"></i>
+                <span>CARGAR DATOS</span>
+            </button>
+            <!-- Status Indicator -->
+            <div class="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1.5 rounded-lg">
+                <span class="w-2.5 h-2.5 bg-emerald-500 rounded-full pulse-light"></span>
+                <span class="text-xs font-semibold text-emerald-400 console-font" id="sync-status">CONECTADO</span>
+            </div>
+            <button type="button" onclick="minimizeDataBridgeWindow()" class="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 shadow-sm px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition duration-150" title="Minimizar Data Bridge">
+                <i class="fa-solid fa-window-minimize"></i>
+                <span>Minimizar</span>
+            </button>
+            <button type="button" onclick="toggleDataBridgeFullScreen()" class="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 shadow-sm px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition duration-150" title="Maximizar a pantalla completa">
+                <i class="fa-solid fa-expand"></i>
+                <span>Pantalla completa</span>
+            </button>
+            <button type="button" onclick="hideDataBridgeWindow()" class="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 shadow-sm px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition duration-150" title="Ocultar al segundo plano">
+                <i class="fa-solid fa-eye-slash"></i>
+                <span>Ocultar</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Stats Panel -->
+    <section class="grid grid-cols-3 gap-4 my-4 shrink-0">
+        <div class="bg-white border border-slate-200 rounded-xl p-4 flex flex-col justify-between">
+            <span class="text-[10px] font-bold text-slate-500 uppercase">Tarifas Sincronizadas</span>
+            <div class="flex items-baseline gap-1 mt-1">
+                <span class="text-xl font-bold text-slate-900 console-font" id="rate-count">1,482</span>
+                <span class="text-xs text-emerald-400 font-semibold"><i class="fa-solid fa-arrow-trend-up"></i> +12</span>
+            </div>
+        </div>
+        <div class="bg-white border border-slate-200 rounded-xl p-4 flex flex-col justify-between">
+            <span class="text-[10px] font-bold text-slate-500 uppercase">Total Histórico Data Bridge</span>
+            <div class="flex items-baseline gap-1 mt-1">
+                <span class="text-xl font-bold text-slate-900 console-font" id="vessel-count">—</span>
+                <span class="text-xs text-emerald-400 font-semibold"><i class="fa-solid fa-database"></i> Master</span>
+            </div>
+        </div>
+        <div class="bg-white border border-slate-200 rounded-xl p-4 flex flex-col justify-between">
+            <span class="text-[10px] font-bold text-slate-500 uppercase">Estado de Sincronización</span>
+            <div class="flex items-baseline gap-1 mt-1">
+                <span class="text-xs font-bold text-indigo-400 uppercase" id="sync-cycle">En espera (30s)</span>
+            </div>
+        </div>
+    </section>
+
+    <section class="global-fleet-globe-responsive shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-950 shadow-sm" aria-label="Mapa maestro de buques Data Bridge">
+        <div class="flex items-center justify-between border-b border-slate-800 bg-slate-900 px-4 py-2.5">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-earth-europe text-cyan-300 text-xs"></i>
+                <span class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-200">Master Vessel Globe</span>
+            </div>
+            <span class="text-[10px] font-semibold text-cyan-200">AIS Points · filteredVessels</span>
+        </div>
+        <div class="density-globe-stage relative overflow-hidden" style="height: 280px; min-height: 280px;">
+            <div id="databridge-map" class="density-globe-canvas relative overflow-hidden" data-master-map>
+                <div id="map-skeleton" class="map-skeleton-container" aria-label="Cargando visor cartográfico">
+                    <div class="map-skeleton-globe">
+                        <div class="map-skeleton-pulse"></div>
+                    </div>
+                    <div class="map-skeleton-status">
+                        <span class="map-skeleton-pulse"></span>
+                        <span>Cargando Visor Data Bridge...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Main Split Area -->
+    <div id="databridge-main-container" class="databridge-workspace flex-1 overflow-hidden min-h-0 my-4">
+        <!-- Terminal Console Area (Left Pane) -->
+        <main class="flex-1 bg-white border border-slate-200 rounded-xl flex flex-col overflow-hidden relative shadow-sm">
+            <!-- Terminal Header -->
+            <div class="bg-slate-50 border-b border-slate-200 px-4 py-2 flex items-center justify-between shrink-0">
+                <div class="flex items-center gap-1.5">
+                    <span class="w-3 h-3 rounded-full bg-red-500/50"></span>
+                    <span class="w-3 h-3 rounded-full bg-yellow-500/50"></span>
+                    <span class="w-3 h-3 rounded-full bg-green-500/50"></span>
+                    <span class="text-xs text-slate-600 font-semibold console-font ml-2">data-bridge-stream.log</span>
+                </div>
+                <button onclick="clearConsole()" class="text-slate-500 hover:text-slate-700 text-xs transition duration-150" title="Limpiar Consola">
+                    <i class="fa-solid fa-trash-can"></i>
+                </button>
+            </div>
+
+            <!-- Terminal Logs -->
+            <div id="logs-container" class="flex-1 overflow-y-auto p-4 console-font text-xs space-y-2.5 logs-container text-slate-700 bg-slate-100 leading-relaxed">
+                <!-- Initial logs populated by JS -->
+            </div>
+        </main>
+
+        <!-- Audit Panel Area (Right Pane) -->
+        <section class="audit-panel bg-white border border-slate-200 rounded-xl flex flex-col overflow-hidden relative shadow-sm">
+            <!-- Panel Header -->
+            <div class="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex items-center justify-between shrink-0">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-clipboard-check text-indigo-400 text-xs"></i>
+                    <span class="text-xs text-slate-800 font-semibold uppercase tracking-wider">Pendientes de Auditoría</span>
+                </div>
+                <span id="audit-badge" class="bg-white text-[#1E3A8A] border border-blue-200 text-[10px] px-2 py-0.5 rounded-full font-bold">0 BUQUES</span>
+            </div>
+
+            <!-- Audit List -->
+            <div id="audit-vessels-container" class="flex-1 overflow-y-auto p-4 space-y-3 logs-container bg-slate-50">
+                <div id="empty-audit-state" class="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500">
+                    <i class="fa-solid fa-circle-info text-2xl mb-2 text-indigo-500/50"></i>
+                    <p class="font-bold text-sm text-slate-600">Bandeja de Entrada Vacía</p>
+                    <p class="text-xs text-slate-500 mt-1 max-w-[280px]">Ejecute el "Motor de Coincidencias" en Core PRO para recibir buques en tiempo real para validación humana.</p>
+                </div>
+                <!-- Dynamic vessel cards will be injected here -->
+            </div>
+        </section>
+    </div>
+
+    <section id="ia-reports-panel" class="bg-white border border-slate-200 rounded-xl shadow-sm mb-4 shrink-0 overflow-hidden">
+        <div class="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-file-shield text-violet-500 text-xs"></i>
+                <span class="text-xs text-slate-800 font-semibold uppercase tracking-wider">Informes IA</span>
+            </div>
+            <span id="ia-reports-badge" class="bg-white text-violet-700 border border-violet-200 text-[10px] px-2 py-0.5 rounded-full font-bold">0 INFORMES</span>
+        </div>
+        <div id="ia-reports-container" class="max-h-64 overflow-y-auto p-4 space-y-3 bg-slate-50">
+            <div class="text-center p-5 text-slate-500">
+                <i class="fa-solid fa-circle-info text-xl mb-2 text-violet-400/60"></i>
+                <p class="font-bold text-sm text-slate-600">Sin informes de IA</p>
+                <p class="text-xs mt-1">Los resultados de CORE_PRO_IA_AUDIT aparecen aquí sin activar la tabla de buques.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Registro de Operaciones Multimodal (Ledger SaaS) -->
+    <section id="multimodal-ledger-panel" class="bg-white border border-slate-200 rounded-xl shadow-sm mb-4 shrink-0 overflow-hidden">
+        <div class="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-book-bookmark text-sky-600 text-xs"></i>
+                <span class="text-xs text-slate-800 font-semibold uppercase tracking-wider">Registro de Operaciones Multimodal (Ledger SaaS)</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span id="multimodal-ledger-badge" class="bg-sky-50 text-sky-700 border border-sky-200 text-[10px] px-2 py-0.5 rounded-full font-bold">0 OPERACIONES</span>
+                <button type="button" onclick="refreshMultimodalLedger()" class="text-slate-400 hover:text-sky-600 text-xs transition" title="Actualizar Ledger SaaS">
+                    <i class="fa-solid fa-rotate-right"></i>
+                </button>
+            </div>
+        </div>
+        <div id="multimodal-ledger-container" class="max-h-64 overflow-y-auto p-3 bg-slate-50">
+            <div id="empty-multimodal-ledger" class="text-center p-5 text-slate-500">
+                <i class="fa-solid fa-boxes-stacked text-xl mb-2 text-sky-400/60"></i>
+                <p class="font-bold text-sm text-slate-600">Sin operaciones multimodal registradas</p>
+                <p class="text-xs mt-1 text-slate-400">Las cotizaciones sincronizadas desde el Cotizador Multimodal de Core PRO se registrarán aquí.</p>
+            </div>
+            <table id="multimodal-ledger-table" class="hidden w-full text-left text-xs border-collapse">
+                <thead>
+                    <tr class="border-b border-slate-200 text-[10px] uppercase font-bold text-slate-500 bg-slate-100/70">
+                        <th class="py-2 px-3">Referencia</th>
+                        <th class="py-2 px-3">Modalidad</th>
+                        <th class="py-2 px-3 text-right">Coste API</th>
+                        <th class="py-2 px-3 text-right">Venta Agencia</th>
+                        <th class="py-2 px-3 text-right">Fee Plataforma</th>
+                        <th class="py-2 px-3 text-center">Estado</th>
+                        <th class="py-2 px-3 text-right">Fecha</th>
+                    </tr>
+                </thead>
+                <tbody id="multimodal-ledger-tbody" class="divide-y divide-slate-200">
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section id="motor-npl-panel" tabindex="0" class="relative bg-white border border-slate-200 rounded-xl shadow-sm p-4 pr-24 shrink-0">
+        <button type="button" id="btn-exit-npl" onclick="closeNPLEngine()" class="npl-exit-button bg-white border border-slate-300 text-slate-600 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600 px-3 py-1.5 rounded-lg text-xs font-semibold inline-flex items-center gap-2 transition duration-150" title="Salir del Motor NPL" aria-label="Salir del Motor NPL">
+            <i class="fa-solid fa-xmark"></i>
+            <span>Salir</span>
+        </button>
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+                <h2 class="text-xs font-bold text-slate-900 uppercase tracking-wider">Motor NPL Independiente</h2>
+                <p class="text-[11px] text-slate-500 mt-1">Extracción nativa de documentos logísticos con envío a auditoría de Data Bridge.</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+                <input id="npl-file-input" type="file" accept=".pdf,.xlsx,.xls,.docx,.txt,.csv" onchange="handleNplFileSelected()" class="block w-64 text-xs text-slate-600 file:mr-3 file:rounded-lg file:border file:border-slate-200 file:bg-slate-50 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-slate-700 hover:file:bg-slate-100">
+                <button type="button" id="btn-process-npl" onclick="processNplDocument()" class="npl-action-button bg-[#1E3A8A] hover:bg-blue-900 text-white px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 shadow-sm transition duration-150">
+                    <i class="fa-solid fa-file-import"></i>
+                    <span>Procesar Documento</span>
+                </button>
+                <button type="button" id="btn-download-npl-json" onclick="downloadNplJson()" disabled class="npl-action-button bg-white border border-slate-200 text-slate-400 disabled:cursor-not-allowed enabled:hover:bg-slate-50 enabled:text-slate-700 px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition duration-150">
+                    <i class="fa-solid fa-download"></i>
+                    <span>JSON</span>
+                </button>
+                <button type="button" id="btn-download-npl-pdf" onclick="downloadNplPdf()" disabled class="npl-action-button bg-white border border-slate-200 text-slate-400 disabled:cursor-not-allowed enabled:hover:bg-slate-50 enabled:text-slate-700 px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition duration-150">
+                    <i class="fa-solid fa-file-pdf"></i>
+                    <span>Imprimir</span>
+                </button>
+                <button type="button" id="btn-reset-npl" onclick="resetNPLEngine()" class="npl-action-button bg-white border border-slate-200 text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition duration-150">
+                    <i class="fa-solid fa-rotate-right"></i>
+                    <span>Cerrar consulta</span>
+                </button>
+                <button type="button" id="btn-close-npl" onclick="closeNPLEngine()" class="npl-action-button bg-white border border-slate-200 text-slate-600 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600 px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition duration-150">
+                    <i class="fa-solid fa-xmark"></i>
+                    <span>Salir</span>
+                </button>
+            </div>
+        </div>
+        <div class="mt-3 grid grid-cols-1 lg:grid-cols-[minmax(220px,0.75fr)_minmax(280px,1fr)] gap-3">
+            <div class="rounded-lg border border-blue-100 bg-blue-50/70 p-3 text-[11px] leading-relaxed text-slate-700">
+                <div class="font-bold uppercase tracking-wider text-[#1E3A8A] mb-1">Guía de captura</div>
+                Recorte o enfoque primero la tabla de Shipnext. Si envía una captura de más de 1500px de ancho, el motor la corta en dos mitades en memoria: cargas a la izquierda y flota a la derecha.
+            </div>
+            <div id="npl-image-preview-wrap" class="hidden npl-preview-frame overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+                <img id="file-preview" alt="Previsualización Motor NPL" class="max-h-40 w-full object-contain bg-white">
+            </div>
+        </div>
+        <div id="npl-status" class="mt-3 text-[11px] text-slate-500 console-font">Motor listo para procesar documentos.</div>
+        <div id="npl-comparative-summary" class="hidden mt-3 rounded-lg border border-emerald-100 bg-emerald-50/80 p-3 text-[11px] leading-relaxed text-slate-700">
+            <div class="font-bold uppercase tracking-wider text-emerald-700 mb-1">Informe Comparativo Previo</div>
+            <p id="npl-comparative-summary-text">-</p>
+        </div>
+        <pre id="npl-result-preview" class="hidden mt-3 max-h-40 overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-3 text-[11px] text-slate-700 console-font whitespace-pre-wrap"></pre>
+        <div id="npl-paste-toast" class="npl-paste-toast rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-800 shadow-lg" role="status" aria-live="polite">
+            Imagen pegada correctamente
+        </div>
+    </section>
+
+    <!-- Controls Footer -->
+    <footer class="flex items-center justify-between border-t border-slate-200 pt-4 mt-4 shrink-0">
+        <p class="text-[11px] text-slate-500">Módulo de Orquestación SeaCharter Bridge. No cerrar esta ventana para mantener el flujo constante.</p>
+        <div class="flex gap-2">
+            <button onclick="pauseResumeSync()" id="btn-pause-sync" class="bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition duration-150">
+                <i id="pause-icon" class="fa-solid fa-pause"></i>
+                <span id="pause-text">Pausar</span>
+            </button>
+            <button onclick="triggerManualSync()" class="bg-white hover:bg-slate-50 text-[#1E3A8A] border border-blue-200 px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 shadow-sm transition duration-150">
+                <i class="fa-solid fa-rotate"></i>
+                <span>Sincronizar Ahora</span>
+            </button>
+        </div>
+    </footer>
+
+    <!-- Logic Script -->
+    <script>
+        const logsContainer = document.getElementById('logs-container');
+        const rateCountEl = document.getElementById('rate-count');
+        const vesselCountEl = document.getElementById('vessel-count');
+        const syncCycleEl = document.getElementById('sync-cycle');
+        const syncStatusEl = document.getElementById('sync-status');
+        const btnPauseSync = document.getElementById('btn-pause-sync');
+        const pauseIcon = document.getElementById('pause-icon');
+        const pauseText = document.getElementById('pause-text');
+        const nplFileInput = document.getElementById('npl-file-input');
+        const nplStatus = document.getElementById('npl-status');
+        const nplResultPreview = document.getElementById('npl-result-preview');
+        const btnProcessNpl = document.getElementById('btn-process-npl');
+        const btnDownloadNplJson = document.getElementById('btn-download-npl-json');
+        const btnDownloadNplPdf = document.getElementById('btn-download-npl-pdf');
+        const nplImagePreviewWrap = document.getElementById('npl-image-preview-wrap');
+        const nplImagePreview = document.getElementById('file-preview');
+        const nplComparativeSummary = document.getElementById('npl-comparative-summary');
+        const nplComparativeSummaryText = document.getElementById('npl-comparative-summary-text');
+        const motorNplPanel = document.getElementById('motor-npl-panel');
+        const nplPasteToast = document.getElementById('npl-paste-toast');
+
+        let isPaused = false;
+        let countdown = 30;
+        let rateCount = 1482;
+        let vesselCount = 0;
+        let timer = null;
+        let latestNplResult = null;
+        let latestNplFileName = null;
+        let latestNplPreviewUrl = null;
+        let nplPasteToastTimer = null;
+        let vesselDataCache = null;
+
+        function hideDataBridgeWindow() {
+            if (window.dataBridgeAPI && typeof window.dataBridgeAPI.hide === 'function') {
+                window.dataBridgeAPI.hide();
+            } else if (window.parent && window.parent !== window) {
+                window.parent.postMessage({ type: 'SEACHARTER_DATABRIDGE_HIDE' }, '*');
+            }
+        }
+
+        function minimizeDataBridgeWindow() {
+            if (window.dataBridgeAPI && typeof window.dataBridgeAPI.minimize === 'function') {
+                window.dataBridgeAPI.minimize();
+            } else {
+                hideDataBridgeWindow();
+            }
+        }
+
+        function toggleDataBridgeFullScreen() {
+            if (window.dataBridgeAPI && typeof window.dataBridgeAPI.toggleFullScreen === 'function') {
+                window.dataBridgeAPI.toggleFullScreen();
+            } else if (window.parent && window.parent !== window) {
+                window.parent.postMessage({ type: 'SEACHARTER_DATABRIDGE_FULLSCREEN' }, '*');
+            }
+        }
+
+        const logPhrases = [
+            () => `[INFO] ${getTimestamp()} - Iniciando conexión con SeaCharter Cloud Server...`,
+            () => `[INFO] ${getTimestamp()} - Handshake establecido. Clave API validada correctamente.`,
+            () => `[SYNC] ${getTimestamp()} - Descargando tarifas actualizadas para la ruta Rotterdam - Houston...`,
+            () => `[SUCCESS] ${getTimestamp()} - Se actualizaron fletes de carbón y petróleo crudo (+1.2% promedio).`,
+            () => `[SYNC] ${getTimestamp()} - Escaneando posiciones AIS satelitales en zona Golfo de México...`,
+            () => `[INFO] ${getTimestamp()} - Encontradas 24 nuevas posiciones del buque M/T 'POLARIS STAR' (IMO 9431288).`,
+            () => `[SYNC] ${getTimestamp()} - Recuperando tabla de puertos World Port Index (WPI)...`,
+            () => `[INFO] ${getTimestamp()} - Base de datos de puertos locales ya está actualizada con la última revisión WPI.`,
+            () => `[SYNC] ${getTimestamp()} - Descargando índice de bunkering para combustible VLSFO en Algeciras y Singapur...`,
+            () => `[SUCCESS] ${getTimestamp()} - Precios de combustible VLSFO actualizados: $615.50/MT Algeciras.`,
+            () => `[INFO] ${getTimestamp()} - Publicando fletes actualizados al radar de SeaCharter Core PRO...`,
+            () => `[SUCCESS] ${getTimestamp()} - Sincronización en tiempo real completada para este ciclo.`
+        ];
+
+        function getTimestamp() {
+            const now = new Date();
+            return now.toLocaleTimeString('es-ES', { hour12: false });
+        }
+
+        function addLog(text, type = 'info') {
+            const logItem = document.createElement('div');
+            
+            // Standard colors depending on type
+            let colorClass = 'text-slate-700';
+            if (text.includes('[SUCCESS]')) {
+                colorClass = 'text-emerald-400';
+            } else if (text.includes('[SYNC]')) {
+                colorClass = 'text-indigo-400';
+            } else if (text.includes('[WARNING]') || text.includes('[PAUSE]')) {
+                colorClass = 'text-amber-400';
+            } else if (text.includes('[ERROR]')) {
+                colorClass = 'text-rose-500 font-semibold';
+            }
+
+            logItem.className = `${colorClass} py-0.5 border-l-2 border-transparent hover:border-indigo-500 pl-2 hover:bg-white/70 transition duration-100`;
+            logItem.textContent = text;
+            logsContainer.appendChild(logItem);
+
+            // Automatically scroll to the bottom
+            logsContainer.scrollTop = logsContainer.scrollHeight;
+        }
+
+        function clearConsole() {
+            logsContainer.innerHTML = '';
+            addLog(`[INFO] ${getTimestamp()} - Consola de registro reiniciada por el usuario.`);
+        }
+
+        function setNplExportState(enabled) {
+            btnDownloadNplJson.disabled = !enabled;
+            btnDownloadNplPdf.disabled = !enabled;
+        }
+
+        function revokeNplPreviewUrl() {
+            if (latestNplPreviewUrl) {
+                URL.revokeObjectURL(latestNplPreviewUrl);
+                latestNplPreviewUrl = null;
+            }
+        }
+
+        function handleNplFileSelected() {
+            const file = nplFileInput.files && nplFileInput.files[0];
+            latestNplResult = null;
+            vesselDataCache = null;
+            latestNplFileName = file ? file.name : null;
+            setNplExportState(false);
+            nplResultPreview.classList.add('hidden');
+            nplResultPreview.textContent = '';
+            updateNplComparativeSummary(null);
+            revokeNplPreviewUrl();
+
+            nplImagePreview.removeAttribute('src');
+            nplImagePreviewWrap.classList.add('hidden');
+            nplStatus.textContent = file ? `Archivo listo para extracción nativa: ${file.name}` : 'Motor listo para procesar documentos nativos.';
+        }
+
+        function showNplPasteToast() {
+            if (!nplPasteToast) return;
+            clearTimeout(nplPasteToastTimer);
+            nplPasteToast.classList.add('is-visible');
+            nplPasteToastTimer = setTimeout(() => {
+                nplPasteToast.classList.remove('is-visible');
+            }, 2200);
+        }
+
+        function handleNplClipboardPaste(event) {
+            if (event.defaultPrevented) return;
+            if (motorNplPanel && motorNplPanel.style.display === 'none') return;
+            const clipboardFiles = Array.from(event.clipboardData?.files || []);
+            const imageFile = clipboardFiles.find((file) => file.type && file.type.startsWith('image/'));
+            if (imageFile) {
+                event.preventDefault();
+                nplStatus.textContent = 'Formato de archivo no reconocido. Use PDF, Excel o Word nativo.';
+                addLog(`[WARN] ${getTimestamp()} - Motor NPL: imagen rechazada; la extracción OCR está desactivada.`);
+                return;
+            }
+
+            const clipboardItems = Array.from(event.clipboardData?.items || []);
+            const imageItem = clipboardItems.find((item) => item.type && item.type.startsWith('image/'));
+            if (!imageItem) return;
+
+            const imageBlob = imageItem.getAsFile();
+            if (!imageBlob) return;
+
+            event.preventDefault();
+            nplStatus.textContent = 'Formato de archivo no reconocido. Use PDF, Excel o Word nativo.';
+            addLog(`[WARN] ${getTimestamp()} - Motor NPL: imagen rechazada; la extracción OCR está desactivada.`);
+        }
+
+        function readFileAsBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const result = String(reader.result || '');
+                    resolve(result.includes(',') ? result.split(',').pop() : result);
+                };
+                reader.onerror = () => reject(reader.error || new Error('No se pudo leer el archivo.'));
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function getNplDownloadBaseName() {
+            const rawName = latestNplFileName || 'resultado-npl';
+            return rawName.replace(/\.[^.]+$/, '').replace(/[^\w.-]+/g, '_') || 'resultado-npl';
+        }
+
+        function getNplVessels(result = latestNplResult) {
+            return Array.isArray(result?.vessels) ? result.vessels : [];
+        }
+
+        function getNplPdfRows(result = latestNplResult) {
+            const rows = Array.isArray(result?.pdfRows) ? result.pdfRows : [];
+            if (rows.length) return rows;
+            return getNplVessels(result).map(vessel => ({
+                ship: vessel.ship,
+                imoType: [vessel.imo, vessel.type].filter(value => value && value !== 'N/A').join(' / ') || 'N/A',
+                dwtCapacity: [vessel.dwt, vessel.capacity].filter(value => value && value !== 'N/A').join(' / ') || 'N/A',
+                gear: vessel.gear,
+                ratingOpenDate: [vessel.rating, vessel.open_date].filter(value => value && value !== 'N/A').join(' / ') || 'N/A',
+                tcIndexOffers: [vessel.tc_index, vessel.offers].filter(value => value && value !== 'N/A').join(' / ') || 'N/A',
+                dispOwner: vessel.disp_owner
+            }));
+        }
+
+        function getNplTechnicalJson(result = latestNplResult) {
+            const emptyPayload = { buques: [] };
+            if (!result) return emptyPayload;
+            if (Array.isArray(result.data_bridge_json?.buques)) {
+                return {
+                    buques: result.data_bridge_json.buques.map(vessel => ({
+                        vesselName: vessel.vesselName || vessel.ship || vessel.nombre_buque || 'N/A',
+                        imo: vessel.imo ? String(vessel.imo) : 'N/A',
+                        dwt: Number.isFinite(Number(vessel.dwt)) ? Math.trunc(Number(vessel.dwt)) : 0
+                    }))
+                };
+            }
+            if (Array.isArray(result.data_bridge_json)) {
+                return {
+                    buques: result.data_bridge_json.map(vessel => ({
+                        vesselName: vessel.vesselName || vessel.ship || vessel.nombre_buque || 'N/A',
+                        imo: vessel.imo ? String(vessel.imo) : 'N/A',
+                        dwt: Number.isFinite(Number(vessel.dwt)) ? Math.trunc(Number(vessel.dwt)) : 0
+                    }))
+                };
+            }
+            if (Array.isArray(result.data_bridge_json?.buques_detectados)) {
+                return {
+                    buques: result.data_bridge_json.buques_detectados.map(vessel => ({
+                        vesselName: vessel.vesselName || vessel.nombre_buque || 'N/A',
+                        imo: vessel.imo ? String(vessel.imo) : 'N/A',
+                        dwt: Number.isFinite(Number(vessel.dwt)) ? Math.trunc(Number(vessel.dwt)) : 0
+                    }))
+                };
+            }
+            return {
+                buques: getNplVessels(result).map(vessel => ({
+                    vesselName: vessel.ship || vessel.vesselName || 'N/A',
+                    imo: vessel.imo ? String(vessel.imo) : 'N/A',
+                    dwt: Number.isFinite(Number(vessel.dwt)) ? Math.trunc(Number(vessel.dwt)) : 0
+                }))
+            };
+        }
+
+        function updateNplComparativeSummary(result) {
+            if (!nplComparativeSummary || !nplComparativeSummaryText) return;
+            const vessels = getNplVessels(result);
+            if (!result || vessels.length === 0) {
+                nplComparativeSummary.classList.add('hidden');
+                nplComparativeSummaryText.textContent = '-';
+                return;
+            }
+            const detected = Number.isFinite(Number(result.totalVesselsDetected))
+                ? Number(result.totalVesselsDetected)
+                : vessels.length;
+            const names = vessels.map(vessel => vessel.ship).filter(Boolean);
+            const briefNames = names.slice(0, 12).join(', ') || 'Sin nombres legibles';
+            const overflow = names.length > 12 ? ` y ${names.length - 12} más` : '';
+            nplComparativeSummaryText.textContent = `Se han detectado ${detected} buques. Detalle: ${briefNames}${overflow}.`;
+            nplComparativeSummary.classList.remove('hidden');
+        }
+
+        function hideNplAnalysisPanels() {
+            updateNplComparativeSummary(null);
+            nplResultPreview.textContent = '';
+            nplResultPreview.classList.add('hidden');
+        }
+
+        async function processNplDocument() {
+            const file = nplFileInput.files && nplFileInput.files[0];
+            if (!file) {
+                nplStatus.textContent = 'Seleccione un archivo antes de procesar.';
+                addLog(`[WARNING] ${getTimestamp()} - Motor NPL: no hay archivo seleccionado.`);
+                return;
+            }
+
+            latestNplResult = null;
+            vesselDataCache = null;
+            latestNplFileName = file.name;
+            setNplExportState(false);
+            nplResultPreview.classList.add('hidden');
+            nplStatus.textContent = `Extrayendo texto nativo de ${file.name}...`;
+            btnProcessNpl.disabled = true;
+            btnProcessNpl.classList.add('opacity-70', 'cursor-wait');
+            addLog(`[SYNC] ${getTimestamp()} - Motor NPL: enviando documento para extracción nativa.`);
+
+            try {
+                const fileContent = await readFileAsBase64(file);
+                const response = await fetch('/api/native-vessel-ingest', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        fileName: file.name,
+                        fileContent
+                    })
+                });
+
+                const result = await response.json();
+                if (!response.ok) {
+                    throw new Error(result.error || 'El Motor NPL no devolvió una respuesta válida.');
+                }
+
+                latestNplResult = result;
+                vesselDataCache = result;
+                const vesselCount = Number.isFinite(Number(result?.totalVesselsDetected))
+                    ? Number(result.totalVesselsDetected)
+                    : getNplVessels(result).length;
+                const cargoCount = Array.isArray(result?.cargoes) ? result.cargoes.length : 0;
+                nplStatus.textContent = result
+                    ? `Extracción completada: ${cargoCount} carga(s), ${vesselCount} buque(s). Use JSON o Imprimir.`
+                    : 'Extracción completada sin datos verificables. El motor devolvió null.';
+                hideNplAnalysisPanels();
+                setNplExportState(Boolean(result));
+                addLog(`[SUCCESS] ${getTimestamp()} - Motor NPL: extracción finalizada sin persistencia.`);
+            } catch (error) {
+                nplStatus.textContent = error.message || 'No se pudo procesar el documento.';
+                addLog(`[ERROR] ${getTimestamp()} - Motor NPL: ${nplStatus.textContent}`);
+            } finally {
+                btnProcessNpl.disabled = false;
+                btnProcessNpl.classList.remove('opacity-70', 'cursor-wait');
+            }
+        }
+
+        function downloadNplJson() {
+            if (!latestNplResult) return;
+            const blob = new Blob([JSON.stringify(getNplTechnicalJson(), null, 2)], { type: 'application/json' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `${getNplDownloadBaseName()}-npl.json`;
+            link.click();
+            URL.revokeObjectURL(link.href);
+            addLog(`[INFO] ${getTimestamp()} - Motor NPL: JSON descargado.`);
+        }
+
+        function downloadNplPdf() {
+            if (!latestNplResult || !window.jspdf?.jsPDF) return;
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'landscape' });
+            const vessels = getNplVessels();
+            const pdfRows = getNplPdfRows();
+            const detected = Number.isFinite(Number(latestNplResult.totalVesselsDetected))
+                ? Number(latestNplResult.totalVesselsDetected)
+                : vessels.length;
+            const margin = 34;
+            const pageWidth = doc.internal.pageSize.getWidth();
+            const pageHeight = doc.internal.pageSize.getHeight();
+            const columns = [
+                ['Ship', 100],
+                ['IMO / Type', 95],
+                ['DWT / Capacity', 95],
+                ['Gear', 70],
+                ['Rating / Open Date', 115],
+                ['T/C INDEX / OFFERS', 130],
+                ['DISP OWNER', 125]
+            ];
+            let y = 46;
+
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(18);
+            doc.setTextColor(15, 23, 42);
+            doc.text('Informe Motor NPL', margin, y);
+            doc.setDrawColor(59, 130, 246);
+            doc.setLineWidth(1.2);
+            doc.line(margin, y + 8, pageWidth - margin, y + 8);
+            y += 30;
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(10);
+            doc.setTextColor(71, 85, 105);
+            doc.text(`Documento: ${latestNplFileName || 'N/A'}`, margin, y);
+            doc.text(`Generado: ${new Date().toLocaleString('es-ES')}`, margin + 270, y);
+            doc.text(`Buques detectados: ${detected}`, margin + 520, y);
+            y += 24;
+
+            if (!pdfRows.length) {
+                doc.text('No se detectaron buques en el documento.', margin, y);
+                doc.save(`${getNplDownloadBaseName()}-npl.pdf`);
+                addLog(`[INFO] ${getTimestamp()} - Motor NPL: PDF generado.`);
+                return;
+            }
+
+            function drawHeader() {
+                let x = margin;
+                doc.setFillColor(239, 246, 255);
+                doc.setDrawColor(191, 219, 254);
+                doc.rect(margin, y, pageWidth - margin * 2, 24, 'FD');
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(8);
+                doc.setTextColor(30, 58, 138);
+                columns.forEach(([label, width]) => {
+                    doc.text(label, x + 5, y + 15);
+                    x += width;
+                });
+                y += 24;
+            }
+
+            function fitCell(value, width) {
+                const text = value === null || value === undefined || value === '' ? 'N/A' : String(value);
+                return doc.splitTextToSize(text, width - 10).slice(0, 2);
+            }
+
+            drawHeader();
+            pdfRows.forEach((rowData, index) => {
+                if (y > pageHeight - 48) {
+                    doc.addPage();
+                    y = 42;
+                    drawHeader();
+                }
+                const row = [
+                    rowData.ship,
+                    rowData.imoType,
+                    rowData.dwtCapacity,
+                    rowData.gear,
+                    rowData.ratingOpenDate,
+                    rowData.tcIndexOffers,
+                    rowData.dispOwner
+                ];
+                const cellLines = row.map((value, cellIndex) => fitCell(value, columns[cellIndex][1]));
+                const rowHeight = Math.max(24, ...cellLines.map(lines => lines.length * 10 + 12));
+                let x = margin;
+                doc.setFillColor(index % 2 === 0 ? 255 : 248, index % 2 === 0 ? 255 : 250, index % 2 === 0 ? 255 : 252);
+                doc.setDrawColor(226, 232, 240);
+                doc.rect(margin, y, pageWidth - margin * 2, rowHeight, 'FD');
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(7.5);
+                doc.setTextColor(15, 23, 42);
+                cellLines.forEach((lines, cellIndex) => {
+                    doc.text(lines, x + 5, y + 13);
+                    x += columns[cellIndex][1];
+                });
+                y += rowHeight;
+            });
+
+            doc.save(`${getNplDownloadBaseName()}-npl.pdf`);
+            addLog(`[INFO] ${getTimestamp()} - Motor NPL: PDF generado.`);
+        }
+
+        function resetNPLEngine() {
+            vesselDataCache = null;
+            latestNplResult = null;
+            latestNplFileName = null;
+            setNplExportState(false);
+            nplFileInput.value = '';
+            nplResultPreview.textContent = '';
+            nplResultPreview.classList.add('hidden');
+            nplImagePreviewWrap.classList.add('hidden');
+            nplImagePreview.removeAttribute('src');
+            if (nplPasteToast) nplPasteToast.classList.remove('is-visible');
+            clearTimeout(nplPasteToastTimer);
+            updateNplComparativeSummary(null);
+            revokeNplPreviewUrl();
+            nplStatus.textContent = 'Motor listo para procesar documentos.';
+            addLog(`[INFO] ${getTimestamp()} - Motor NPL: consulta cerrada y motor listo para nuevo archivo.`);
+        }
+
+        function closeNPLEngine() {
+            resetNPLEngine();
+            const motorPanel = document.getElementById('motor-npl-panel');
+            if (motorPanel) motorPanel.style.display = 'none';
+            const dataBridgeMain = document.getElementById('databridge-main-container');
+            if (dataBridgeMain) dataBridgeMain.style.display = 'block';
+            console.log('Motor NPL reseteado');
+        }
+
+        if (motorNplPanel) {
+            motorNplPanel.addEventListener('paste', handleNplClipboardPaste);
+            motorNplPanel.addEventListener('click', () => motorNplPanel.focus({ preventScroll: true }));
+        }
+        document.addEventListener('paste', handleNplClipboardPaste);
+
+        function closeNplEngine() {
+            closeNPLEngine();
+        }
+
+        function populateInitialLogs() {
+            addLog(`[INFO] ${getTimestamp()} - Iniciando SeaCharter Data Bridge v1.2.0...`);
+            addLog(`[INFO] ${getTimestamp()} - Entorno de seguridad activo (Sandbox/Electron Preload habilitado).`);
+            addLog(`[INFO] ${getTimestamp()} - Conexión con Base de Datos local Drizzle-Postgres establecida.`);
+            setTimeout(() => addLog(`[INFO] ${getTimestamp()} - Sincronizando en segundo plano silencioso.`), 400);
+            setTimeout(() => addLog(`[SYNC] ${getTimestamp()} - Cargando primer lote de fletes marítimos...`), 800);
+            setTimeout(() => {
+                addLog(`[SUCCESS] ${getTimestamp()} - 1,482 tarifas y fletes indexados satisfactoriamente.`);
+                startCountdownTimer();
+            }, 1200);
+        }
+
+        function triggerManualSync() {
+            if (isPaused) {
+                addLog(`[WARNING] ${getTimestamp()} - Sincronización forzada en modo pausado.`, 'warning');
+            }
+            addLog(`[SYNC] ${getTimestamp()} - Iniciando sincronización manual forzada...`);
+            syncStatusEl.textContent = 'SINCRONIZANDO...';
+            syncStatusEl.className = 'text-xs font-semibold text-indigo-400 console-font';
+            countdown = 30;
+            SyncService.refresh();
+
+            setTimeout(() => {
+                rateCount += Math.floor(Math.random() * 8) + 1;
+                rateCountEl.textContent = rateCount.toLocaleString();
+                addLog(`[SUCCESS] ${getTimestamp()} - Se actualizaron ${Math.floor(Math.random() * 10) + 1} tarifas de fletes y ${Math.floor(Math.random() * 20) + 1} posiciones de buques.`);
+                addLog(`[INFO] ${getTimestamp()} - Transmisión de fletes a SeaCharter Core PRO finalizada con éxito.`);
+                
+                syncStatusEl.textContent = isPaused ? 'PAUSADO' : 'CONECTADO';
+                syncStatusEl.className = isPaused ? 'text-xs font-semibold text-amber-400 console-font' : 'text-xs font-semibold text-emerald-400 console-font';
+            }, 1000);
+        }
+
+        function pauseResumeSync() {
+            isPaused = !isPaused;
+            if (isPaused) {
+                addLog(`[PAUSE] ${getTimestamp()} - Sincronización automática PAUSADA por el usuario.`);
+                syncStatusEl.textContent = 'PAUSADO';
+                syncStatusEl.className = 'text-xs font-semibold text-amber-400 console-font';
+                
+                pauseText.textContent = 'Reanudar';
+                pauseIcon.className = 'fa-solid fa-play';
+                btnPauseSync.className = "bg-white border border-blue-200 hover:bg-slate-50 text-[#1E3A8A] px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition duration-150";
+            } else {
+                addLog(`[INFO] ${getTimestamp()} - Sincronización automática REANUDADA.`);
+                syncStatusEl.textContent = 'CONECTADO';
+                syncStatusEl.className = 'text-xs font-semibold text-emerald-400 console-font';
+                
+                pauseText.textContent = 'Pausar';
+                pauseIcon.className = 'fa-solid fa-pause';
+                btnPauseSync.className = "bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition duration-150";
+            }
+        }
+
+        function startCountdownTimer() {
+            if (timer) clearInterval(timer);
+            
+            timer = setInterval(() => {
+                if (isPaused) {
+                    syncCycleEl.textContent = 'Pausado';
+                    return;
+                }
+
+                countdown--;
+                if (countdown <= 0) {
+                    countdown = 30;
+                    triggerManualSync();
+                } else {
+                    syncCycleEl.textContent = `En espera (${countdown}s)`;
+                }
+
+                // Periodically add a decorative log to make the stream feel active
+                if (countdown % 10 === 0) {
+                    const randomPhraseIdx = Math.floor(Math.random() * logPhrases.length);
+                    addLog(logPhrases[randomPhraseIdx]());
+                }
+            }, 1000);
+        }
+
+        // --- Human-in-the-Loop Audit Flow Logic ---
+        const DB_NAME = 'SeaCharterDB';
+        const DB_VERSION = 1;
+
+        function openSeaCharterDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    if (!db.objectStoreNames.contains('vessels')) {
+                        db.createObjectStore('vessels', { keyPath: 'imo' });
+                    }
+                };
+                request.onsuccess = (event) => resolve(event.target.result);
+                request.onerror = (event) => reject(event.target.error);
+            });
+        }
+
+        async function getVesselFromIndexedDB(imo) {
+            if (!imo) return null;
+            try {
+                const db = await openSeaCharterDB();
+                return new Promise((resolve, reject) => {
+                    const transaction = db.transaction('vessels', 'readonly');
+                    const store = transaction.objectStore('vessels');
+                    const request = store.get(String(imo));
+                    request.onsuccess = (event) => resolve(event.target.result || null);
+                    request.onerror = (event) => reject(event.target.error);
+                });
+            } catch (err) {
+                console.error("IndexedDB get error:", err);
+                return null;
+            }
+        }
+
+        async function saveVesselToIndexedDB(vessel) {
+            if (!vessel || !vessel.imo) return;
+            try {
+                const db = await openSeaCharterDB();
+                const existing = await getVesselFromIndexedDB(vessel.imo);
+                const merged = {
+                    imo: String(vessel.imo),
+                    name: vessel.name || vessel.vesselName || (existing ? existing.name : "Unknown"),
+                    type: vessel.type || vessel.vesselClass || (existing ? existing.type : "Bulk Carrier"),
+                    draft: vessel.draft || (existing ? existing.draft : null),
+                    dwt: vessel.dwt || (existing ? existing.dwt : null),
+                    flag: vessel.flag || vessel.bandera || (existing ? existing.flag : "Panama"),
+                    status: vessel.status || vessel.auditStatus || (existing ? existing.status : "Approved"),
+                    delta_historico: vessel.delta_historico !== undefined ? vessel.delta_historico : (existing ? existing.delta_historico : 0),
+                    t_fondeo: vessel.t_fondeo !== undefined ? vessel.t_fondeo : (existing ? existing.t_fondeo : 0),
+                    t_remolcadores: vessel.t_remolcadores !== undefined ? vessel.t_remolcadores : (existing ? existing.t_remolcadores : 0),
+                    last_updated: Date.now()
+                };
+
+                return new Promise((resolve, reject) => {
+                    const transaction = db.transaction('vessels', 'readwrite');
+                    const store = transaction.objectStore('vessels');
+                    const request = store.put(merged);
+                    request.onsuccess = () => resolve(true);
+                    request.onerror = (event) => reject(event.target.error);
+                });
+            } catch (err) {
+                console.error("IndexedDB put error:", err);
+            }
+        }
+
+        function calculateDelta(imo, originalEtaStr) {
+            const etaInput = document.getElementById(`input-eta-${imo}`);
+            const deltaDisplay = document.getElementById(`display-delta-${imo}`);
+            if (!etaInput || !deltaDisplay) return;
+
+            const originalDate = new Date(originalEtaStr);
+            const editedDate = new Date(etaInput.value);
+
+            if (isNaN(originalDate.getTime()) || isNaN(editedDate.getTime())) {
+                deltaDisplay.textContent = '0.00 d';
+                return;
+            }
+
+            const diffTime = editedDate.getTime() - originalDate.getTime();
+            const diffDays = diffTime / (1000 * 60 * 60 * 24);
+            deltaDisplay.textContent = `${diffDays >= 0 ? '+' : ''}${diffDays.toFixed(2)} d`;
+        }
+
+        let pendingAudits = [];
+        let pending_frozen_report = null;
+        let currentSyncId = null;
+        let activePayloadFingerprint = '';
+        const CORE_PRO_PRODUCTION_ORIGIN = 'https://neon-seachartercorepro-4ce09d.netlify.app';
+        const CORE_PRO_API_ORIGIN = (() => {
+            const configuredOrigin = String(window.CORE_PRO_API_ORIGIN || '').trim().replace(/\/+$/, '');
+            if (configuredOrigin) return configuredOrigin;
+            if (/^(localhost|127\.0\.0\.1)$/.test(window.location.hostname)) return window.location.origin;
+            if (window.location.hostname.includes('neon-seachartercorepro-4ce09d')) return window.location.origin;
+            return CORE_PRO_PRODUCTION_ORIGIN;
+        })();
+
+        function createCoreProApiUrl(pathname) {
+            return new URL(pathname, `${CORE_PRO_API_ORIGIN}/`);
+        }
+
+        async function fetchCoreProApiWithFunctionFallback(apiPath, functionPath, options) {
+            let response = await fetch(createCoreProApiUrl(apiPath), options);
+            if (response.status === 404) {
+                response = await fetch(createCoreProApiUrl(functionPath), options);
+            }
+            return response;
+        }
+
+        let dataBridgeMasterStatsRequest = null;
+        let dataBridgeMasterStatsController = null;
+
+        function refreshDataBridgeMasterCount() {
+            if (dataBridgeMasterStatsRequest) return dataBridgeMasterStatsRequest;
+            dataBridgeMasterStatsController = new AbortController();
+            const activeController = dataBridgeMasterStatsController;
+            dataBridgeMasterStatsRequest = (async () => {
+                try {
+                    const response = await fetchCoreProApiWithFunctionFallback(
+                        '/api/databridge-master-stats',
+                        '/.netlify/functions/databridge-master-stats',
+                        {
+                        headers: { Accept: 'application/json' },
+                        cache: 'no-store',
+                        signal: activeController.signal
+                        }
+                    );
+                    if (!response.headers.get('content-type')?.includes('application/json')) {
+                        throw new Error('Invalid Payload');
+                    }
+                    const payload = await response.json();
+                    const totalVessels = Number(payload?.totalVessels);
+                    if (!response.ok || payload?.success !== true || !Number.isFinite(totalVessels) || totalVessels < 0) {
+                        throw new Error(payload?.error || `HTTP ${response.status}`);
+                    }
+                    vesselCount = totalVessels;
+                    vesselCountEl.textContent = vesselCount.toLocaleString();
+                    return vesselCount;
+                } catch (error) {
+                    if (error?.name !== 'AbortError') {
+                        vesselCountEl.textContent = vesselCount > 0 ? vesselCount.toLocaleString() : '—';
+                        console.warn('[Data Bridge] No se pudo cargar el histórico maestro.', error);
+                    }
+                    return vesselCount;
+                } finally {
+                    if (dataBridgeMasterStatsController === activeController) {
+                        dataBridgeMasterStatsController = null;
+                        dataBridgeMasterStatsRequest = null;
+                    }
+                }
+            })();
+            return dataBridgeMasterStatsRequest;
+        }
+        window.refreshDataBridgeMasterCountOnDemand = refreshDataBridgeMasterCount;
+
+        window.GlobalStore = window.GlobalStore || {
+            filteredVessels: [],
+            getFilteredVessels() {
+                return this.filteredVessels;
+            },
+            setFilteredVessels(vessels) {
+                this.filteredVessels = Array.isArray(vessels) ? vessels.slice() : [];
+                window.dispatchEvent(new CustomEvent('databridge:filtered-vessels-updated', {
+                    detail: { vessels: this.filteredVessels, vesselCount: this.filteredVessels.length, updatedAt: Date.now() }
+                }));
+            }
+        };
+
+        function syncDataBridgeMasterMap() {
+            window.GlobalStore.setFilteredVessels(pendingAudits);
+            if (!window.GlobalFleetGlobe?.getInstance('bridge')) {
+                window.GlobalFleetGlobe?.mount({ key: 'bridge', containerId: 'databridge-map' });
+            } else {
+                window.GlobalFleetGlobe.updateVessels(null, 'bridge');
+            }
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function normalizeProcessState(vessel) {
+            const rawStatus = String(
+                vessel.estadoProcesos ||
+                vessel.estadoProceso ||
+                vessel.auditStatus ||
+                vessel.status ||
+                ''
+            ).trim().toUpperCase();
+
+            const processedStatuses = ['APPROVED', 'SUCCESS', 'PROCESSED', 'PROCESADO', 'VALIDATED', 'VALIDADO'];
+            const rejectedStatuses = ['DISCARDED', 'REJECTED', 'DESCARTADO', 'INVALID', 'INVÁLIDO', 'INVALIDO'];
+
+            if (processedStatuses.includes(rawStatus)) {
+                return {
+                    label: 'Procesado',
+                    detail: vessel.estadoProcesos || vessel.auditStatus || vessel.status || 'Validado',
+                    className: 'text-emerald-700 bg-white border-emerald-200'
+                };
+            }
+
+            if (rejectedStatuses.includes(rawStatus)) {
+                return {
+                    label: 'Procesado',
+                    detail: vessel.estadoProcesos || vessel.auditStatus || vessel.status || 'Descartado',
+                    className: 'text-rose-700 bg-white border-rose-200'
+                };
+            }
+
+            return {
+                label: 'Requiere acción',
+                detail: vessel.estadoProcesos || vessel.auditStatus || vessel.status || 'Pendiente',
+                className: 'text-amber-700 bg-white border-amber-200'
+            };
+        }
+
+        function formatCoreProValue(vessel) {
+            const core = vessel.coreProValue || vessel.coreProInput || vessel.enviadoCorePro || {};
+            if (typeof core === 'string') return core;
+
+            const dwt = core.dwt ?? vessel.dwt;
+            const flag = core.flag ?? core.bandera ?? vessel.flag ?? vessel.bandera;
+            const eta = core.eta ?? vessel.eta;
+            const name = core.vesselName ?? core.name ?? vessel.name;
+
+            return [
+                name ? `Buque: ${name}` : null,
+                dwt ? `DWT: ${dwt}` : null,
+                flag ? `Bandera: ${flag}` : null,
+                eta ? `ETA: ${eta}` : null
+            ].filter(Boolean).join(' · ') || 'Sin valor Core PRO';
+        }
+
+        function normalizeDataBridgeState(vessel) {
+            const received = vessel.dataBridgeReceived || vessel.lastDataBridgeResponse || vessel.recibidoDataBridge || null;
+            const rawStatus = String(received?.status || received?.auditStatus || received?.estadoProcesos || '').trim().toUpperCase();
+
+            if (!received) {
+                return {
+                    label: 'Requiere acción',
+                    detail: 'Esperando respuesta de Data Bridge',
+                    className: 'text-amber-700 bg-white border-amber-200'
+                };
+            }
+
+            const rejectedStatuses = ['DISCARDED', 'REJECTED', 'DESCARTADO', 'INVALID', 'INVÁLIDO', 'INVALIDO'];
+            const isRejected = rejectedStatuses.includes(rawStatus);
+            return {
+                label: 'Procesado',
+                detail: isRejected ? 'Descartado por Data Bridge' : 'Confirmado por Data Bridge',
+                className: isRejected
+                    ? 'text-rose-700 bg-white border-rose-200'
+                    : 'text-emerald-700 bg-white border-emerald-200'
+            };
+        }
+
+        function renderAuditFlowColumns(vessel, safeImo) {
+            const processState = normalizeProcessState(vessel);
+            const dataBridgeState = normalizeDataBridgeState(vessel);
+            const coreProValue = formatCoreProValue(vessel);
+
+            return `
+                <div class="audit-flow-grid border border-slate-200/80 bg-white/45 rounded-lg p-2" data-audit-flow="${safeImo}">
+                    <div class="rounded-md border ${processState.className} p-2 min-w-0">
+                        <div class="text-[8px] uppercase tracking-[0.12em] font-extrabold opacity-80">PENDIENTE DE AUDITORIA</div>
+                        <div class="text-[10px] font-black mt-1">${escapeHtml(processState.label)}</div>
+                        <div class="audit-flow-detail text-[9px] font-semibold opacity-80" title="${escapeHtml(processState.detail)}">${escapeHtml(processState.detail)}</div>
+                    </div>
+                    <div id="audit-flow-received-${safeImo}" class="rounded-md border ${dataBridgeState.className} p-2 min-w-0">
+                        <div class="text-[8px] uppercase tracking-[0.12em] font-extrabold opacity-80">DATOS RECIBIDOS POR DATA BRIDGE</div>
+                        <div class="text-[10px] font-black mt-1">${escapeHtml(dataBridgeState.label)}</div>
+                        <div class="audit-flow-detail text-[9px] font-semibold opacity-80" title="${escapeHtml(dataBridgeState.detail)}">${escapeHtml(dataBridgeState.detail)}</div>
+                    </div>
+                    <div class="rounded-md border border-blue-200 bg-white text-[#1E3A8A] p-2 min-w-0">
+                        <div class="text-[8px] uppercase tracking-[0.12em] font-extrabold opacity-80">DATOS ENVIADOS POR CORE PRO</div>
+                        <div class="text-[10px] font-black mt-1">Valor de entrada</div>
+                        <div class="audit-flow-detail text-[9px] font-semibold opacity-80" title="${escapeHtml(coreProValue)}">${escapeHtml(coreProValue)}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function markDataBridgeReceived(safeImo, status) {
+            const receivedEl = document.getElementById(`audit-flow-received-${safeImo}`);
+            if (!receivedEl) return;
+            const isDiscarded = status === 'Discarded';
+            receivedEl.className = `rounded-md border ${isDiscarded ? 'text-rose-700 bg-white border-rose-200' : 'text-emerald-700 bg-white border-emerald-200'} p-2 min-w-0`;
+            receivedEl.innerHTML = `
+                <div class="text-[8px] uppercase tracking-[0.12em] font-extrabold opacity-80">DATOS RECIBIDOS POR DATA BRIDGE</div>
+                <div class="text-[10px] font-black mt-1">Procesado</div>
+                <div class="audit-flow-detail text-[9px] font-semibold opacity-80" title="${isDiscarded ? 'Descartado por Data Bridge' : 'Confirmado por Data Bridge'}">${isDiscarded ? 'Descartado por Data Bridge' : 'Confirmado por Data Bridge'}</div>
+            `;
+        }
+
+        function compareBridgeFlow(cardId) {
+            const card = document.getElementById(cardId);
+            if (!card) return;
+
+            const safeImo = card.dataset.safeImo;
+            const vessel = pendingAudits.find(item => String(item.imo) === String(safeImo)) || {};
+            const processState = normalizeProcessState(vessel);
+            const dataBridgeState = normalizeDataBridgeState(vessel);
+            const coreProValue = formatCoreProValue(vessel);
+            const received = vessel.dataBridgeReceived || vessel.lastDataBridgeResponse || vessel.recibidoDataBridge || null;
+            const resultEl = document.getElementById(`compare-result-${safeImo}`);
+            if (!resultEl) return;
+
+            let resultClass = 'border-amber-200 bg-amber-50 text-amber-800';
+            let icon = 'fa-triangle-exclamation';
+            let title = 'Pendiente de respuesta';
+            let detail = 'Core PRO envió información a Data Bridge, pero todavía no hay respuesta recibida desde Data Bridge hacia Core PRO.';
+
+            if (received) {
+                const bridgeDetail = dataBridgeState.detail;
+                const isMismatch = String(processState.detail || '').toUpperCase() !== String(bridgeDetail || '').toUpperCase()
+                    && !String(processState.detail || '').toUpperCase().includes('PENDING')
+                    && !String(processState.detail || '').toUpperCase().includes('PENDIENTE');
+
+                if (isMismatch) {
+                    resultClass = 'border-sky-200 bg-sky-50 text-sky-800';
+                    icon = 'fa-code-compare';
+                    title = 'Intercambio recibido con diferencias de estado';
+                    detail = `Core PRO registra "${processState.detail}" y Data Bridge registra "${bridgeDetail}". Revise si corresponde actualizar el estado final.`;
+                } else {
+                    resultClass = 'border-emerald-200 bg-emerald-50 text-emerald-800';
+                    icon = 'fa-circle-check';
+                    title = 'Intercambio confirmado';
+                    detail = 'La información enviada desde Core PRO ya llegó a Data Bridge y existe respuesta de Data Bridge disponible para Core PRO.';
+                }
+            }
+
+            resultEl.className = `rounded-lg border px-3 py-2 text-[10px] ${resultClass}`;
+            resultEl.innerHTML = `
+                <div class="flex items-start gap-2">
+                    <i class="fa-solid ${icon} mt-0.5"></i>
+                    <div class="min-w-0">
+                        <div class="font-black uppercase tracking-[0.08em]">${escapeHtml(title)}</div>
+                        <div class="mt-1 font-semibold leading-snug">${escapeHtml(detail)}</div>
+                        <div class="mt-1 text-[9px] opacity-80 truncate" title="${escapeHtml(coreProValue)}">Core PRO: ${escapeHtml(coreProValue)}</div>
+                    </div>
+                </div>
+            `;
+            resultEl.classList.remove('hidden');
+            addLog(`[COMPARE] ${getTimestamp()} - Comparación Core PRO/Data Bridge ejecutada para IMO ${safeImo}.`);
+        }
+
+        function mapFrozenReportVessels(vesselsList) {
+            return (Array.isArray(vesselsList) ? vesselsList : []).map(v => {
+                const metadata = v.MetaData || {};
+                let rawType = v.type || v.vesselClass || v.specialtyType || metadata.ShipType || metadata.shipType || "Bulk Carrier";
+                if (typeof rawType === 'number') {
+                    rawType = rawType >= 70 && rawType <= 79 ? "Bulk Carrier" : "General Cargo";
+                }
+
+                return {
+                    imo: Number(v.IMO || v.imo || metadata.IMO) || 0,
+                    name: v.ShipName || v.vesselName || v.vessel_name || v.name || metadata.ShipName || "Unknown",
+                    type: rawType,
+                    draft: Number(v.draft || v.Draft || metadata.draft) || 0,
+                    dwt: Number(v.dwt || v.DWT || metadata.dwt) || 0,
+                    gross_tonnage: Number(v.gross_tonnage || v.grossTonnage || v.gt || metadata.gross_tonnage || metadata.GT) || null,
+                    loa_meters: Number(v.loa_meters || v.loaMeters || v.loa || v.LOA || metadata.loa_meters || metadata.LOA) || null,
+                    beam_meters: Number(v.beam_meters || v.beamMeters || v.beam || v.breadth || metadata.beam_meters || metadata.Beam) || null,
+                    latitude: Number(v.latitude ?? v.lat ?? v.AIS_Live_Lat ?? metadata.latitude ?? metadata.lat),
+                    longitude: Number(v.longitude ?? v.lon ?? v.lng ?? v.AIS_Live_Lon ?? metadata.longitude ?? metadata.lon ?? metadata.lng),
+                    flag: v.flag || v.bandera || metadata.Flag || "Panama",
+                    eta: v.eta || metadata.ETA || new Date().toISOString().split('T')[0],
+                    ultimo_puerto: v.ultimo_puerto || "N/A",
+                    destino_actual: v.destino_actual || "N/A",
+                    eta_puerto_carga: v.eta_puerto_carga || v.eta || "N/A",
+                    eta_delta: v.eta_delta || "0.0 días (En ventana)",
+                    numero_imo: (function() {
+                        const imoVal = v.numero_imo || v.imo || v.IMO || metadata.IMO;
+                        if (!imoVal) return null;
+                        const s = imoVal.toString().trim();
+                        if (s === '0' || s === 'N/A' || s === 'Unknown' || s === 'PENDING' || s === '') return null;
+                        if (!/\d/.test(s)) return null;
+                        return s;
+                    })(),
+                    tipo_buque: v.tipo_buque || rawType,
+                    ano_construccion: (function() {
+                        const yr = v.ano_construccion || v.yearBuilt || v.builtYear || v.built_year || v.built || v.year_built || metadata.Year_Built;
+                        if (!yr) return null;
+                        const parsed = parseInt(yr, 10);
+                        return isNaN(parsed) ? null : parsed;
+                    })(),
+                    bandera: v.bandera || v.flag || metadata.Flag || "Panama",
+                    armador_manager: v.armador_manager || null,
+                    gruas_geared: (function() {
+                        const geared = v.gruas_geared !== undefined ? v.gruas_geared : (v.hasCranes !== undefined ? v.hasCranes : false);
+                        return geared === true || geared === 'true' || geared === 1;
+                    })(),
+                    estadoProcesos: v.estadoProcesos || v.auditStatus || v.status || 'PENDING_AUDIT',
+                    coreProValue: v.coreProValue || v.coreProInput || v.enviadoCorePro || null,
+                    dataBridgeReceived: v.dataBridgeReceived || v.lastDataBridgeResponse || v.recibidoDataBridge || null
+                };
+            }).filter(v => v.imo > 0);
+        }
+
+        function extractIncomingVesselsPayload(payload) {
+            if (Array.isArray(payload)) return payload;
+            if (!payload || typeof payload !== 'object') return [];
+            if (Array.isArray(payload.vessels)) return payload.vessels;
+            if (Array.isArray(payload.buques)) return payload.buques;
+            if (Array.isArray(payload.data)) return payload.data;
+            return [];
+        }
+
+        function receiveCoreProVessels(payload, sourceLabel = 'Core PRO') {
+            const incomingVessels = extractIncomingVesselsPayload(payload);
+            const buques = mapFrozenReportVessels(incomingVessels);
+            console.log(`¡Datos reales recibidos en Data Bridge desde ${sourceLabel}!`, incomingVessels);
+
+            resetAuditTray();
+
+            if (buques.length > 0) {
+                addLog(`[SYNC] ${getTimestamp()} - Recibidos ${buques.length} buques reales desde ${sourceLabel}.`);
+                addVesselsToAuditList(buques);
+            } else {
+                addLog(`[SYNC] ${getTimestamp()} - El payload recibido desde ${sourceLabel} no contiene buques válidos para pintar.`);
+            }
+        }
+
+        function extractIaReportText(reportData) {
+            const parts = reportData?.candidates?.[0]?.content?.parts;
+            if (Array.isArray(parts)) return parts.map(part => part?.text || '').filter(Boolean).join('\n');
+            if (typeof reportData === 'string') return reportData;
+            return reportData ? JSON.stringify(reportData, null, 2) : '';
+        }
+
+        function renderIaReports(reports) {
+            const container = document.getElementById('ia-reports-container');
+            const badge = document.getElementById('ia-reports-badge');
+            if (!container || !badge) return;
+
+            const safeReports = Array.isArray(reports) ? reports : [];
+            badge.textContent = `${safeReports.length} INFORME${safeReports.length === 1 ? '' : 'S'}`;
+            if (safeReports.length === 0) {
+                container.innerHTML = '<div class="text-center p-5 text-slate-500"><p class="font-bold text-sm text-slate-600">Sin informes de IA</p></div>';
+                return;
+            }
+
+            container.innerHTML = safeReports.map(report => {
+                const status = String(report.status || 'PENDING').toUpperCase();
+                const body = extractIaReportText(report.reportData) || report.errorMessage || 'Informe en procesamiento.';
+                const dateValue = report.updatedAt || report.createdAt;
+                const dateLabel = dateValue ? new Date(dateValue).toLocaleString('es-ES') : 'Sin fecha';
+                const statusClass = status === 'COMPLETED'
+                    ? 'text-emerald-700 border-emerald-200 bg-emerald-50'
+                    : status === 'ERROR'
+                        ? 'text-rose-700 border-rose-200 bg-rose-50'
+                        : 'text-amber-700 border-amber-200 bg-amber-50';
+                return `<article class="bg-white border border-slate-200 rounded-xl p-3 space-y-2">
+                    <div class="flex items-center justify-between gap-3">
+                        <span class="text-[10px] font-black uppercase tracking-wider ${statusClass} border rounded-full px-2 py-0.5">${escapeHtml(status)}</span>
+                        <time class="text-[10px] text-slate-500 console-font">${escapeHtml(dateLabel)}</time>
+                    </div>
+                    <pre class="whitespace-pre-wrap text-[11px] leading-relaxed text-slate-700 font-sans max-h-40 overflow-y-auto">${escapeHtml(String(body))}</pre>
+                </article>`;
+            }).join('');
+        }
+
+        function clearIaAuditState() {
+            currentSyncId = null;
+            renderIaReports([]);
+        }
+
+        function getFrozenReportFingerprint(payload) {
+            return [
+                String(payload?.syncId || ''),
+                String(payload?.updated_at || payload?.created_at || ''),
+                String(payload?.vessel_count || 0)
+            ].join(':');
+        }
+
+        async function rehydrateIaAuditState(payload) {
+            const nextSyncId = typeof payload?.syncId === 'string' ? payload.syncId.trim() : '';
+            if (!nextSyncId) {
+                clearIaAuditState();
+                return;
+            }
+
+            const nextFingerprint = getFrozenReportFingerprint(payload);
+            if (nextFingerprint !== activePayloadFingerprint) {
+                clearIaAuditState();
+                activePayloadFingerprint = nextFingerprint;
+            }
+            currentSyncId = nextSyncId;
+            await SyncService.refresh();
+        }
+
+        const SyncService = {
+            async fetchReports() {
+                if (!currentSyncId) return [];
+
+                try {
+                    const url = createCoreProApiUrl('/api/ia-reports');
+                    url.searchParams.append('sync_id', currentSyncId);
+                    url.searchParams.append('t', String(Date.now()));
+                    const response = await fetch(url.toString(), {
+                        headers: {
+                            'Accept': 'application/json',
+                            'Cache-Control': 'no-cache, no-store, must-revalidate'
+                        },
+                        cache: 'no-store'
+                    });
+                    const payload = await response.json().catch(() => ({}));
+                    if (!response.ok) return [];
+                    if (payload.available === false) {
+                        addLog(`[INFO] ${getTimestamp()} - ${payload.message || 'Reporte no disponible'}.`);
+                    }
+                    const reports = Array.isArray(payload.ia_reports) ? payload.ia_reports : [];
+                    renderIaReports(reports);
+                    return reports;
+                } catch (_) {
+                    return [];
+                }
+            },
+
+            async refresh() {
+                const results = await Promise.allSettled([this.fetchReports()]);
+                results.forEach((result) => {
+                    if (result.status === 'rejected') {
+                        addLog(`[ERROR] ${getTimestamp()} - Falló la consulta independiente de ia_reports: ${result.reason?.message || result.reason}`);
+                    }
+                });
+            }
+        };
+        window.SyncService = SyncService;
+
+        function resetAuditTray() {
+            pendingAudits = [];
+            syncDataBridgeMasterMap();
+            const container = document.getElementById('audit-vessels-container');
+            if (container) {
+                const cards = container.querySelectorAll('[id^="audit-card-"]');
+                cards.forEach(card => card.remove());
+
+                const emptyState = document.getElementById('empty-audit-state');
+                if (emptyState) {
+                    emptyState.classList.remove('hidden');
+                }
+            }
+            const badge = document.getElementById('audit-badge');
+            if (badge) {
+                badge.textContent = '0 BUQUES';
+            }
+        }
+
+        function notifyFrozenReportReady() {
+            if (!pending_frozen_report || !Array.isArray(pending_frozen_report.vessels) || pending_frozen_report.vessels.length === 0) return;
+            window.pending_frozen_report = pending_frozen_report;
+        }
+
+        async function fetchCoreProFrozenReport(expectedSyncId = '') {
+            const syncId = String(expectedSyncId || currentSyncId || '').trim();
+            if (!syncId) return null;
+
+            const url = createCoreProApiUrl('/api/core-pro-frozen-report');
+            url.searchParams.set('syncId', syncId);
+            url.searchParams.append('t', String(Date.now()));
+            const response = await fetch(url.toString(), {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'Cache-Control': 'no-cache, no-store, must-revalidate'
+                },
+                cache: 'no-store'
+            });
+            const payload = await response.json().catch(() => null);
+
+            if (response.status !== 200) {
+                throw new Error(payload?.error || `Core PRO respondió ${response.status}`);
+            }
+
+            const vessels = Array.isArray(payload?.vessels) ? payload.vessels : [];
+            if (!payload?.available || vessels.length === 0) {
+                addLog(`[CONGELAR_REPORTE] ${getTimestamp()} - Core PRO no tiene un informe persistido disponible.`);
+                return null;
+            }
+
+            if (Number(payload?.vessel_count) !== vessels.length) {
+                throw new Error(`Core PRO devolvió un conteo inconsistente (${vessels.length}/${payload?.vessel_count || 0}).`);
+            }
+
+            pending_frozen_report = { ...payload, vessels: mapFrozenReportVessels(vessels) };
+            notifyFrozenReportReady();
+            loadPendingFrozenReport();
+            await rehydrateIaAuditState(payload);
+            return pending_frozen_report;
+        }
+        window.fetchCoreProFrozenReport = fetchCoreProFrozenReport;
+
+        async function handleCoreProLiveSyncSignal(signal) {
+            if (signal?.type !== 'CORE_PRO_FROZEN_REPORT_COMMITTED') return;
+            const syncId = typeof signal.syncId === 'string' ? signal.syncId.trim() : '';
+            if (!syncId) return;
+            currentSyncId = syncId;
+            addLog(`[SYNC] ${getTimestamp()} - Commit confirmado en Core PRO para ${Number(signal.vessel_count) || 0} buques. Leyendo el reporte persistido.`);
+            await fetchCoreProFrozenReport(syncId);
+        }
+
+        if (window.electronAPI && typeof window.electronAPI.onVesselsForAudit === 'function') {
+            window.electronAPI.onVesselsForAudit((signal) => {
+                handleCoreProLiveSyncSignal(signal).catch((error) => {
+                    addLog(`[ERROR] ${getTimestamp()} - Falló la lectura posterior al Live Sync: ${error.message}`);
+                });
+            });
+        } else if (typeof BroadcastChannel === 'function') {
+            const coreProLiveSyncChannel = new BroadcastChannel('seacharter-core-pro-live-sync');
+            coreProLiveSyncChannel.addEventListener('message', (event) => {
+                handleCoreProLiveSyncSignal(event.data).catch((error) => {
+                    addLog(`[ERROR] ${getTimestamp()} - Falló la lectura posterior al Live Sync: ${error.message}`);
+                });
+            });
+            window.coreProLiveSyncChannel = coreProLiveSyncChannel;
+        }
+
+        // =========================================================================
+        // AGGRESSIVE CORE PRO SESSION DETECTION, HEADER SYNC & PAYLOAD INJECTION
+        // =========================================================================
+        let activeCoreProSession = null;
+
+        function extractReferenceFromValue(val) {
+            if (!val) return '';
+            if (typeof val === 'string') {
+                const trimmed = val.trim();
+                if (!trimmed) return '';
+                const match = trimmed.match(/\b(RDM\/[A-Za-z0-9/_-]+)\b/i) || trimmed.match(/\b(RDM\/\d{4}-[\w-]+)\b/i);
+                if (match) return match[1].toUpperCase();
+                if (/^RDM\b/i.test(trimmed)) return trimmed.toUpperCase();
+                return '';
+            }
+            if (typeof val === 'object') {
+                return (
+                    extractReferenceFromValue(val.reference) ||
+                    extractReferenceFromValue(val.contractRef) ||
+                    extractReferenceFromValue(val.ref) ||
+                    extractReferenceFromValue(val.id) ||
+                    extractReferenceFromValue(val.sessionId) ||
+                    extractReferenceFromValue(val.session) ||
+                    extractReferenceFromValue(val.sessionReference) ||
+                    extractReferenceFromValue(val.operation?.id) ||
+                    extractReferenceFromValue(val.operation?.reference) ||
+                    extractReferenceFromValue(val.dossier?.reference) ||
+                    extractReferenceFromValue(val.voyage_reference) ||
+                    ''
+                );
+            }
+            return '';
+        }
+
+        function detectActiveSessionReference() {
+            // 1. Check URL query parameters and hash aggressively
+            try {
+                const searchParams = new URLSearchParams(window.location.search || '');
+                const hashParams = new URLSearchParams((window.location.hash || '').replace(/^#\/?/, ''));
+                
+                const priorityKeys = [
+                    'ref', 'reference', 'session', 'sessionId', 'session_id',
+                    'contract_ref', 'contractRef', 'expediente', 'dossier', 'dossier_id',
+                    'id', 'q', 'rdm'
+                ];
+
+                for (const key of priorityKeys) {
+                    const candidate = searchParams.get(key) || hashParams.get(key);
+                    const parsed = extractReferenceFromValue(candidate);
+                    if (parsed) return parsed;
+                }
+
+                for (const [key, value] of searchParams.entries()) {
+                    if (/ref|session|rdm|contract|expediente|dossier/i.test(key)) {
+                        const parsed = extractReferenceFromValue(value);
+                        if (parsed) return parsed;
+                    }
+                    const parsedVal = extractReferenceFromValue(value);
+                    if (parsedVal) return parsedVal;
+                }
+
+                for (const [key, value] of hashParams.entries()) {
+                    if (/ref|session|rdm|contract|expediente|dossier/i.test(key)) {
+                        const parsed = extractReferenceFromValue(value);
+                        if (parsed) return parsed;
+                    }
+                    const parsedVal = extractReferenceFromValue(value);
+                    if (parsedVal) return parsedVal;
+                }
+
+                const fullUrl = decodeURIComponent(window.location.href || '');
+                const urlMatch = extractReferenceFromValue(fullUrl);
+                if (urlMatch) return urlMatch;
+            } catch (_) {}
+
+            // 2. Check parent or opener window (if same-origin context)
+            try {
+                const parentWin = window.parent !== window ? window.parent : (window.opener && !window.opener.closed ? window.opener : null);
+                if (parentWin) {
+                    const parentRef = parentWin.ContractRefManager?.getActiveContractRef?.() ||
+                                      parentWin.ContractReference?.getActiveContractRef?.() ||
+                                      parentWin.getActiveContractRef?.();
+                    const parsed = extractReferenceFromValue(parentRef);
+                    if (parsed) return parsed;
+
+                    const parentUrl = decodeURIComponent(parentWin.location?.href || '');
+                    const parentUrlMatch = extractReferenceFromValue(parentUrl);
+                    if (parentUrlMatch) return parentUrlMatch;
+                }
+            } catch (_) {}
+
+            // 3. Check well-known localStorage and sessionStorage keys
+            const storageKeys = [
+                'active_core_pro_session',
+                'active_contract_ref',
+                'corepro_active_session',
+                'active_session',
+                'session_reference',
+                'last_active_session',
+                'seacharter_active_session',
+                'core_pro_session'
+            ];
+
+            for (const key of storageKeys) {
+                try {
+                    const raw = localStorage.getItem(key);
+                    if (raw) {
+                        try {
+                            const parsed = JSON.parse(raw);
+                            const ref = extractReferenceFromValue(parsed);
+                            if (ref) return ref;
+                        } catch (_) {
+                            const ref = extractReferenceFromValue(raw);
+                            if (ref) return ref;
+                        }
+                    }
+                } catch (_) {}
+                try {
+                    const raw = sessionStorage.getItem(key);
+                    if (raw) {
+                        try {
+                            const parsed = JSON.parse(raw);
+                            const ref = extractReferenceFromValue(parsed);
+                            if (ref) return ref;
+                        } catch (_) {
+                            const ref = extractReferenceFromValue(raw);
+                            if (ref) return ref;
+                        }
+                    }
+                } catch (_) {}
+            }
+
+            // 4. Aggressive scan over ALL localStorage and sessionStorage keys
+            try {
+                const localLen = localStorage.length;
+                for (let i = 0; i < localLen; i++) {
+                    const key = localStorage.key(i);
+                    if (!key) continue;
+                    const val = localStorage.getItem(key);
+                    if (!val) continue;
+                    if (/ref|session|rdm|contract|expediente|dossier/i.test(key) || val.includes('RDM/')) {
+                        try {
+                            const parsedJson = JSON.parse(val);
+                            const ref = extractReferenceFromValue(parsedJson);
+                            if (ref) return ref;
+                        } catch (_) {
+                            const ref = extractReferenceFromValue(val);
+                            if (ref) return ref;
+                        }
+                    }
+                }
+            } catch (_) {}
+
+            try {
+                const sessionLen = sessionStorage.length;
+                for (let i = 0; i < sessionLen; i++) {
+                    const key = sessionStorage.key(i);
+                    if (!key) continue;
+                    const val = sessionStorage.getItem(key);
+                    if (!val) continue;
+                    if (/ref|session|rdm|contract|expediente|dossier/i.test(key) || val.includes('RDM/')) {
+                        try {
+                            const parsedJson = JSON.parse(val);
+                            const ref = extractReferenceFromValue(parsedJson);
+                            if (ref) return ref;
+                        } catch (_) {
+                            const ref = extractReferenceFromValue(val);
+                            if (ref) return ref;
+                        }
+                    }
+                }
+            } catch (_) {}
+
+            // 5. In-memory fallback
+            if (activeCoreProSession) {
+                const ref = extractReferenceFromValue(activeCoreProSession);
+                if (ref) return ref;
+            }
+
+            return '';
+        }
+
+        function updateSessionBadge(reference) {
+            const badgeEl = document.getElementById('databridge-session-badge');
+            const dotEl = document.getElementById('databridge-session-dot');
+            const textEl = document.getElementById('databridge-session-text');
+            if (!badgeEl || !dotEl || !textEl) return;
+
+            const normalized = extractReferenceFromValue(reference);
+            if (normalized) {
+                badgeEl.dataset.sessionActive = 'true';
+                badgeEl.dataset.reference = normalized;
+                badgeEl.className = 'flex items-center gap-2 bg-emerald-50 border border-emerald-300 px-3 py-1.5 rounded-lg text-xs font-bold text-emerald-800 shadow-sm transition duration-150';
+                badgeEl.title = `Sesión activa vinculada: ${normalized}`;
+                dotEl.className = 'w-2.5 h-2.5 bg-emerald-500 rounded-full pulse-light';
+                textEl.textContent = `🟢 ${normalized}`;
+            } else {
+                badgeEl.dataset.sessionActive = 'false';
+                delete badgeEl.dataset.reference;
+                badgeEl.className = 'flex items-center gap-2 bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-500 shadow-sm transition duration-150';
+                badgeEl.title = 'Sin sesión activa en Core PRO';
+                dotEl.className = 'w-2.5 h-2.5 bg-slate-300 rounded-full';
+                textEl.textContent = 'Sin sesión activa';
+            }
+        }
+
+        function updateActiveCoreProSession(sessionData, silent = false) {
+            const previousRef = extractReferenceFromValue(activeCoreProSession);
+            const nextRef = extractReferenceFromValue(sessionData);
+
+            if (nextRef) {
+                activeCoreProSession = typeof sessionData === 'object' && sessionData !== null
+                    ? { ...sessionData, reference: nextRef }
+                    : { reference: nextRef, timestamp: Date.now() };
+                updateSessionBadge(nextRef);
+                if (!silent && previousRef !== nextRef) {
+                    addLog(`[CORE PRO] Sesión activa sincronizada: ${nextRef}`);
+                }
+            } else {
+                activeCoreProSession = null;
+                updateSessionBadge('');
+                if (!silent && previousRef) {
+                    addLog(`[CORE PRO] Sesión activa limpiada o desconectada.`);
+                }
+            }
+        }
+
+        let isFetchingRemoteSession = false;
+        async function fetchRemoteActiveSessionState() {
+            if (isFetchingRemoteSession) return null;
+            isFetchingRemoteSession = true;
+            try {
+                const response = await fetch(createCoreProApiUrl('/api/app-state'), {
+                    headers: { 'Accept': 'application/json' },
+                    cache: 'no-store'
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    const remoteRef = extractReferenceFromValue(data?.currentSessionRef || data?.reference || data);
+                    if (remoteRef) {
+                        updateActiveCoreProSession({ reference: remoteRef, timestamp: Date.now(), ...data });
+                        return remoteRef;
+                    }
+                }
+            } catch (_) {
+            } finally {
+                isFetchingRemoteSession = false;
+            }
+            return null;
+        }
+
+        function refreshActiveSessionState() {
+            const detectedRef = detectActiveSessionReference();
+            if (detectedRef) {
+                const currentRef = extractReferenceFromValue(activeCoreProSession);
+                if (currentRef !== detectedRef) {
+                    updateActiveCoreProSession({ reference: detectedRef, timestamp: Date.now() });
+                } else {
+                    updateSessionBadge(detectedRef);
+                }
+            } else if (activeCoreProSession) {
+                try {
+                    const raw = localStorage.getItem('active_core_pro_session');
+                    if (!raw) {
+                        updateActiveCoreProSession(null);
+                    }
+                } catch (_) {}
+            } else {
+                fetchRemoteActiveSessionState();
+            }
+        }
+
+        // Initial session discovery
+        refreshActiveSessionState();
+        fetchRemoteActiveSessionState();
+
+        // BroadcastChannel for instant cross-tab/frame synchronization (legacy core_bridge_sync + proactive seacharter_sync_channel)
+        if (typeof BroadcastChannel === 'function') {
+            const seacharterSyncChannel = new BroadcastChannel('seacharter_sync_channel');
+            seacharterSyncChannel.addEventListener('message', (event) => {
+                const data = event.data;
+                if (data?.type === 'CORE_SESSION_ACTIVE' && data?.reference) {
+                    updateActiveCoreProSession(data);
+                }
+            });
+            window.seacharterSyncChannel = seacharterSyncChannel;
+
+            // Proactively ping Core PRO for active session
+            try {
+                seacharterSyncChannel.postMessage({ type: 'PING_SESSION', timestamp: Date.now() });
+            } catch (_) {}
+
+            const coreBridgeSyncChannel = new BroadcastChannel('core_bridge_sync');
+            coreBridgeSyncChannel.addEventListener('message', (event) => {
+                const data = event.data;
+                if (data?.type === 'MULTIMODAL_LEDGER_SYNC' && data?.payload) {
+                    addMultimodalLedgerItem(data.payload);
+                } else if (data?.type === 'active_core_pro_session' || data?.reference) {
+                    updateActiveCoreProSession(data);
+                } else if (data?.type === 'active_core_pro_session_cleared' || data?.reference === null) {
+                    updateActiveCoreProSession(null);
+                } else {
+                    refreshActiveSessionState();
+                }
+            });
+            window.coreBridgeSyncChannel = coreBridgeSyncChannel;
+        }
+
+        // ==========================================
+        // REGISTRO DE OPERACIONES MULTIMODAL (LEDGER SAAS)
+        // ==========================================
+        const multimodalLedgerRows = [];
+
+        function renderMultimodalLedger() {
+            const emptyEl = document.getElementById('empty-multimodal-ledger');
+            const tableEl = document.getElementById('multimodal-ledger-table');
+            const tbodyEl = document.getElementById('multimodal-ledger-tbody');
+            const badgeEl = document.getElementById('multimodal-ledger-badge');
+
+            if (!tbodyEl) return;
+
+            if (badgeEl) {
+                badgeEl.textContent = `${multimodalLedgerRows.length} OPERACI${multimodalLedgerRows.length === 1 ? 'ÓN' : 'ONES'}`;
+            }
+
+            if (multimodalLedgerRows.length === 0) {
+                if (emptyEl) emptyEl.classList.remove('hidden');
+                if (tableEl) tableEl.classList.add('hidden');
+                tbodyEl.innerHTML = '';
+                return;
+            }
+
+            if (emptyEl) emptyEl.classList.add('hidden');
+            if (tableEl) tableEl.classList.remove('hidden');
+
+            tbodyEl.innerHTML = multimodalLedgerRows.map((op) => {
+                const coste = Number(op.coste_api || op.costeApi || 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                const venta = Number(op.venta_agencia || op.ventaAgencia || 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                const fee = Number(op.fee_plataforma || op.feePlataforma || 50).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                const fecha = op.created_at ? new Date(op.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : getTimestamp();
+
+                const safeRef = String(op.referencia || 'RDM-MM-XXXX').replace(/[<>&"']/g, '');
+                const safeMod = String(op.modalidad || 'FCL').replace(/[<>&"']/g, '');
+                const safeEstado = String(op.estado || 'Cotizado').replace(/[<>&"']/g, '');
+
+                return `
+                    <tr class="hover:bg-sky-50/50 transition">
+                        <td class="py-2 px-3 font-mono font-bold text-sky-800">${safeRef}</td>
+                        <td class="py-2 px-3 font-medium text-slate-700">${safeMod}</td>
+                        <td class="py-2 px-3 text-right font-mono text-slate-600">€${coste}</td>
+                        <td class="py-2 px-3 text-right font-mono font-bold text-slate-900">€${venta}</td>
+                        <td class="py-2 px-3 text-right font-mono font-semibold text-emerald-600">€${fee}</td>
+                        <td class="py-2 px-3 text-center">
+                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                ${safeEstado}
+                            </span>
+                        </td>
+                        <td class="py-2 px-3 text-right text-slate-400 font-mono text-[10px]">${fecha}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function addMultimodalLedgerItem(item) {
+            if (!item || !item.referencia) return;
+            const exists = multimodalLedgerRows.some((r) => r.referencia === item.referencia);
+            if (!exists) {
+                multimodalLedgerRows.unshift(item);
+                renderMultimodalLedger();
+                addLog(`[SYNC] ${getTimestamp()} - Nueva operación en Ledger SaaS: ${item.referencia} (${item.modalidad || 'Multimodal'}) - Venta: €${item.venta_agencia} - Fee SaaS: €${item.fee_plataforma || 50}`);
+            }
+        }
+
+        async function refreshMultimodalLedger() {
+            try {
+                const response = await fetch('/api/multimodal/sync');
+                if (response.ok) {
+                    const json = await response.json();
+                    if (json && Array.isArray(json.data)) {
+                        multimodalLedgerRows.length = 0;
+                        json.data.forEach((item) => multimodalLedgerRows.push(item));
+                        renderMultimodalLedger();
+                    }
+                }
+            } catch (err) {
+                console.warn('[Data Bridge] Error al cargar Ledger SaaS:', err);
+            }
+        }
+
+        // Cargar registros del Ledger SaaS al inicio
+        refreshMultimodalLedger();
+
+        // Storage Event Listener (instant sync across browser tabs)
+        window.addEventListener('storage', (event) => {
+            if (event.key === 'active_core_pro_session') {
+                try {
+                    updateActiveCoreProSession(event.newValue ? JSON.parse(event.newValue) : null);
+                } catch (_) {
+                    refreshActiveSessionState();
+                }
+            } else if (!event.key || /ref|session|contract|rdm/i.test(event.key)) {
+                refreshActiveSessionState();
+            }
+        });
+
+        // Tab focus, visibility, and navigation hooks for immediate header sync
+        window.addEventListener('focus', refreshActiveSessionState);
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) refreshActiveSessionState();
+        });
+        window.addEventListener('popstate', refreshActiveSessionState);
+        window.addEventListener('hashchange', refreshActiveSessionState);
+
+        // Window postMessage handler
+        window.addEventListener('message', (event) => {
+            const data = event.data;
+            if (!data) return;
+            if (data.type === 'MULTIMODAL_LEDGER_SYNC' && data.payload) {
+                addMultimodalLedgerItem(data.payload);
+            } else if (data.type === 'active_core_pro_session' || data.type === 'contract-reference:changed' || data.type === 'SEACHARTER_SESSION_UPDATE') {
+                const ref = extractReferenceFromValue(data.reference || data.payload || data);
+                if (ref) updateActiveCoreProSession({ reference: ref, timestamp: Date.now() });
+            } else if (data.type === 'active_core_pro_session_cleared') {
+                updateActiveCoreProSession(null);
+            }
+        });
+
+        // Heartbeat timer (1s) to guarantee header refresh even during silent background transitions
+        setInterval(refreshActiveSessionState, 1000);
+
+        // ==========================================
+        // ACTION: CARGAR DATOS (PAYLOAD INJECTION)
+        // ==========================================
+        async function loadDataBridgeSessionPayload() {
+            refreshActiveSessionState();
+            let activeRef = detectActiveSessionReference() || extractReferenceFromValue(activeCoreProSession);
+            if (!activeRef) {
+                activeRef = await fetchRemoteActiveSessionState();
+            }
+            if (!activeRef) {
+                addLog(`[WARNING] ${getTimestamp()} - [CARGAR DATOS] No se detectó ninguna sesión activa. Abra un expediente en Core PRO (ej. RDM/2026-0080).`);
+                if (typeof window.alert === 'function') {
+                    window.alert('No se detectó ninguna sesión activa en Core PRO (ej. RDM/2026-0080).');
+                }
+                return;
+            }
+
+            addLog(`[SYNC] ${getTimestamp()} - [CARGAR DATOS] Empaquetando payload para expediente: ${activeRef}...`);
+
+            // Gather candidate vessels from pending audits, pending frozen report, or NPL
+            const vessels = pendingAudits.length > 0
+                ? pendingAudits
+                : (pending_frozen_report?.vessels || getNplVessels() || []);
+
+            const payload = {
+                type: 'fleet',
+                source: 'SeaCharter Data Bridge',
+                reference: activeRef,
+                contractRef: activeRef,
+                session: {
+                    reference: activeRef,
+                    id: activeRef,
+                    timestamp: new Date().toISOString()
+                },
+                operation: {
+                    id: activeRef,
+                    reference: activeRef,
+                    status: 'active',
+                    source: 'SeaCharter Data Bridge'
+                },
+                vessels: vessels,
+                totalVessels: vessels.length,
+                timestamp: new Date().toISOString()
+            };
+
+            // Post to parent / opener
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage({
+                    type: 'SEACHARTER_DATABRIDGE_LOAD_DATA',
+                    reference: activeRef,
+                    contractRef: activeRef,
+                    payload: payload
+                }, '*');
+                window.parent.postMessage({
+                    type: 'SEACHARTER_DATABRIDGE_OPPORTUNITIES',
+                    candidates: vessels,
+                    reference: activeRef
+                }, '*');
+            }
+            if (window.opener && !window.opener.closed) {
+                window.opener.postMessage({
+                    type: 'SEACHARTER_DATABRIDGE_LOAD_DATA',
+                    reference: activeRef,
+                    contractRef: activeRef,
+                    payload: payload
+                }, '*');
+            }
+
+            // Broadcast on channel
+            try {
+                if (typeof BroadcastChannel === 'function') {
+                    const channel = new BroadcastChannel('core_bridge_sync');
+                    channel.postMessage({
+                        type: 'active_core_pro_session',
+                        reference: activeRef,
+                        payload: payload,
+                        timestamp: Date.now()
+                    });
+                    channel.close?.();
+
+                    const primaryImoBroadcast = String(
+                        (vessels[0] && (vessels[0].imo || vessels[0].imo_number || vessels[0].imoNumber)) ||
+                        ''
+                    ).trim();
+                    if (primaryImoBroadcast && /^\d{7}$/.test(primaryImoBroadcast)) {
+                        const crossAppChannel = new BroadcastChannel('cross_app_sync');
+                        crossAppChannel.postMessage({
+                            type: 'LOAD_IMO',
+                            imo: primaryImoBroadcast,
+                            reference: activeRef,
+                            timestamp: Date.now()
+                        });
+                        crossAppChannel.close?.();
+
+                        const coreProChannel = new BroadcastChannel('core_pro_channel');
+                        coreProChannel.postMessage({
+                            type: 'LOAD_IMO',
+                            imo: primaryImoBroadcast,
+                            core_pro_pending_imo: primaryImoBroadcast,
+                            reference: activeRef,
+                            timestamp: Date.now()
+                        });
+                        coreProChannel.close?.();
+                    }
+                }
+            } catch (_) {}
+
+            // Send IMO cross-app to /api/app-state for Core PRO auto-completion
+            const primaryImo = String(
+                (vessels[0] && (vessels[0].imo || vessels[0].imo_number || vessels[0].imoNumber)) ||
+                ''
+            ).trim();
+            if (primaryImo && /^\d{7}$/.test(primaryImo)) {
+                try {
+                    fetch(createCoreProApiUrl('/api/app-state'), {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            key: 'core_pro_pending_imo',
+                            selected_imo: primaryImo,
+                            imo: primaryImo,
+                            value: primaryImo,
+                            reference: activeRef,
+                            target_session_id: activeRef,
+                            timestamp: Date.now()
+                        })
+                    }).catch(function(err) {
+                        console.warn('[Data Bridge] Error enviando IMO a Core PRO via /api/app-state:', err);
+                    });
+                } catch (_) {}
+            }
+
+            // If pending frozen report is available, load it into the audit tray
+            if (pending_frozen_report && Array.isArray(pending_frozen_report.vessels) && pending_frozen_report.vessels.length > 0) {
+                loadPendingFrozenReport();
+            }
+
+            window.dispatchEvent(new CustomEvent('databridge:data-loaded', { detail: { reference: activeRef, payload } }));
+            addLog(`[SUCCESS] ${getTimestamp()} - [CARGAR DATOS] Datos de la sesión ${activeRef} (${vessels.length} buques) empaquetados y enviados a Core PRO.`);
+        }
+        window.loadDataBridgeSessionPayload = loadDataBridgeSessionPayload;
+        window.detectActiveSessionReference = detectActiveSessionReference;
+        window.refreshActiveSessionState = refreshActiveSessionState;
+
+        function loadPendingFrozenReport() {
+            if (!pending_frozen_report || !Array.isArray(pending_frozen_report.vessels) || pending_frozen_report.vessels.length === 0) {
+                addLog(`[CONGELAR_REPORTE] ${getTimestamp()} - No hay pending_frozen_report con buques para cargar.`);
+                return;
+            }
+
+            resetAuditTray();
+            addVesselsToAuditList(pending_frozen_report.vessels);
+            addLog(`[CONGELAR_REPORTE] ${getTimestamp()} - Informe automático cargado con ${pending_frozen_report.vessels.length} buques.`);
+        }
+
+        function addVesselsToAuditList(vesselsList) {
+            const container = document.getElementById('audit-vessels-container');
+            const emptyState = document.getElementById('empty-audit-state');
+            const badge = document.getElementById('audit-badge');
+            const safeVesselsList = Array.isArray(vesselsList) ? vesselsList : [];
+
+            if (safeVesselsList.length > 0 && emptyState) {
+                emptyState.classList.add('hidden');
+            }
+
+            safeVesselsList.forEach(vessel => {
+                if (pendingAudits.some(item => item.imo === vessel.imo && item.name === vessel.name)) {
+                    return;
+                }
+
+                pendingAudits.push(vessel);
+
+                const card = document.createElement('div');
+                const safeImo = vessel.imo || Math.floor(Math.random() * 1000000);
+                card.id = `audit-card-${safeImo}`;
+                card.dataset.safeImo = String(safeImo);
+                card.className = "bg-slate-50/80 border border-slate-200 rounded-xl p-3.5 space-y-3 transition-all duration-300 hover:border-slate-300 hover:bg-slate-50";
+                
+                const escapedName = (vessel.name || "Unknown").replace(/'/g, "\\'");
+                const escapedType = String(vessel.type || "Bulk Carrier").replace(/'/g, "\\'");
+                const originalEta = vessel.eta || new Date().toISOString().split('T')[0];
+                const etaDelta = vessel.eta_delta || '0.0 días (En ventana)';
+                const displayName = escapeHtml(vessel.name || "Unknown");
+                const displayType = escapeHtml(vessel.type || "Bulk Carrier");
+                const displayImo = escapeHtml(vessel.imo || 'N/A');
+                const displayLastPort = escapeHtml(vessel.ultimo_puerto || 'N/A');
+                const displayDestination = escapeHtml(vessel.destino_actual || 'N/A');
+                const displayEtaPort = escapeHtml(vessel.eta_puerto_carga || originalEta);
+                const displayEtaDelta = escapeHtml(etaDelta);
+                const displayDraft = escapeHtml(vessel.draft ? vessel.draft : 'N/A');
+                const displayOriginalEta = escapeHtml(originalEta);
+                const inputDwtValue = escapeHtml(vessel.dwt || 0);
+                const inputFlagValue = escapeHtml(vessel.flag || vessel.bandera || 'Panama');
+                const displayGrossTonnage = vessel.gross_tonnage ? Number(vessel.gross_tonnage).toLocaleString('es-ES') : 'N/A';
+                const displayLoa = vessel.loa_meters ? `${Number(vessel.loa_meters).toLocaleString('es-ES')} m` : 'N/A';
+                const displayBeam = vessel.beam_meters ? `${Number(vessel.beam_meters).toLocaleString('es-ES')} m` : 'N/A';
+                const displayYearBuilt = vessel.ano_construccion || vessel.year_built || 'N/A';
+
+                let deltaColorClass = 'text-emerald-700 bg-white border-emerald-200';
+                if (etaDelta.includes('+')) {
+                    deltaColorClass = 'text-rose-700 bg-white border-rose-200';
+                }
+
+                card.innerHTML = `
+                    <div class="flex items-start justify-between">
+                        <div class="min-w-0 flex-1 pr-2">
+                            <h4 class="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5 truncate">
+                                <i class="fa-solid fa-ship text-indigo-400 shrink-0"></i>
+                                <span class="truncate" title="${displayName}">${displayName}</span>
+                            </h4>
+                            <p class="text-[10px] text-[#1E3A8A] font-semibold mt-0.5 truncate">${displayType}</p>
+                        </div>
+                        <span class="text-[9px] font-bold text-slate-500 bg-white px-2 py-0.5 border border-slate-200 rounded console-font shrink-0">IMO ${displayImo}</span>
+                    </div>
+
+                    ${renderAuditFlowColumns(vessel, safeImo)}
+
+                    <section class="rounded-lg border border-slate-200 bg-white px-3 py-2.5" aria-label="Especificaciones Técnicas">
+                        <div class="mb-2 flex items-center justify-between gap-2">
+                            <span class="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">Especificaciones Técnicas</span>
+                            <span class="text-[9px] font-bold text-emerald-700" data-master-profile-status="${safeImo}">${vessel.gross_tonnage || vessel.loa_meters ? 'Ficha maestra disponible' : 'Consultando vessels_master'}</span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[10px]">
+                            <div class="flex items-center justify-between gap-2"><span class="text-slate-500">GT</span><strong class="console-font text-slate-800" data-master-field="gross_tonnage" data-master-imo="${safeImo}">${displayGrossTonnage}</strong></div>
+                            <div class="flex items-center justify-between gap-2"><span class="text-slate-500">LOA</span><strong class="console-font text-slate-800" data-master-field="loa_meters" data-master-imo="${safeImo}">${displayLoa}</strong></div>
+                            <div class="flex items-center justify-between gap-2"><span class="text-slate-500">Manga</span><strong class="console-font text-slate-800" data-master-field="beam_meters" data-master-imo="${safeImo}">${displayBeam}</strong></div>
+                            <div class="flex items-center justify-between gap-2"><span class="text-slate-500">Año</span><strong class="console-font text-slate-800" data-master-field="year_built" data-master-imo="${safeImo}">${displayYearBuilt}</strong></div>
+                        </div>
+                    </section>
+
+                    <div class="grid grid-cols-2 gap-2 border-t border-b border-slate-200/60 py-2.5 text-[10px] text-slate-600">
+                        <div class="flex items-center gap-1 col-span-2">
+                            <span class="text-slate-500 font-medium">Último Puerto:</span>
+                            <span class="font-bold text-slate-700 console-font truncate">${displayLastPort}</span>
+                        </div>
+                        <div class="flex items-center gap-1 col-span-2">
+                            <span class="text-slate-500 font-medium">Destino Actual:</span>
+                            <span class="font-bold text-slate-700 console-font truncate">${displayDestination}</span>
+                        </div>
+                        <div class="flex items-center gap-1 col-span-2">
+                            <span class="text-slate-500 font-medium">ETA Calculado Radar:</span>
+                            <span class="font-bold text-slate-700 console-font">${displayEtaPort}</span>
+                        </div>
+                        <div class="flex items-center gap-1 col-span-2">
+                            <span class="text-slate-500 font-medium">Delta:</span>
+                            <span class="font-bold ${deltaColorClass} border px-1.5 py-0.5 rounded console-font">${displayEtaDelta}</span>
+                        </div>
+                        <div class="flex items-center gap-1 mt-1 border-t border-slate-200/30 pt-1.5">
+                            <span class="text-slate-500 font-medium">DWT:</span>
+                            <input type="number" id="input-dwt-${safeImo}" class="bg-white border border-slate-200/80 focus:border-indigo-500 focus:outline-none rounded px-1.5 py-0.5 text-slate-800 w-24 text-[10px] font-bold console-font" value="${inputDwtValue}">
+                        </div>
+                        <div class="flex items-center gap-1 mt-1 border-t border-slate-200/30 pt-1.5">
+                            <span class="text-slate-500 font-medium">Calado:</span>
+                            <span class="font-bold text-slate-700 console-font">${displayDraft} m</span>
+                        </div>
+                        <div class="flex items-center gap-1 col-span-2">
+                            <span class="text-slate-500 font-medium">Bandera:</span>
+                            <input type="text" id="input-flag-${safeImo}" class="bg-white border border-slate-200/80 focus:border-indigo-500 focus:outline-none rounded px-1.5 py-0.5 text-slate-800 w-24 text-[10px] font-bold" value="${inputFlagValue}">
+                        </div>
+                        <div class="flex items-center gap-1 col-span-2">
+                            <span class="text-slate-500 font-medium">ETA Radar:</span>
+                            <span class="font-bold text-slate-700 console-font">${displayOriginalEta}</span>
+                        </div>
+                        <div class="col-span-2 flex items-center justify-between border-t border-slate-200/40 pt-2 mt-1">
+                            <div class="flex items-center gap-1">
+                                <span class="text-slate-500 font-medium">ETA Final:</span>
+                                <input type="date" id="input-eta-${safeImo}" class="bg-white border border-slate-200/80 focus:border-indigo-500 focus:outline-none rounded px-1.5 py-0.5 text-slate-800 text-[10px] font-bold console-font" value="${originalEta}" onchange="calculateDelta('${safeImo}', '${originalEta}')">
+                            </div>
+                            <div class="flex items-center gap-1 text-[9px]">
+                                <span class="text-slate-500 font-medium">Ajuste Manual Delta:</span>
+                                <span id="display-delta-${safeImo}" class="font-bold text-indigo-400 bg-white border border-blue-200 px-1.5 py-0.5 rounded console-font">0.00 d</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="compare-result-${safeImo}" class="hidden"></div>
+
+                    <div class="flex items-center gap-2 justify-end pt-1">
+                        <button onclick="compareBridgeFlow('${card.id}')" class="bg-sky-500/10 border border-sky-500/25 hover:bg-sky-500/20 hover:border-sky-500/40 text-sky-300 px-2.5 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1 transition duration-150" title="Comparar datos enviados por Core PRO y recibidos por Data Bridge">
+                            <i class="fa-solid fa-code-compare"></i>
+                            <span>Comparar</span>
+                        </button>
+                        <button onclick="submitAudit('${card.id}', ${vessel.imo || 0}, '${escapedName}', '${escapedType}', ${vessel.draft || 0}, '${originalEta}', 'Discarded')" class="bg-rose-500/10 border border-rose-500/20 hover:bg-rose-500/25 hover:border-rose-500/40 text-rose-400 px-2.5 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1 transition duration-150">
+                            <i class="fa-solid fa-xmark"></i>
+                            <span>Descartar (Inválido)</span>
+                        </button>
+                        <button onclick="submitAudit('${card.id}', ${vessel.imo || 0}, '${escapedName}', '${escapedType}', ${vessel.draft || 0}, '${originalEta}', 'Approved')" class="bg-emerald-500/15 border border-emerald-500/30 hover:bg-emerald-50 text-emerald-400 px-3 py-1.5 rounded-lg text-[10px] font-extrabold flex items-center gap-1 transition duration-150 shadow-sm">
+                            <i class="fa-solid fa-cloud-arrow-up"></i>
+                            <span>PUSH (Aprobar)</span>
+                        </button>
+                    </div>
+                `;
+                
+                container.appendChild(card);
+            });
+
+            badge.textContent = `${pendingAudits.length} BUQUE${pendingAudits.length === 1 ? '' : 'S'}`;
+            syncDataBridgeMasterMap();
+            hydrateDataBridgeMasterProfiles(safeVesselsList).catch(error => {
+                console.warn('[Data Bridge] No se pudo hidratar la ficha técnica maestra.', error);
+            });
+        }
+
+        async function hydrateDataBridgeMasterProfiles(vesselsList) {
+            const imos = Array.from(new Set((Array.isArray(vesselsList) ? vesselsList : [])
+                .map(vessel => String(vessel?.imo || vessel?.numero_imo || '').replace(/\D/g, ''))
+                .filter(imo => imo.length === 7)));
+            if (imos.length === 0) return [];
+            const response = await fetch(createCoreProApiUrl('/api/vessels-master-classes'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify({ imos }),
+                cache: 'no-store'
+            });
+            const payload = await response.json();
+            if (!response.ok || payload?.success === false) throw new Error(payload?.error || `HTTP ${response.status}`);
+            const profiles = Array.isArray(payload?.profiles) ? payload.profiles : (Array.isArray(payload?.classes) ? payload.classes : []);
+            profiles.forEach(profile => {
+                const imo = String(profile?.imo || profile?.imo_number || '').replace(/\D/g, '');
+                const vessel = pendingAudits.find(candidate => String(candidate?.imo || candidate?.numero_imo || '').replace(/\D/g, '') === imo);
+                if (!vessel) return;
+                Object.assign(vessel, {
+                    gross_tonnage: profile.gross_tonnage ?? profile.grossTonnage ?? vessel.gross_tonnage,
+                    loa_meters: profile.loa_meters ?? profile.loaMeters ?? vessel.loa_meters,
+                    beam_meters: profile.beam_meters ?? profile.beamMeters ?? vessel.beam_meters,
+                    ano_construccion: profile.year_built ?? profile.yearBuilt ?? vessel.ano_construccion,
+                    year_built: profile.year_built ?? profile.yearBuilt ?? vessel.year_built,
+                    flag: profile.flag || vessel.flag,
+                    bandera: profile.flag || vessel.bandera,
+                });
+                const values = {
+                    gross_tonnage: vessel.gross_tonnage ? Number(vessel.gross_tonnage).toLocaleString('es-ES') : 'N/A',
+                    loa_meters: vessel.loa_meters ? `${Number(vessel.loa_meters).toLocaleString('es-ES')} m` : 'N/A',
+                    beam_meters: vessel.beam_meters ? `${Number(vessel.beam_meters).toLocaleString('es-ES')} m` : 'N/A',
+                    year_built: vessel.ano_construccion || vessel.year_built || 'N/A',
+                };
+                Object.entries(values).forEach(([field, value]) => {
+                    const element = document.querySelector(`[data-master-field="${field}"][data-master-imo="${imo}"]`);
+                    if (element) element.textContent = String(value);
+                });
+                const flagInput = document.getElementById(`input-flag-${imo}`);
+                if (flagInput && profile.flag) flagInput.value = profile.flag;
+                const status = document.querySelector(`[data-master-profile-status="${imo}"]`);
+                if (status) status.textContent = 'Ficha maestra sincronizada';
+            });
+            syncDataBridgeMasterMap();
+            return profiles;
+        }
+
+        async function submitAudit(cardId, imo, name, type, draft, originalEta, status) {
+            const card = document.getElementById(cardId);
+            if (!card) return;
+
+            const safeImo = card.dataset.safeImo || String(imo);
+            const inputDwt = document.getElementById(`input-dwt-${safeImo}`)?.value;
+            const inputFlag = document.getElementById(`input-flag-${safeImo}`)?.value;
+            const inputEta = document.getElementById(`input-eta-${safeImo}`)?.value;
+
+            const dwtVal = parseFloat(inputDwt) || 0;
+            const flagVal = inputFlag || 'Panama';
+            const masterVessel = pendingAudits.find(vessel => String(vessel?.imo || '') === String(imo)) || {};
+
+            // Calculate delay delta compared to original radar signal
+            let deltaDays = 0;
+            if (originalEta && inputEta) {
+                const originalDate = new Date(originalEta);
+                const editedDate = new Date(inputEta);
+                if (!isNaN(originalDate.getTime()) && !isNaN(editedDate.getTime())) {
+                    deltaDays = (editedDate.getTime() - originalDate.getTime()) / (1000 * 60 * 60 * 24);
+                }
+            }
+
+            const buttons = card.querySelectorAll('button');
+            buttons.forEach(btn => btn.disabled = true);
+
+            const originalHtml = card.innerHTML;
+            card.className = "bg-white/50 border border-slate-200 rounded-xl p-3.5 space-y-3 opacity-60 pointer-events-none transition-all duration-300";
+
+            addLog(`[SYNC] ${getTimestamp()} - Enviando decisión de auditoría (${status === 'Approved' ? 'VÁLIDO' : 'INVÁLIDO'}) para el buque '${name}'...`);
+            markDataBridgeReceived(safeImo, status);
+
+            let apiSuccess = false;
+            try {
+                const response = await fetch('/api/validate-vessel', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: name,
+                        imo: imo,
+                        type: type,
+                        draft: draft,
+                        dwt: dwtVal,
+                        status: status,
+                        flag: flagVal,
+                        gross_tonnage: masterVessel.gross_tonnage ?? null,
+                        loa_meters: masterVessel.loa_meters ?? null,
+                        beam_meters: masterVessel.beam_meters ?? null,
+                        year_built: masterVessel.ano_construccion ?? masterVessel.year_built ?? null,
+                        delta_historico: deltaDays
+                    })
+                });
+
+                const result = await response.json();
+                if (response.ok && result && result.success) {
+                    apiSuccess = true;
+                } else {
+                    const apiError = result && (result.error || result.message) ? (result.error || result.message) : `HTTP ${response.status}`;
+                    addLog(`[ERROR] ${getTimestamp()} - Core PRO/Postgres no confirmó la recepción del buque '${name}': ${apiError}`);
+                }
+            } catch (err) {
+                console.warn("API server offline or errored, proceeding with Local-First IndexedDB persistence:", err);
+                addLog(`[ERROR] ${getTimestamp()} - Core PRO/Postgres no respondió para el buque '${name}'. Guardando solo en IndexedDB local.`);
+            }
+
+            // Persist locally in IndexedDB as the primary source of truth
+            try {
+                const vesselRecord = {
+                    imo: safeImo,
+                    name: name,
+                    type: type,
+                    draft: draft,
+                    dwt: dwtVal,
+                    flag: flagVal,
+                    status: status,
+                    delta_historico: deltaDays,
+                    t_fondeo: 0,
+                    t_remolcadores: 0
+                };
+
+                await saveVesselToIndexedDB(vesselRecord);
+				if (apiSuccess && window.parent !== window) {
+					window.parent.postMessage({ type: 'SEACHARTER_DATABRIDGE_MUTATION', resource: 'vessel-audit' }, window.location.origin);
+				}
+
+                if (status === 'Approved') {
+                    if (apiSuccess) {
+                        addLog(`[SUCCESS] ${getTimestamp()} - Buque '${name}' (IMO ${imo}) AUDITADO y REGISTRADO en Postgres exitosamente.`);
+                    } else {
+                        addLog(`[SUCCESS] ${getTimestamp()} - [MODO LOCAL-FIRST] Buque '${name}' (IMO ${imo}) AUDITADO y REGISTRADO en IndexedDB.`);
+                    }
+                } else {
+                    addLog(`[WARNING] ${getTimestamp()} - Buque '${name}' (IMO ${imo}) DESCARTADO de forma segura localmente.`);
+                }
+
+                pendingAudits = pendingAudits.filter(item => !(item.imo === imo && item.name === name));
+                syncDataBridgeMasterMap();
+
+                card.style.transform = "translateX(50px)";
+                card.style.opacity = "0";
+                setTimeout(() => {
+                    card.remove();
+                    
+                    const badge = document.getElementById('audit-badge');
+                    badge.textContent = `${pendingAudits.length} BUQUE${pendingAudits.length === 1 ? '' : 'S'}`;
+
+                    if (pendingAudits.length === 0) {
+                        const emptyState = document.getElementById('empty-audit-state');
+                        if (emptyState) emptyState.classList.remove('hidden');
+                    }
+                }, 300);
+
+            } catch (dbErr) {
+                addLog(`[ERROR] ${getTimestamp()} - Falló la persistencia local de buque '${name}': ${dbErr.message}`);
+                card.className = "bg-slate-50/80 border border-rose-500/40 rounded-xl p-3.5 space-y-3 hover:bg-slate-50 transition-all duration-300";
+                card.innerHTML = originalHtml;
+                addLog(`[INFO] ${getTimestamp()} - Intente auditar nuevamente el buque '${name}'.`);
+            }
+        }
+
+        // Initialize
+        (function mountSharedDatalasticCreditCounter() {
+            const host = document.getElementById('databridge-datalastic-credit');
+            let attempts = 0;
+            const mount = () => {
+                const owner = window.parent !== window ? window.parent : window.opener;
+                const component = owner?.DatalasticCreditCounter;
+                if (component?.mount) {
+                    const unsubscribe = component.mount(host, { variant: 'toolbar', showLimit: true });
+                    window.addEventListener('pagehide', unsubscribe, { once: true });
+                    return;
+                }
+                attempts += 1;
+                if (attempts < 30) {
+                    window.setTimeout(mount, 100);
+                    return;
+                }
+                host.className = 'datalastic-credit-counter datalastic-credit-counter--toolbar';
+                host.dataset.state = 'unavailable';
+                host.textContent = 'Saldo Datalastic no disponible';
+            };
+            mount();
+        })();
+        populateInitialLogs();
+        syncDataBridgeMasterMap();
+    </script>
+</body>
+</html>

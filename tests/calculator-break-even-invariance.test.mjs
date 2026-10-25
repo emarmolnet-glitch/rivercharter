@@ -1,0 +1,294 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import test from 'node:test';
+import vm from 'node:vm';
+
+const indexSource = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+const calculatorStart = indexSource.indexOf('function calcularViaje(datosDelBuqueAislados)');
+const calculatorEnd = indexSource.indexOf("if (typeof window !== 'undefined') {\n            window.calcularViaje", calculatorStart);
+const calculatorSource = indexSource.slice(calculatorStart, calculatorEnd).trim();
+const stevedoringAllocationStart = indexSource.indexOf('function resolveStevedoringAllocation(condition, cargoTons)');
+const stevedoringAllocationEnd = indexSource.indexOf('function renderStevedoringCostBreakdown', stevedoringAllocationStart);
+const stevedoringAllocationSource = indexSource.slice(stevedoringAllocationStart, stevedoringAllocationEnd).trim();
+const requiredInputsStart = indexSource.indexOf('function hasRequiredCalculationInputs()');
+const requiredInputsEnd = indexSource.indexOf('function resetTotalEstimation', requiredInputsStart);
+const requiredInputsSource = indexSource.slice(requiredInputsStart, requiredInputsEnd).trim();
+
+const baseInputs = {
+  'dist-ballast': 1000,
+  'dist-laden': 1000,
+  'spd-ballast': 12,
+  'spd-laden': 12,
+  'cargo-qty': 20000,
+  'cargo-type': 'Granel Sólido (Dry Bulk)',
+  'cargo-type-manual': '',
+  'rate-load': 5000,
+  'rate-disch': 5000,
+  'freight-conditions': 'FIOS',
+  'laytime-load-condition': 'SHINC',
+  'laytime-disch-condition': 'SHINC',
+  'turn-time-hours': 24,
+  'factor-clima': 0,
+  'charter-party-standard': 'GENCON',
+  'cons-sea': 20,
+  'price-sea': 600,
+  'price-ifo': 500,
+  'cons-port': 4,
+  'cons-anchorage': 4,
+  'cons-anchorage-aux': 2,
+  'price-port': 700,
+  'opex-daily': 5000,
+  'cargo-surcharge': 0,
+  'pda-pol': 20000,
+  'pda-pod': 20000,
+  'stevedoring-costs': 10000,
+  'pda-misc': 0,
+  'margin-owner': 5,
+  'margin-charterer': 3,
+  'freight-rate': 30,
+  'freight-sell': 35,
+  'comm-pct': 2.5,
+  'vessel-dwt': 30000,
+  'delta-historico': 0,
+  't-fondeo': 0,
+  'eu-carbon-price': 80,
+  'ets-route-type': 0.5,
+  'asb-delay-hours': 0,
+  'apply-ets-surcharge': 'NO',
+  'port-pol': 'Rotterdam',
+  'port-pod': 'Bilbao',
+  'coste-maniobra-especial': 0,
+  'dias-preparacion': 0,
+  'input-trincaje': 0,
+};
+
+function buildElements(overrides = {}) {
+  const values = { ...baseInputs, ...overrides };
+  const elements = new Map(Object.entries(values).map(([id, value]) => [id, {
+    value: String(value),
+    dataset: {},
+    setAttribute() {},
+  }]));
+  elements.set('t-remolcadores', {
+    value: '0',
+    dataset: { autoEstimated: 'true', tarifaBase: '0' },
+    setAttribute() {},
+  });
+  return { elements, values };
+}
+
+function runCalculator(overrides = {}) {
+  const { elements, values } = buildElements(overrides);
+  const context = {
+    Math,
+    Number,
+    parseFloat,
+    document: { getElementById: (id) => elements.get(id) || null },
+    State: { cargoType: values['cargo-type'] },
+    PORT_DB: {},
+    window: {
+      SeaCharterVoyageCostEngine: {
+        inferTugCostByDwt(dwt, manualUnitCost) {
+          const totalUses = Number(dwt) > 0 ? 4 : 0;
+          const unitCost = Number(manualUnitCost) > 0 ? Number(manualUnitCost) : (totalUses ? 1200 : 0);
+          return {
+            tugs_por_maniobra: totalUses ? 1 : 0,
+            tarifa_efectiva_ud: unitCost,
+            total_usos_remolcador: totalUses,
+            coste_total_tugs: unitCost * totalUses,
+            inferred: true,
+          };
+        },
+      },
+    },
+    getMetodoEstibaActual: () => 'standard',
+    getMetodoDescargaActual: () => 'standard',
+    calcularRitmoEfectivo: (side) => Number(values[side === 'pod' ? 'rate-disch' : 'rate-load']),
+    normalizarTipoCarga: () => 'granel',
+    costeTrincajeCondicional: () => 0,
+    vesselHasScrubber: () => false,
+    readNumeroGruasPuerto: () => 1,
+    calcularDiasPuertoPorEstiba: (cargo, rate) => Number(rate) > 0 ? Number(cargo) / Number(rate) : 0,
+    getLaytimeCondition: (side) => values[side === 'pod' ? 'laytime-disch-condition' : 'laytime-load-condition'],
+    applyLaytimeCalendarRisk: (days, condition) => ['SHEX', 'SHEX UU', 'SHEX EIU', 'FHEX', 'SSHEX'].includes(condition)
+      ? Number(days) * (7 / 5)
+      : Number(days),
+    getOwnerStevedoringFactor: (condition) => ({ FILO: 0.5, LIFO: 0.5, LINER: 1 }[condition] ?? 0),
+    getCountryFromPort: () => '',
+    isSecaZone: () => false,
+    getManualFuelBreakdown: () => null,
+    buildExecutiveShipClassAnalysis: () => ({ capexDaily: 0 }),
+    getEtsRouteFactor: () => Number(values['ets-route-type']),
+    calcularPrecioObjetivo: (base, margin) => Math.max(0, Number(base) || 0) * (1 + ((Number(margin) || 0) / 100)),
+  };
+  vm.runInNewContext(
+    `${stevedoringAllocationSource}; ${calculatorSource}; globalThis.result = calcularViaje({ dwt: ${Number(values['vessel-dwt']) || 0}, hasScrubber: false });`,
+    context,
+  );
+  return { result: context.result, elements };
+}
+
+function assertValidBreakEven(testNumber, result) {
+  assert.notEqual(result, undefined);
+  assert.notEqual(result.breakEven, undefined);
+  assert.equal(Number.isFinite(result.breakEven), true);
+  console.log(`Calculadora reparada. Resultado de prueba ${testNumber}: ${result.breakEven}. Integridad de fórmula validada`);
+}
+
+test('break-even returns zero for zero cargo', () => {
+  const { result } = runCalculator({ 'cargo-qty': 0 });
+  assertValidBreakEven(1, result);
+  assert.equal(result.breakEven, 0);
+});
+
+test('break-even remains finite for negative edge inputs', () => {
+  const { result } = runCalculator({
+    'cargo-qty': -100,
+    'pda-pol': -5000,
+    'opex-daily': -1000,
+    'comm-pct': -10,
+  });
+  assertValidBreakEven(2, result);
+});
+
+test('break-even accepts the selected cargo type when the manual description is empty', () => {
+  const { result, elements } = runCalculator();
+  const context = {
+    Boolean,
+    Number,
+    String,
+    document: { getElementById: (id) => elements.get(id) || null },
+  };
+  vm.runInNewContext(`${requiredInputsSource}; globalThis.ready = hasRequiredCalculationInputs();`, context);
+  assert.equal(context.ready, true);
+  assertValidBreakEven(3, result);
+  assert.ok(result.breakEven > 0);
+});
+
+test('laytime uses cargo divided by both real rates plus turn time hours', () => {
+  const { result } = runCalculator({
+    'cargo-qty': 12000,
+    'rate-load': 3000,
+    'rate-disch': 4000,
+    'turn-time-hours': 12,
+  });
+
+  assert.equal(result.laytimeDays, 7.5);
+  assert.equal(result.turnTimeDays, 0.5);
+  assert.ok(result.totalOpex > 0);
+});
+
+test('interrupted laytime adds two weekend-risk days per five calculated days', () => {
+  const continuous = runCalculator({
+    'cargo-qty': 10000,
+    'rate-load': 2000,
+    'rate-disch': 2000,
+    'turn-time-hours': 0,
+    'laytime-load-condition': 'SHINC',
+    'laytime-disch-condition': 'CQD',
+  }).result;
+  const interrupted = runCalculator({
+    'cargo-qty': 10000,
+    'rate-load': 2000,
+    'rate-disch': 2000,
+    'turn-time-hours': 0,
+    'laytime-load-condition': 'SHEX UU',
+    'laytime-disch-condition': 'FHEX',
+  }).result;
+
+  assert.equal(continuous.laytimeDays, 10);
+  assert.equal(interrupted.laytimeDays, 14);
+  assert.equal(interrupted.laytimeRiskDays, 4);
+  assert.ok(interrupted.totalOpex > continuous.totalOpex);
+  assert.ok(interrupted.breakEven > continuous.breakEven);
+});
+
+test('conditions allocate stevedoring cost to the owner', () => {
+  const fios = runCalculator({
+    'freight-conditions': 'FIOS',
+    'stevedoring-costs': 20000,
+  }).result;
+  const filo = runCalculator({
+    'freight-conditions': 'FILO',
+    'stevedoring-costs': 20000,
+  }).result;
+  const liner = runCalculator({
+    'freight-conditions': 'LINER',
+    'stevedoring-costs': 20000,
+  }).result;
+
+  assert.equal(fios.stevedoringOwnerCost, 0);
+  assert.equal(filo.stevedoringOwnerCost, 10000);
+  assert.equal(liner.stevedoringOwnerCost, 20000);
+  assert.ok(filo.breakEven > fios.breakEven);
+  assert.ok(liner.breakEven > filo.breakEven);
+});
+
+test('liner terms auto-estimate stevedoring while FIOS keeps owner cost at zero', () => {
+  const fios = runCalculator({
+    'freight-conditions': 'FIOS',
+    'stevedoring-costs': 0,
+  });
+  const liner = runCalculator({
+    'freight-conditions': 'LINER',
+    'stevedoring-costs': 0,
+    'cargo-qty': 20000,
+  });
+
+  assert.equal(fios.result.stevedoringOwnerCost, 0);
+  assert.equal(liner.result.stevedoringEnteredCost, 50000);
+  assert.equal(liner.result.stevedoringOwnerCost, 50000);
+  assert.equal(liner.elements.get('stevedoring-costs').dataset.autoEstimated, 'true');
+  assert.match(indexSource, /id="res-cost-stevedoring-note"/);
+  assert.match(indexSource, /FIOS: coste \$0 para el armador/);
+  assert.match(indexSource, /Liner Terms: coste a cargo del armador/);
+  assert.match(indexSource, /pdaRecurrente[\s\S]*stevedoringAllocation\.ownerCost/);
+  assert.doesNotMatch(indexSource, /pdaRecurrente[\s\S]{0,300}parseFloat\(document\.getElementById\('stevedoring-costs'\)\.value\)/);
+});
+
+test('slower real port rates increase voyage days and break-even', () => {
+  const fast = runCalculator({ 'rate-load': 6000, 'rate-disch': 6000 }).result;
+  const slow = runCalculator({ 'rate-load': 2000, 'rate-disch': 2000 }).result;
+
+  assert.ok(slow.totalDays > fast.totalDays);
+  assert.ok(slow.totalOpex > fast.totalOpex);
+  assert.ok(slow.breakEven > fast.breakEven);
+});
+
+test('changing turn time from 12 to 48 hours increases billable days and break-even', () => {
+  const twelveHours = runCalculator({ 'turn-time-hours': 12 }).result;
+  const fortyEightHours = runCalculator({ 'turn-time-hours': 48 }).result;
+
+  assert.equal(fortyEightHours.turnTimeDays - twelveHours.turnTimeDays, 1.5);
+  assert.ok(fortyEightHours.totalDays > twelveHours.totalDays);
+  assert.ok(fortyEightHours.totalOpex > twelveHours.totalOpex);
+  assert.ok(fortyEightHours.breakEven > twelveHours.breakEven);
+});
+
+test('break-even safely handles a one-hundred-percent commission', () => {
+  const { result } = runCalculator({ 'comm-pct': 100 });
+  assertValidBreakEven(4, result);
+  assert.equal(result.breakEven, 0);
+});
+
+test('break-even remains finite for very high costs and cargo', () => {
+  const { result } = runCalculator({
+    'cargo-qty': 1000000,
+    'pda-pol': 1000000000,
+    'pda-pod': 1000000000,
+    'opex-daily': 1000000,
+    'price-sea': 100000,
+  });
+  assertValidBreakEven(5, result);
+  assert.ok(result.breakEven > 0);
+});
+
+test('carbon price flows into ETS cost and projected owner profit', () => {
+  const lowCarbon = runCalculator({ 'eu-carbon-price': 40 }).result;
+  const highCarbon = runCalculator({ 'eu-carbon-price': 80 }).result;
+  const etsIncrease = highCarbon.etsCost - lowCarbon.etsCost;
+
+  assert.ok(etsIncrease > 0);
+  assert.equal(highCarbon.costTotal - lowCarbon.costTotal, etsIncrease);
+  assert.equal(lowCarbon.netProfitOwner - highCarbon.netProfitOwner, etsIncrease);
+});

@@ -1,0 +1,176 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import test from 'node:test';
+
+const forwarderComponentSource = readFileSync(new URL('../src/components/ForwarderWorkspace.jsx', import.meta.url), 'utf8');
+const appSource = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+const indexHtmlSource = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+const entrySource = readFileSync(new URL('../src/forwarder-workspace-entry.jsx', import.meta.url), 'utf8');
+
+test('1. ForwarderWorkspace.jsx defines two-column fullscreen layout with Tailwind CSS', () => {
+  // Sidebar w-80
+  assert.match(forwarderComponentSource, /w-80/);
+  assert.match(forwarderComponentSource, /shrink-0/);
+  // Main canvas flex-1
+  assert.match(forwarderComponentSource, /flex-1/);
+  // Maritime slate/blue palette
+  assert.match(forwarderComponentSource, /bg-slate-950/);
+  assert.match(forwarderComponentSource, /bg-slate-900/);
+  assert.match(forwarderComponentSource, /border-slate-800/);
+});
+
+test('2. ForwarderWorkspace.jsx implements "+ Nuevo Proyecto" with prompt and POST to forwarder-projects endpoint', () => {
+  assert.match(forwarderComponentSource, /\+ Nuevo Proyecto/);
+  assert.match(forwarderComponentSource, /window\.prompt\(/);
+  assert.match(forwarderComponentSource, /fetch\((?:getApiUrl\()?['"](?:https:\/\/neon-seachartercorepro-4ce09d\.netlify\.app)?\/\.netlify\/functions\/forwarder-projects['"]/);
+  assert.match(forwarderComponentSource, /method:\s*['"]POST['"]/);
+  assert.match(forwarderComponentSource, /client_name/);
+});
+
+test('3. ForwarderWorkspace.jsx fetches projects on mount with isLoading state and displays project details', () => {
+  assert.match(forwarderComponentSource, /useEffect\(/);
+  assert.match(forwarderComponentSource, /fetchProjects/);
+  assert.match(forwarderComponentSource, /method:\s*['"]GET['"]/);
+  assert.match(forwarderComponentSource, /isLoading/);
+  assert.match(forwarderComponentSource, /project_ref/);
+  assert.match(forwarderComponentSource, /client_name/);
+  assert.match(forwarderComponentSource, /status/);
+});
+
+test('4. ForwarderWorkspace.jsx manages activeProject state and renders header and dashed services placeholder', () => {
+  assert.match(forwarderComponentSource, /activeProject/);
+  assert.match(forwarderComponentSource, /setActiveProject/);
+  // Empty state when no active project
+  assert.match(forwarderComponentSource, /Expediente de Transitario/);
+  assert.match(forwarderComponentSource, /Selecciona un proyecto de la lista lateral/);
+  // Header with active project
+  assert.match(forwarderComponentSource, /activeProject\.client_name/);
+  assert.match(forwarderComponentSource, /activeProject\.project_ref/);
+  assert.match(forwarderComponentSource, /activeProject\.status/);
+  // Dashed border placeholder with button
+  assert.match(forwarderComponentSource, /border-dashed/);
+  assert.match(forwarderComponentSource, /No hay servicios logísticos añadidos a este proyecto/);
+  assert.match(forwarderComponentSource, /➕ Añadir Servicio/);
+});
+
+test('5. App.jsx conditionally renders ForwarderWorkspace when view is FORWARDERS while preserving all hooks', () => {
+  assert.match(appSource, /import\s*\{\s*ForwarderWorkspace\s*\}\s*from\s*['"]\.\/components\/ForwarderWorkspace\.jsx['"]/);
+  assert.match(appSource, /currentView === 'FORWARDERS'\s*\?\s*\(\s*<ForwarderWorkspace\s*\/>\s*\)\s*:\s*\(\s*children\s*\)/);
+  assert.match(appSource, /useSeaCharterSync\(\)/);
+  assert.match(appSource, /useUrlImoAutoLookup\(\)/);
+  assert.match(appSource, /usePendingImoSync\(\)/);
+});
+
+test('6. index.html includes visual vertical separator and 💼 PROYECTOS button to the right of AUDITORIA', () => {
+  const renderNavStart = indexHtmlSource.indexOf('function renderPrimaryNavigation()');
+  const renderNavEnd = indexHtmlSource.indexOf('function updateMobileModuleNavLabel', renderNavStart);
+  const renderNavSource = indexHtmlSource.slice(renderNavStart, renderNavEnd);
+
+  assert.match(renderNavSource, /tab-btn-forwarders/);
+  assert.match(renderNavSource, /💼 PROYECTOS/);
+  assert.match(renderNavSource, /w-px.*bg-slate-700/);
+  assert.match(renderNavSource, /switchTab\(['"]FORWARDERS['"]\)/);
+});
+
+test('7. index.html defines view-forwarders and switchTab hides other views (including 3D globe and INPUT GEOGRAFICO)', () => {
+  assert.match(indexHtmlSource, /id="view-forwarders"/);
+  assert.match(indexHtmlSource, /id="forwarder-workspace-root"/);
+  assert.match(indexHtmlSource, /src="\.\/src\/forwarder-workspace-entry\.jsx"/);
+
+  const switchTabStart = indexHtmlSource.indexOf('function switchTab(tabId)');
+  const switchTabEnd = indexHtmlSource.indexOf('function closeMobileSessionMenu()', switchTabStart);
+  const switchTabSource = indexHtmlSource.slice(switchTabStart, switchTabEnd);
+
+  assert.match(switchTabSource, /tabId === 'FORWARDERS'/);
+  assert.match(switchTabSource, /view-forwarders/);
+  assert.match(switchTabSource, /window\.mountForwarderWorkspace/);
+  assert.match(switchTabSource, /window\.currentView = 'FORWARDERS'/);
+});
+
+test('8. forwarder-workspace-entry.jsx mounts ForwarderWorkspace to DOM container', () => {
+  assert.match(entrySource, /createRoot/);
+  assert.match(entrySource, /mountForwarderWorkspace/);
+  assert.match(entrySource, /<ForwarderWorkspace \/>/);
+});
+
+test('9. Project Cargo Builder modal opens on "Añadir Servicio" with large overlay layout', () => {
+  assert.match(forwarderComponentSource, /isCargoModalOpen/);
+  assert.match(forwarderComponentSource, /setIsCargoModalOpen\(true\)/);
+  assert.match(forwarderComponentSource, /max-w-6xl/);
+  assert.match(forwarderComponentSource, /Project Cargo Builder/);
+  // Contains the 3 clear vertical sections
+  assert.match(forwarderComponentSource, /1\.\s*Lista de Empaque\s*\(Packing List\)/);
+  assert.match(forwarderComponentSource, /2\.\s*Trincaje y Materiales/);
+  assert.match(forwarderComponentSource, /3\.\s*Mano de Obra Portuaria/);
+});
+
+test('10. Section 1 implements dynamic Packing List table with cargoItems state, auto-calculations, and totals', () => {
+  assert.match(forwarderComponentSource, /const\s*\[cargoItems,\s*setCargoItems\]\s*=\s*useState\(\[\]\)/);
+  assert.match(forwarderComponentSource, /\+ Añadir Pieza/);
+  // Editable columns
+  assert.match(forwarderComponentSource, /Cantidad/);
+  assert.match(forwarderComponentSource, /Tipo\/Modelo/);
+  assert.match(forwarderComponentSource, /Largo \(m\)/);
+  assert.match(forwarderComponentSource, /Ancho \(m\)/);
+  assert.match(forwarderComponentSource, /Alto \(m\)/);
+  assert.match(forwarderComponentSource, /Peso Unitario \(kg\)/);
+  // Auto-calculated columns
+  assert.match(forwarderComponentSource, /M2/);
+  assert.match(forwarderComponentSource, /M3/);
+  // Table footer totals for M2, M3 and Peso
+  assert.match(forwarderComponentSource, /<tfoot/);
+  assert.match(forwarderComponentSource, /totals\.m2/);
+  assert.match(forwarderComponentSource, /totals\.m3/);
+  assert.match(forwarderComponentSource, /totals\.weight/);
+});
+
+test('11. Section 2 implements Dunnage & Lashing materials numeric counters with +/- buttons', () => {
+  assert.match(forwarderComponentSource, /Maderas de Estiba \(Dunnage\)/);
+  assert.match(forwarderComponentSource, /Eslingas de alta capacidad/);
+  assert.match(forwarderComponentSource, /Cadenas y Tensores/);
+  assert.match(forwarderComponentSource, /Grilletes/);
+  assert.match(forwarderComponentSource, /dunnageWood/);
+  assert.match(forwarderComponentSource, /highCapacitySlings/);
+  assert.match(forwarderComponentSource, /chainsBinders/);
+  assert.match(forwarderComponentSource, /shackles/);
+});
+
+test('12. Section 3 implements Port Labor and Heavy Lift numeric counters with +/- buttons', () => {
+  assert.match(forwarderComponentSource, /Cuadrillas de Estibadores \(Turnos\)/);
+  assert.match(forwarderComponentSource, /Equipo de Trincadores/);
+  assert.match(forwarderComponentSource, /Grúa Auxiliar de Tierra \(Heavy Lift\)/);
+  assert.match(forwarderComponentSource, /stevedoreGangs/);
+  assert.match(forwarderComponentSource, /lashingTeam/);
+  assert.match(forwarderComponentSource, /heavyLiftCrane/);
+});
+
+test('13. Modal Footer implements financial inputs and "Guardar Flete y Estiba en Proyecto" save handler', () => {
+  assert.match(forwarderComponentSource, /Coste Total Estimado \(€\)/);
+  assert.match(forwarderComponentSource, /Precio Venta a Cliente \(€\)/);
+  assert.match(forwarderComponentSource, /Guardar Flete y Estiba en Proyecto/);
+  // Console.log complete object
+  assert.match(forwarderComponentSource, /console\.log\(/);
+  // State cleanup
+  assert.match(forwarderComponentSource, /setCargoItems\(\[\]\)/);
+  // Modal close
+  assert.match(forwarderComponentSource, /setIsCargoModalOpen\(false\)/);
+});
+
+test('14. ForwarderWorkspace implements delete project button with stopPropagation, confirmation, and state update', () => {
+  // Discreet delete button in project card
+  assert.match(forwarderComponentSource, /handleDeleteProject/);
+  assert.match(forwarderComponentSource, /title=["']Eliminar proyecto["']/);
+  // Uses stopPropagation to prevent opening project
+  assert.match(forwarderComponentSource, /e\.stopPropagation\(\)/);
+  // Confirmation dialog
+  assert.match(forwarderComponentSource, /window\.confirm\(/);
+  // Deletes from local state
+  assert.match(forwarderComponentSource, /setProjects\(/);
+  // Redirects or cleans active project
+  assert.match(forwarderComponentSource, /setActiveProject\(updatedProjects\[0\]\)/);
+  assert.match(forwarderComponentSource, /setActiveProject\(null\)/);
+  // Calls DELETE endpoint
+  assert.match(forwarderComponentSource, /method:\s*['"]DELETE['"]/);
+});
+
+

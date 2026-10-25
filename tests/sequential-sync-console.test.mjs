@@ -1,0 +1,95 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import test from 'node:test';
+
+const source = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+
+test('synchronization panel renders five horizontal telemetry blocks', () => {
+  assert.match(source, /id="matching-sequential-status-console"[^>]*min-w-\[980px\][^>]*grid-cols-5/);
+  assert.match(source, /id="matching-route-status-block"/);
+  assert.match(source, /id="matching-cargo-status-block"/);
+  assert.match(source, /id="matching-fleet-status-block"/);
+  assert.match(source, /id="matching-execution-success-stick"/);
+  assert.match(source, /id="matching-databridge-status-block"/);
+});
+
+test('telemetry renderer changes presentation classes without mutating application state', () => {
+  const rendererStart = source.indexOf('function updateSequentialTelemetryBlock');
+  const rendererEnd = source.indexOf("window.updateSequentialTelemetryBlock = updateSequentialTelemetryBlock", rendererStart);
+  const rendererSource = source.slice(rendererStart, rendererEnd);
+  assert.match(rendererSource, /block\.dataset\.telemetryState = state/);
+  assert.match(rendererSource, /valueElement\.textContent = value/);
+  assert.doesNotMatch(rendererSource, /fetch\s*\(|GlobalStore|SeaCharterStore|localStorage/);
+});
+
+test('route and laycan summary listens to the existing SEA_ROUTE_DEFINED event', () => {
+  const routeStart = source.indexOf("window.addEventListener('SEA_ROUTE_DEFINED'");
+  const routeEnd = source.indexOf('function getCoreProMatchingRequestContext', routeStart);
+  const routeSource = source.slice(routeStart, routeEnd);
+  assert.match(routeSource, /'matching-route-status-block',[\s\S]*routeReady \? 'success' : 'pending'/);
+  assert.match(routeSource, /matching-laycan-status-text/);
+});
+
+test('fleet telemetry consumes the derived filtered array and clean taxonomy labels', () => {
+  assert.match(source, /window\.getFleetTaxonomyLabels = getFleetTaxonomyLabels/);
+  assert.match(source, /window\.addEventListener\('ais:filtered-vessels-updated',[\s\S]*updateFleetTelemetryFromDerivedVessels/);
+  assert.match(source, /const detailHasVessels = Array\.isArray\(detail\.vessels\)/);
+  assert.match(source, /const vesselCount = vessels\.length/);
+  assert.match(source, /'Cargo': 'Cargo',[\s\S]*'Tankers': 'Tankers',[\s\S]*'Passengers': 'Passengers',[\s\S]*'Others': 'Others'/);
+  assert.match(source, /countSource: detailHasVessels \? 'derived-filter' : 'committed-selection'/);
+  assert.doesNotMatch(source, /vesselCount = Math\.max\(0, Number\(event\?\.detail\?\.vesselCount\)/);
+});
+
+test('matching block consumes MATCHING_EXECUTION_SUCCESS', () => {
+  assert.match(source, /window\.addEventListener\('MATCHING_EXECUTION_SUCCESS'/);
+  assert.match(source, /`\$\{vessels\.length\} Buque\$\{vessels\.length === 1 \? '' : 's'\} en Caché`/);
+});
+
+test('Coincidencia removes local radar and Data Bridge send controls without deleting shared services', () => {
+  assert.doesNotMatch(source, /data-radar-global-control data-radar-context="matching"/);
+  assert.doesNotMatch(source, /id="commercial-nlp-send-btn"/);
+  assert.match(source, /SINCRONIZAR CANDIDATOS \(NEON DB\)/);
+  assert.match(source, /window\.executeMatchingRadarSweep/);
+  assert.match(source, /window\.RadarGlobalControl/);
+  assert.match(source, /function getDataBridgeTransmissionVessels\(\)[\s\S]*window\.renderedMatchingVessels/);
+  assert.match(source, /function setRenderedMatchingVessels\(vessels, metadata = \{\}\)[\s\S]*setDataBridgeTransmissionAvailability\(canonicalVessels\)/);
+  assert.match(source, /function setDataBridgeTransmissionAvailability\(matchedVessels = getDataBridgeTransmissionVessels\(\)\)/);
+  assert.match(source, /const enabled = vessels\.length > 0/);
+  assert.match(source, /control\.disabled = !enabled/);
+  assert.match(source, /setDataBridgeTransmissionAvailability\(vessels\)/);
+  assert.match(source, /if \(matchedVessels\.length === 0\)[\s\S]*setDataBridgeTransmissionAvailability\?\.\(matchedVessels\)[\s\S]*return/);
+  assert.doesNotMatch(source, /sendBtn\.disabled = true/);
+});
+
+test('Data Bridge telemetry exposes processing, success and network error states', () => {
+  assert.match(source, /new CustomEvent\('DATABRIDGE_SYNC_STATUS', \{[\s\S]*state: 'processing'/);
+  assert.match(source, /const visualSyncSucceeded = response\.status === 200[\s\S]*responsePayload\?\.available === true/);
+  assert.match(source, /state: visualSyncSucceeded \? 'success' : 'error'/);
+  assert.match(source, /state === 'processing'[\s\S]*'Sincronizando\.\.\.'/);
+  assert.match(source, /state === 'success'[\s\S]*'Sincronizado'/);
+  assert.match(source, /`Error de Red\$\{httpStatus \? ` \/ \$\{httpStatus\}` : ''\}`/);
+  assert.doesNotMatch(source, /Esperando envío/);
+  assert.match(source, /if \(!visualSyncSucceeded\)/);
+});
+
+test('reactive sync combines FormState and positive AES matching', () => {
+  assert.match(source, /window\.FormState = Object\.assign\(\{ POL: '', POD: '', Laycan: '' \}/);
+  assert.match(source, /function evaluateReactiveSyncStatus\(metadata = \{\}\)/);
+  assert.match(source, /formComplete && matchingPositive/);
+  assert.match(source, /return updateSyncStatus\(true, \{ source: 'form-state-aes-matching'/);
+  assert.match(source, /window\.sync_status = synchronized/);
+  assert.match(source, /block\.classList\.toggle\('status-green', state === 'success'\)/);
+});
+
+test('Data Bridge confirmation uses the POST response instead of the removed status endpoint', () => {
+  assert.doesNotMatch(source, /fetch\('\/api\/databridge-core-pro-sync'/);
+  assert.match(source, /const dataBridgeResponse = await postDataBridgeReceiveVessels\(\{/);
+  assert.match(source, /notifyDataBridgeFrozenReportCommitted\(responsePayload, dataBridgeConfirmation\)/);
+  assert.match(source, /dataBridgeConfirmed: true/);
+});
+
+test('telemetry implementation adds no toast notifications', () => {
+  const telemetryStart = source.indexOf('const SEQUENTIAL_TELEMETRY_STYLES');
+  const telemetryEnd = source.indexOf('async function syncCoreProMatchingReport', telemetryStart);
+  assert.doesNotMatch(source.slice(telemetryStart, telemetryEnd), /showToast\s*\(/);
+});

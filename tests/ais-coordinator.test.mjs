@@ -1,0 +1,347 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+  createAisCoordinator,
+  getAisConsumptionSnapshot,
+} from "../netlify/functions/_shared/aisCoordinator.js";
+
+const environment = new Map([
+  ["DATALASTIC_API_KEY", "test-key"],
+  ["DATALASTIC_MONTHLY_CREDIT_LIMIT", "25"],
+]);
+
+globalThis.Netlify = {
+  env: {
+    get(name) {
+      return environment.get(name);
+    },
+  },
+};
+
+function createMemoryStore() {
+  const values = new Map();
+  return {
+    values,
+    async get(key) {
+      return values.get(key) ?? null;
+    },
+    async setJSON(key, value) {
+      values.set(key, structuredClone(value));
+    },
+  };
+}
+
+function createBudgetGate({ allowed = true } = {}) {
+  const calls = { locks: 0, reservations: 0, releases: 0 };
+  return {
+    calls,
+    async withRequestLock(_cacheKey, operation) {
+      calls.locks += 1;
+      return operation({
+        async reserve(period, limit) {
+          calls.reservations += 1;
+          return { allowed, usedCredits: allowed ? calls.reservations : limit, limit, period };
+        },
+        async release() {
+          calls.releases += 1;
+        },
+      });
+    },
+  };
+}
+
+function jsonResponse(payload, status = 200) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+test("tracking reuses the five-minute cache and spends one credit", async () => {
+  let fetchCount = 0;
+  const budgetGate = createBudgetGate();
+  const coordinator = createAisCoordinator({
+    store: createMemoryStore(),
+    budgetGate,
+    now: () => Date.parse("2026-08-14T12:00:00.000Z"),
+    fetchImpl: async (url) => {
+      fetchCount += 1;
+      assert.equal(url.pathname, "/api/v0/vessel");
+      assert.equal(url.searchParams.get("imo"), "1234567");
+      return jsonResponse({
+        data: {
+          name: "Shadow Vessel",
+          imo: "1234567",
+          lat: 41.2,
+          lon: -8.7,
+          speed: 11.5,
+          eta_UTC: "2026-08-20T00:00:00Z",
+        },
+      });
+    },
+  });
+
+  const first = await coordinator.getLivePosition("IMO 1234567");
+  const second = await coordinator.getLivePosition("1234567");
+
+  assert.equal(first.meta.cacheStatus, "MISS");
+  assert.equal(second.meta.cacheStatus, "HIT");
+  assert.equal(fetchCount, 1);
+  assert.equal(budgetGate.calls.reservations, 1);
+  assert.equal("eta" in first.data, false);
+  assert.equal("eta_UTC" in first.data, false);
+});
+
+test("radar caches the enriched payload and shares a three-decimal zone", async () => {
+  let fetchCount = 0;
+  let enrichmentCount = 0;
+  const store = createMemoryStore();
+  const coordinator = createAisCoordinator({
+    store,
+    budgetGate: createBudgetGate(),
+    now: () => Date.parse("2026-08-14T12:05:00.000Z"),
+    enrichRadarVessels: async (vessels) => {
+      enrichmentCount += 1;
+      return {
+        vessels: vessels.map((vessel) => ({ ...vessel, dwt: 42_000, technicalMatch: true })),
+        counts: { liveRadar: vessels.length, technicalMatches: vessels.length },
+      };
+    },
+    fetchImpl: async (url) => {
+      fetchCount += 1;
+      assert.equal(url.pathname, "/api/v0/vessel_inradius");
+      assert.equal(url.searchParams.get("lat"), "40.123");
+      assert.equal(url.searchParams.get("lon"), "-7.987");
+      assert.equal(url.searchParams.get("radius"), "10");
+      return jsonResponse({
+        data: {
+          vessels: [{
+            name: "Radar Vessel",
+            imo: "7654321",
+            lat: 40.1234,
+            lon: -7.9876,
+            distance: 3.2,
+          }],
+        },
+      });
+    },
+  });
+
+  const first = await coordinator.getRadarTraffic(40.1231, -7.9871);
+  const second = await coordinator.getRadarTraffic(40.1234, -7.9874, 10);
+  const cachedEnvelope = store.values.get("radar/v2/40.123_-7.987_10nm.json");
+
+  assert.equal(first.meta.cacheStatus, "MISS");
+  assert.equal(second.meta.cacheStatus, "HIT");
+  assert.equal(fetchCount, 1);
+  assert.equal(enrichmentCount, 1);
+  assert.equal(first.data.length, 1);
+  assert.equal(first.data[0].dwt, 42_000);
+  assert.deepEqual(first.sourceCounts, { liveRadar: 1, technicalMatches: 1 });
+  assert.equal("distance" in first.data[0], false);
+  assert.equal(cachedEnvelope.value.data[0].dwt, 42_000);
+  assert.deepEqual(cachedEnvelope.value.sourceCounts, { liveRadar: 1, technicalMatches: 1 });
+});
+
+test("radar serves soft-stale immediately and refreshes the enriched payload in background", async () => {
+  let currentTime = Date.parse("2026-08-14T13:00:00.000Z");
+  let fetchCount = 0;
+  let enrichmentCount = 0;
+  let releaseRefresh;
+  let scheduledRefresh;
+  let signalRefreshStarted;
+  const refreshStarted = new Promise((resolve) => {
+    signalRefreshStarted = resolve;
+  });
+  const coordinator = createAisCoordinator({
+    store: createMemoryStore(),
+    budgetGate: createBudgetGate(),
+    now: () => currentTime,
+    enrichRadarVessels: async (vessels) => {
+      enrichmentCount += 1;
+      return {
+        vessels: vessels.map((vessel) => ({ ...vessel, enrichmentVersion: enrichmentCount })),
+        counts: { liveRadar: vessels.length, technicalMatches: enrichmentCount },
+      };
+    },
+    fetchImpl: async () => {
+      fetchCount += 1;
+      if (fetchCount === 2) {
+        signalRefreshStarted();
+        await new Promise((resolve) => {
+          releaseRefresh = resolve;
+        });
+      }
+      return jsonResponse({
+        data: {
+          vessels: [{ name: `Radar Vessel ${fetchCount}`, imo: "7000002", lat: 41.2, lon: -8.6 }],
+        },
+      });
+    },
+  });
+
+  const first = await coordinator.getRadarTraffic(41.201, -8.601, 25);
+  currentTime += 11 * 60 * 1000;
+  const stale = await coordinator.getRadarTraffic(41.2012, -8.6012, 25, {
+    scheduleRefresh(promise) {
+      scheduledRefresh = promise;
+    },
+  });
+
+  assert.equal(first.meta.cacheStatus, "MISS");
+  assert.equal(stale.meta.cacheStatus, "STALE");
+  assert.equal(stale.meta.circuitBreaker, "SOFT_STALE");
+  assert.equal(stale.data[0].enrichmentVersion, 1);
+  assert.ok(scheduledRefresh);
+
+  await refreshStarted;
+  assert.equal(fetchCount, 2);
+  releaseRefresh();
+  await scheduledRefresh;
+  const refreshed = await coordinator.getRadarTraffic(41.201, -8.601, 25);
+
+  assert.equal(refreshed.meta.cacheStatus, "HIT");
+  assert.equal(refreshed.data[0].enrichmentVersion, 2);
+  assert.equal(fetchCount, 2);
+  assert.equal(enrichmentCount, 2);
+});
+
+test("vessel particulars use the official endpoint and normalize technical fields", async () => {
+  const coordinator = createAisCoordinator({
+    store: createMemoryStore(),
+    budgetGate: createBudgetGate(),
+    now: () => Date.parse("2026-08-14T12:10:00.000Z"),
+    fetchImpl: async (url) => {
+      assert.equal(url.pathname, "/api/v0/vessel_info");
+      assert.equal(url.searchParams.get("imo"), "9876543");
+      return jsonResponse({
+        data: {
+          imo: "9876543",
+          mmsi: "224123456",
+          name: "Database First",
+          country_iso: "ES",
+          type_specific: "Bulk Carrier",
+          deadweight: 54_321,
+          gross_tonnage: 31_245,
+          year_built: 2016,
+          length: 189.4,
+          breadth: 30.2,
+          draught_average: 10.7,
+        },
+      });
+    },
+  });
+
+  const result = await coordinator.getVesselParticulars("IMO 9876543");
+
+  assert.equal(result.meta.cacheStatus, "MISS");
+  assert.deepEqual(result.data, {
+    imoNumber: "9876543",
+    mmsi: "224123456",
+    vesselName: "Database First",
+    dwt: 54_321,
+    latitude: null,
+    longitude: null,
+    vesselType: "Bulk Carrier",
+    draftMeters: 10.7,
+    flag: "ES",
+    callSign: null,
+    yearBuilt: 2016,
+    grossTonnage: 31_245,
+    netTonnage: null,
+    loaMeters: 189.4,
+    beamMeters: 30.2,
+    lastPort: null,
+    eta: null,
+  });
+});
+
+test("the circuit breaker serves stale cache without another provider call", async () => {
+  let currentTime = Date.parse("2026-08-14T12:00:00.000Z");
+  let fetchCount = 0;
+  const store = createMemoryStore();
+  const warmCoordinator = createAisCoordinator({
+    store,
+    budgetGate: createBudgetGate(),
+    now: () => currentTime,
+    fetchImpl: async () => {
+      fetchCount += 1;
+      return jsonResponse({ data: { imo: "2345678", lat: 12, lon: 24 } });
+    },
+  });
+
+  await warmCoordinator.getLivePosition("2345678");
+  currentTime += 6 * 60 * 1000;
+
+  const blockedCoordinator = createAisCoordinator({
+    store,
+    budgetGate: createBudgetGate({ allowed: false }),
+    now: () => currentTime,
+    fetchImpl: async () => {
+      fetchCount += 1;
+      throw new Error("provider should not be called");
+    },
+  });
+  const result = await blockedCoordinator.getLivePosition("2345678");
+
+  assert.equal(result.meta.cacheStatus, "STALE");
+  assert.equal(result.meta.circuitBreaker, "BUDGET_LIMIT");
+  assert.equal(fetchCount, 1);
+});
+
+test("failed provider calls release the reserved credit", async () => {
+  const budgetGate = createBudgetGate();
+  const coordinator = createAisCoordinator({
+    store: createMemoryStore(),
+    budgetGate,
+    fetchImpl: async () => jsonResponse({ error: "upstream failure" }, 503),
+  });
+
+  await assert.rejects(() => coordinator.getLivePosition("3456789"));
+  assert.equal(budgetGate.calls.reservations, 1);
+  assert.equal(budgetGate.calls.releases, 1);
+});
+
+test("a missing provider key is reported before the budget database is contacted", async () => {
+  const previousKey = environment.get("DATALASTIC_API_KEY");
+  environment.delete("DATALASTIC_API_KEY");
+  let budgetContacted = false;
+  const coordinator = createAisCoordinator({
+    store: createMemoryStore(),
+    budgetGate: {
+      async withRequestLock() {
+        budgetContacted = true;
+        throw new Error("budget should not be contacted");
+      },
+    },
+  });
+
+  try {
+    await assert.rejects(
+      () => coordinator.getLivePosition("9863118"),
+      (error) => error?.code === "AIS_PROVIDER_NOT_CONFIGURED",
+    );
+    assert.equal(budgetContacted, false);
+  } finally {
+    environment.set("DATALASTIC_API_KEY", previousKey);
+  }
+});
+
+test("the in-memory monitor counts provider credits but not cache hits", async () => {
+  const before = getAisConsumptionSnapshot();
+  const coordinator = createAisCoordinator({
+    store: createMemoryStore(),
+    budgetGate: createBudgetGate(),
+    now: () => Date.parse("2026-08-14T15:00:00.000Z"),
+    fetchImpl: async () => jsonResponse({ data: { imo: "4567890", lat: 10, lon: 20 } }),
+  });
+
+  await coordinator.getLivePosition("4567890");
+  await coordinator.getLivePosition("4567890");
+  const after = getAisConsumptionSnapshot();
+
+  assert.equal(after.consumedCredits, before.consumedCredits + 1);
+  assert.equal(after.providerRequests, before.providerRequests + 1);
+  assert.equal(after.cacheHits, before.cacheHits + 1);
+});
