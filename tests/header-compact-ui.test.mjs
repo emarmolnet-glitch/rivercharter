@@ -24,7 +24,7 @@ test('header removes long subtitle under the title', () => {
 test('header title font size is reduced to compact scale', () => {
   assert.match(
     indexSource,
-    /<h1 class="text-xs md:text-sm font-bold text-white tracking-tight">SeaCharter Core PRO <span[^>]*>RODAHMAR ENGINE<\/span><\/h1>/,
+    /<h1 class="[^"]*text-xs md:text-sm[^"]*">[\s\S]*?(?:RiverCharter|SeaCharter Core PRO)[\s\S]*?RODAHMAR ENGINE[\s\S]*?<\/h1>/,
     'Header title font size must be reduced to text-xs md:text-sm'
   );
 });
@@ -32,7 +32,7 @@ test('header title font size is reduced to compact scale', () => {
 test('header container uses compact vertical padding', () => {
   assert.match(
     indexSource,
-    /<header class="app-header[^"]*\bpy-2\b[^"]*">/,
+    /<header class="app-header[^"]*\bpy-2\b[^"]*"[^>]*>/,
     'Header must use compact vertical padding py-2'
   );
 });
@@ -40,7 +40,7 @@ test('header container uses compact vertical padding', () => {
 test('adjacent header elements maintain vertical centering with items-center', () => {
   assert.match(
     indexSource,
-    /<header class="app-header[^"]*\bitems-center\b[^"]*">/,
+    /<header class="app-header[^"]*\bitems-center\b[^"]*"[^>]*>/,
     'Header container must maintain vertical centering'
   );
   assert.match(

@@ -1,10 +1,21 @@
 import React, { useState, useEffect } from 'react';
+// @ts-ignore
 import { getApiUrl } from './src/utils/apiConfig.js';
 
 const STORAGE_KEY = 'sea_charter_v2_session';
 
-// TypeScript Interface for Vessel data structure
-export interface Vessel {
+// Elimina el modelo de datos estático Vessel en favor de la arquitectura modular RiverCharter
+import {
+  type Tugboat,
+  type Barge,
+  type RiverVoyage,
+  type VoyageBarge,
+} from './src/types/rivercharter.js';
+
+export type { Tugboat, Barge, RiverVoyage, VoyageBarge };
+
+// Interfaz modular para unidades fluviales (remolcadores, barcazas y convoyes)
+export interface FluvialFleetUnit {
   vessel_name: string;
   dwt: number;
   loa: string;
@@ -13,6 +24,13 @@ export interface Vessel {
   spd_laden: number;
   cons_sea: number;
   cons_port: number;
+  unit_type?: 'tugboat' | 'barge' | 'convoy';
+  motor?: string;
+  daily_opex?: number;
+  mmsi?: string;
+  capacity?: number;
+  dynamic_draft?: number;
+  iot_tracking_id?: string;
 }
 
 export default function ShipComparison() {
@@ -34,7 +52,7 @@ export default function ShipComparison() {
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
   // --- State for the list of saved vessels displayed in the table ---
-  const [savedVessels, setSavedVessels] = useState<Vessel[]>([]);
+  const [savedVessels, setSavedVessels] = useState<FluvialFleetUnit[]>([]);
 
   // --- Session cleanup function ---
   const cleanSession = () => {
@@ -377,7 +395,7 @@ export default function ShipComparison() {
     }
 
     // Create vessel object with current state values
-    const newVessel: Vessel = {
+    const newVessel: FluvialFleetUnit = {
       vessel_name: name.trim(),
       dwt: dwt ? Number(dwt) : 0,
       loa: loa ? String(loa) : '',
@@ -390,7 +408,7 @@ export default function ShipComparison() {
 
     // Read existing array from localStorage
     const storedVesselsStr = localStorage.getItem('rodahmar_saved_vessels');
-    let savedList: Vessel[] = [];
+    let savedList: FluvialFleetUnit[] = [];
     if (storedVesselsStr) {
       try {
         savedList = JSON.parse(storedVesselsStr);

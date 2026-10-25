@@ -8,7 +8,7 @@ const controllerSource = readFileSync(new URL('../src/global-splash-screen.js', 
 test('global splash covers the complete interface from the first body paint', () => {
   assert.match(indexSource, /<body class="[^"]*bg-slate-900[^"]*" data-app-ready="false" aria-busy="true">/);
   assert.match(indexSource, /id="global-splash-screen" class="fixed inset-0 z-50 bg-slate-900"/);
-  assert.match(indexSource, /SeaCharter Core PRO - Iniciando motor\.\.\./);
+  assert.match(indexSource, /(?:RiverCharter|SeaCharter Core PRO) - Iniciando motor\.\.\./);
   assert.match(indexSource, /#global-splash-screen \{[\s\S]*position: fixed;[\s\S]*inset: 0;[\s\S]*z-index: 2147483000 !important;/);
 });
 
@@ -33,13 +33,13 @@ test('splash screen displays dual visual identity: Sub-Brand above and Master Br
   assert.ok(splashMatch, 'Splash screen element found in index.html');
   const splashHtml = splashMatch[0];
 
-  // Sub-Brand: SeaCharter Core PRO above
-  assert.match(splashHtml, /<!-- Sub-Brand: SeaCharter Core PRO -->/);
-  assert.match(splashHtml, /<div style="font-size: 24px; font-weight: 800; color: #0E3A5D; letter-spacing: -0.02em;">SeaCharter<\/div>/);
-  assert.match(splashHtml, /<div style="font-size: 17px; font-weight: 700; color: #2898B8; letter-spacing: -0.01em; margin-top: 2px;">Core PRO<\/div>/);
+  // Sub-Brand: RiverCharter / SeaCharter Core PRO above
+  assert.match(splashHtml, /<!-- Sub-Brand: (?:RiverCharter|SeaCharter Core PRO) -->/);
+  assert.match(splashHtml, /<div style="font-size: 24px; font-weight: 800; color: #0E3A5D; letter-spacing: -0.02em;">(?:RiverCharter|SeaCharter)<\/div>/);
+  assert.match(splashHtml, /<div style="font-size: 17px; font-weight: 700; color: #2898B8; letter-spacing: -0.01em; margin-top: 2px;">(?:Fluvial Logistics|Core PRO)<\/div>/);
 
   // Central block intact
-  assert.match(splashHtml, /<p class="global-splash__title">SeaCharter Core PRO - Iniciando motor\.\.\.<\/p>/);
+  assert.match(splashHtml, /<p class="global-splash__title">(?:RiverCharter|SeaCharter Core PRO) - Iniciando motor\.\.\.<\/p>/);
   assert.match(splashHtml, /<div class="global-splash__progress" aria-hidden="true"><\/div>/);
 
   // Master Brand: CHARTER CORE PRO below progress bar (unified circular logo and typography)
