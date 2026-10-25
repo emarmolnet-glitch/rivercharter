@@ -408,6 +408,30 @@ export async function ensureApplicationSchema() {
       ON multimodal_operations (referencia);
     CREATE INDEX IF NOT EXISTS multimodal_operations_created_at_idx
       ON multimodal_operations (created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS barges (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      barge_number VARCHAR(100),
+      barge_type VARCHAR(50) DEFAULT 'HOPPER' NOT NULL,
+      capacity NUMERIC(12, 2) NOT NULL,
+      dynamic_draft NUMERIC(6, 2) NOT NULL,
+      iot_tracking_id VARCHAR(100) UNIQUE,
+      status VARCHAR(50) DEFAULT 'AVAILABLE' NOT NULL,
+      current_location VARCHAR(255),
+      latitude NUMERIC(10, 6),
+      longitude NUMERIC(10, 6),
+      last_telemetry_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    ALTER TABLE barges ADD COLUMN IF NOT EXISTS latitude NUMERIC(10, 6);
+    ALTER TABLE barges ADD COLUMN IF NOT EXISTS longitude NUMERIC(10, 6);
+    ALTER TABLE barges ADD COLUMN IF NOT EXISTS last_telemetry_at TIMESTAMPTZ;
+    ALTER TABLE barges ADD COLUMN IF NOT EXISTS current_location VARCHAR(255);
+    ALTER TABLE barges ADD COLUMN IF NOT EXISTS iot_tracking_id VARCHAR(100);
+    CREATE INDEX IF NOT EXISTS barges_iot_tracking_id_idx ON barges (iot_tracking_id);
   `).then(() => undefined).catch((error: unknown) => {
     applicationSchemaReady = null;
     throw error;

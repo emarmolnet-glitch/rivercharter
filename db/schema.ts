@@ -492,6 +492,9 @@ export const barges = pgTable(
     iotTrackingId: varchar("iot_tracking_id", { length: 100 }).unique(), // ID de rastreo telemétrico IoT
     status: varchar("status", { length: 50 }).default("AVAILABLE").notNull(), // AVAILABLE, COUPLED, MAINTENANCE
     currentLocation: varchar("current_location", { length: 255 }),
+    latitude: numeric("latitude", { precision: 10, scale: 6 }),
+    longitude: numeric("longitude", { precision: 10, scale: 6 }),
+    lastTelemetryAt: timestamp("last_telemetry_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

@@ -1,4 +1,5 @@
 import React, { memo, useEffect, useRef, useState, useCallback } from 'react';
+import { AisStreamToggle } from './AisStreamToggle';
 
 // ============================================================================
 // TIPOS Y DEFINICIONES DE TELEMETRÍA FLUVIAL
@@ -432,6 +433,10 @@ const GlobeCanvasContent = memo(function GlobeCanvasContent({
       <div id={containerId} className="density-globe-canvas h-full w-full" />
       {/* Superposición optimizada de marcadores de embarcaciones */}
       <ConvoyMarkersOverlay vessels={vessels} onVesselClick={onVesselClick} />
+      {/* Controlador de estado WebSocket AISStream para ahorro de datos */}
+      <div className="absolute top-3 right-3 z-30 pointer-events-auto">
+        <AisStreamToggle />
+      </div>
     </div>
   );
 });
