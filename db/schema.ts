@@ -448,3 +448,123 @@ export const multimodalOperations = pgTable("multimodal_operations", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// ============================================================================
+// RIVERCHARTER - FLUVIAL LOGISTICS DATA ARCHITECTURE
+// ============================================================================
+
+/**
+ * Tabla de Remolcadores (Tugboats / Empujadores fluviales)
+ * Modela la unidad propulsora del convoy fluvial: motor, opex diario y MMSI para AIS.
+ */
+export const tugboats = pgTable(
+  "tugboats",
+  {
+    id: serial("id").primaryKey(),
+    name: varchar("name", { length: 255 }).notNull(),
+    motor: varchar("motor", { length: 255 }).notNull(), // Motor y potencia
+    enginePowerHp: integer("engine_power_hp"),
+    dailyOpex: numeric("daily_opex", { precision: 12, scale: 2 }).notNull(), // Opex diario
+    mmsi: varchar("mmsi", { length: 20 }), // MMSI para rastreo AIS
+    bollardPullTons: numeric("bollard_pull_tons", { precision: 8, scale: 2 }),
+    status: varchar("status", { length: 50 }).default("OPERATIONAL").notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    index("tugboats_mmsi_idx").on(table.mmsi),
+    check("tugboats_daily_opex_positive_check", sql`${table.dailyOpex} >= 0`),
+  ],
+);
+
+/**
+ * Tabla de Barcazas (Barges)
+ * Modela las unidades de carga acoplables: capacidad, calado dinámico e ID de rastreo IoT.
+ */
+export const barges = pgTable(
+  "barges",
+  {
+    id: serial("id").primaryKey(),
+    name: varchar("name", { length: 255 }).notNull(),
+    bargeNumber: varchar("barge_number", { length: 100 }),
+    bargeType: varchar("barge_type", { length: 50 }).default("HOPPER").notNull(), // HOPPER, TANKER, DECK, BOX
+    capacity: numeric("capacity", { precision: 12, scale: 2 }).notNull(), // Capacidad máxima (MT)
+    dynamicDraft: numeric("dynamic_draft", { precision: 6, scale: 2 }).notNull(), // Calado dinámico según carga (m)
+    iotTrackingId: varchar("iot_tracking_id", { length: 100 }).unique(), // ID de rastreo telemétrico IoT
+    status: varchar("status", { length: 50 }).default("AVAILABLE").notNull(), // AVAILABLE, COUPLED, MAINTENANCE
+    currentLocation: varchar("current_location", { length: 255 }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    index("barges_iot_tracking_id_idx").on(table.iotTrackingId),
+    check("barges_capacity_positive_check", sql`${table.capacity} > 0`),
+    check("barges_dynamic_draft_positive_check", sql`${table.dynamicDraft} > 0`),
+  ],
+);
+
+/**
+ * Tabla de Viajes Fluviales (River Voyages)
+ * Modela el itinerario del convoy: ID de viaje, remolcador asignado y nivel mínimo de estiaje.
+ */
+export const riverVoyages = pgTable(
+  "river_voyages",
+  {
+    id: serial("id").primaryKey(),
+    voyageNumber: varchar("voyage_number", { length: 100 }).notNull().unique(), // ID de viaje
+    tugboatId: integer("tugboat_id")
+      .notNull()
+      .references(() => tugboats.id, { onDelete: "restrict" }), // Remolcador asignado
+    riverName: varchar("river_name", { length: 150 }).notNull(), // Nombre del río o corredor hidroviario
+    originTerminal: varchar("origin_terminal", { length: 255 }).notNull(),
+    destinationTerminal: varchar("destination_terminal", { length: 255 }).notNull(),
+    minWaterLevel: numeric("min_water_level", { precision: 6, scale: 2 }).notNull(), // Nivel mínimo de estiaje requerido (m)
+    currentWaterLevel: numeric("current_water_level", { precision: 6, scale: 2 }), // Nivel hidrométrico actual (m)
+    departureDate: timestamp("departure_date", { withTimezone: true }),
+    estimatedArrivalDate: timestamp("estimated_arrival_date", { withTimezone: true }),
+    actualArrivalDate: timestamp("actual_arrival_date", { withTimezone: true }),
+    status: varchar("status", { length: 50 }).default("PLANNED").notNull(), // PLANNED, IN_TRANSIT, COMPLETED, CANCELLED
+    metadata: jsonb("metadata").default(sql`'{}'::jsonb`).notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    index("river_voyages_tugboat_id_idx").on(table.tugboatId),
+    index("river_voyages_voyage_number_idx").on(table.voyageNumber),
+    check("river_voyages_min_water_level_positive_check", sql`${table.minWaterLevel} >= 0`),
+  ],
+);
+
+/**
+ * Tabla Puente Dinámica: Barcazas por Viaje (Voyage Barges)
+ * Permite acoplar y desacoplar múltiples barcazas en distintos puntos/hitos de un viaje fluvial.
+ * Dispone de borrado en cascada (ON DELETE CASCADE) tanto para el viaje como para la barcaza.
+ */
+export const voyageBarges = pgTable(
+  "voyage_barges",
+  {
+    id: serial("id").primaryKey(),
+    voyageId: integer("voyage_id")
+      .notNull()
+      .references(() => riverVoyages.id, { onDelete: "cascade" }), // ON DELETE CASCADE
+    bargeId: integer("barge_id")
+      .notNull()
+      .references(() => barges.id, { onDelete: "cascade" }), // ON DELETE CASCADE
+    couplingPoint: varchar("coupling_point", { length: 255 }).notNull(), // Punto/km fluvial de acople
+    decouplingPoint: varchar("decoupling_point", { length: 255 }), // Punto/km fluvial de desacople
+    coupledAt: timestamp("coupled_at", { withTimezone: true }).defaultNow().notNull(),
+    decoupledAt: timestamp("decoupled_at", { withTimezone: true }),
+    cargoDescription: varchar("cargo_description", { length: 255 }),
+    cargoWeightTons: numeric("cargo_weight_tons", { precision: 12, scale: 2 }),
+    loadedDraftMeters: numeric("loaded_draft_meters", { precision: 6, scale: 2 }),
+    status: varchar("status", { length: 50 }).default("COUPLED").notNull(), // COUPLED, IN_TRANSIT, DECOUPLED
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    index("voyage_barges_voyage_id_idx").on(table.voyageId),
+    index("voyage_barges_barge_id_idx").on(table.bargeId),
+    index("voyage_barges_status_idx").on(table.status),
+  ],
+);
+
+

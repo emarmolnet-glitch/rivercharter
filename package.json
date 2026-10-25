@@ -1,7 +1,7 @@
 {
-  "name": "seacharter-core-pro",
+  "name": "rivercharter",
   "version": "1.0.0",
-  "description": "Voyage Estimator with custom maritime routing and preferred ocean weights",
+  "description": "RiverCharter - Fluvial Logistics and River Voyage Management",
   "main": "electron/main.js",
   "scripts": {
     "start": "electron .",
@@ -67,8 +67,8 @@
     "npm": "10.x"
   },
   "build": {
-    "appId": "com.seacharter.corepro",
-    "productName": "SeaCharter Core PRO",
+    "appId": "com.rivercharter.app",
+    "productName": "RiverCharter",
     "directories": {
       "output": "dist_electron"
     },
