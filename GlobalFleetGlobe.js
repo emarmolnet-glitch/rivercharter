@@ -411,21 +411,74 @@
 
     function createVesselMarker(vessel) {
         const anchor = document.createElement('div');
-        anchor.className = vessel.portAnchored ? 'globe-vessel-anchor is-port-anchored' : 'globe-vessel-anchor';
+        const isTugboat = vessel.unit_type === 'tugboat' || vessel.isTugboat || Boolean(vessel.motor && !vessel.bargeType);
+        const isBarge = vessel.unit_type === 'barge' || vessel.isBarge || Boolean(vessel.bargeType);
+        const isCoupled = vessel.status === 'COUPLED' || vessel.isCoupled !== false;
 
-        const name = vessel.vesselName || vessel.name || 'Buque';
+        let anchorClass = 'globe-vessel-anchor';
+        if (vessel.portAnchored) anchorClass += ' is-port-anchored';
+        if (isTugboat) anchorClass += ' is-tugboat';
+        if (isBarge) anchorClass += ` is-barge ${isCoupled ? 'is-coupled' : 'is-decoupled'}`;
+        anchor.className = anchorClass;
+
+        const name = vessel.vesselName || vessel.name || (isTugboat ? 'Remolcador Fluvial' : isBarge ? 'Barcaza Fluvial' : 'Buque');
         const latitude = Number(vessel.latitude ?? vessel.lat ?? 0);
         const longitude = Number(vessel.longitude ?? vessel.lng ?? 0);
         const coords = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
-        const dwt = vessel.dwt ? `${Number(vessel.dwt).toLocaleString('es-ES')} DWT` : 'N/D';
-        const type = vessel.vesselType || vessel.type || 'N/D';
+        const dwt = vessel.dwt || vessel.capacity ? `${Number(vessel.dwt || vessel.capacity).toLocaleString('es-ES')} MT` : 'N/D';
+        const type = isTugboat ? 'Remolcador (Tugboat)' : isBarge ? `Barcaza [${vessel.bargeType || 'Carga'}]` : (vessel.vesselType || vessel.type || 'N/D');
         const safeName = escapeTooltipText(name);
         const safeDwt = escapeTooltipText(dwt);
         const safeType = escapeTooltipText(type);
         const safeCoords = escapeTooltipText(coords);
 
-        anchor.innerHTML = `
-            <button type="button" class="globe-vessel-marker" aria-label="${safeName} localizado">
+        let glyphHtml = '';
+        let buttonClass = 'globe-vessel-marker';
+
+        if (isTugboat) {
+            buttonClass += ' globe-tugboat-marker';
+            const motorText = escapeTooltipText(vessel.motor || 'Motor Marino Fluvial');
+            glyphHtml = `
+                <span class="globe-vessel-marker-glyph" aria-hidden="true" title="Remolcador: ${safeName}">
+                    <svg viewBox="0 0 32 38" fill="none">
+                        <circle class="globe-vessel-marker-ring" cx="16" cy="14.5" r="11.5" stroke="#22d3ee" stroke-width="2"/>
+                        <!-- Icono de Motor Fluvial -->
+                        <rect x="11" y="9.5" width="10" height="9.5" rx="1.5" fill="#0e7490" stroke="#38bdf8" stroke-width="1.2"/>
+                        <circle cx="16" cy="14.2" r="2.2" fill="#22d3ee"/>
+                        <path d="M16 6.5v3M16 19v3.5M8 14.2h3M21 14.2h3" stroke="#22d3ee" stroke-width="1.4" stroke-linecap="round"/>
+                        <path d="M11 20l-2 3M21 20l2 3" stroke="#22d3ee" stroke-width="1.4" stroke-linecap="round"/>
+                        <path class="globe-vessel-marker-anchor-line" d="M16 26v8" stroke="#22d3ee" stroke-width="1.2"/>
+                        <circle class="globe-vessel-marker-anchor-point" cx="16" cy="36" r="1.5" fill="#22d3ee"/>
+                    </svg>
+                </span>
+                <span class="globe-radar-tooltip" role="tooltip">
+                    <strong>⚙️ ${safeName} (Remolcador)</strong>
+                    <span><b>Propulsión:</b> ${motorText}</span>
+                    <span><b>OPEX Diario:</b> $${Number(vessel.dailyOpex || 3200).toLocaleString('es-ES')} USD/d</span>
+                    <span><b>Posición:</b> <code>${safeCoords}</code></span>
+                </span>`;
+        } else if (isBarge) {
+            buttonClass += ` globe-barge-marker ${isCoupled ? 'is-coupled' : 'is-decoupled'}`;
+            const statusLabel = isCoupled ? 'Acoplada al convoy' : 'Desacoplada (Fondeo/Terminal)';
+            glyphHtml = `
+                <span class="globe-vessel-marker-glyph" aria-hidden="true" title="Barcaza: ${safeName}">
+                    <svg viewBox="0 0 24 32" fill="none">
+                        <rect x="4" y="3" width="16" height="18" rx="2" stroke="${isCoupled ? '#38bdf8' : '#f59e0b'}" stroke-width="1.5" fill="rgba(15, 23, 42, 0.9)"/>
+                        <path d="M4 9h16M4 15h16" stroke="${isCoupled ? '#0284c7' : '#d97706'}" stroke-width="1.2"/>
+                        <circle cx="12" cy="12" r="1.8" fill="${isCoupled ? '#38bdf8' : '#f59e0b'}"/>
+                        <path d="M12 21v8" stroke="${isCoupled ? '#38bdf8' : '#f59e0b'}" stroke-width="1.2"/>
+                        <circle cx="12" cy="30" r="1.2" fill="${isCoupled ? '#38bdf8' : '#f59e0b'}"/>
+                    </svg>
+                </span>
+                <span class="globe-radar-tooltip" role="tooltip">
+                    <strong>📦 ${safeName}</strong>
+                    <span><b>Estado:</b> ${statusLabel}</span>
+                    <span><b>Capacidad:</b> ${safeDwt}</span>
+                    <span><b>Calado dinámico:</b> ${Number(vessel.dynamicDraft || 2.8).toFixed(2)} m</span>
+                    <span><b>Posición:</b> <code>${safeCoords}</code></span>
+                </span>`;
+        } else {
+            glyphHtml = `
                 <span class="globe-vessel-marker-glyph" aria-hidden="true">
                     <svg viewBox="0 0 32 38" fill="none">
                         <circle class="globe-vessel-marker-ring" cx="16" cy="14.5" r="11.5"/>
@@ -441,8 +494,14 @@
                     <span><b>DWT:</b> ${safeDwt}</span>
                     <span><b>Tipo:</b> ${safeType}</span>
                     <span><b>Posición:</b> <code>${safeCoords}</code></span>
-                </span>
+                </span>`;
+        }
+
+        anchor.innerHTML = `
+            <button type="button" class="${buttonClass}" aria-label="${safeName} localizado">
+                ${glyphHtml}
             </button>`;
+
         anchor.addEventListener('click', (event) => {
             if (!event.target?.closest?.('.globe-vessel-marker')) return;
             const view = vesselMarkerViews.get(vessel);

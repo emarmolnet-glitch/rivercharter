@@ -149,6 +149,20 @@ export interface RiverConvoy {
   navigationAlert?: string | null;
 }
 
+export interface SaveRiverVoyagePayload {
+  tugboat_id: number;
+  barge_ids: number[];
+  voyage_number?: string;
+  river_name?: string;
+  origin_terminal?: string;
+  destination_terminal?: string;
+  min_water_level?: number;
+  current_water_level?: number;
+  departure_date?: string | Date | null;
+  estimated_arrival_date?: string | Date | null;
+  metadata?: Record<string, unknown>;
+}
+
 /**
  * Evento de Acople/Desacople para auditoría telemétrica
  */
