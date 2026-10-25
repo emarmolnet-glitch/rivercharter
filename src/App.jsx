@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { HashRouter, HashRouter as BrowserRouter } from 'react-router-dom';
 import { ForwarderWorkspace } from './components/ForwarderWorkspace.jsx';
+import { AisStreamToggle } from './components/AisStreamToggle';
 import GlobalMadreDrawer, {
   getCoreProUIContext,
   triggerLaserScanEffect,
@@ -779,8 +780,9 @@ export function TopNav() {
           </div>
         </div>
 
-        {/* DERECHA: BOTONES DE ACCIÓN / DISPARADOR MADRE */}
+        {/* DERECHA: BOTONES DE ACCIÓN / CONTROLADOR TELEMETRÍA AIS / DISPARADOR MADRE */}
         <div className="header-actions-right flex items-center gap-2 shrink-0">
+          <AisStreamToggle compact className="shrink-0" />
           <button
             type="button"
             onClick={() => {
@@ -821,4 +823,7 @@ export {
   ejecutarEscaneoCompleto
 };
 export { default as VoyageExecutiveReportModal, buildVoyageStowagePlan } from './components/VoyageExecutiveReportModal.jsx';
+export { AisStreamToggle } from './components/AisStreamToggle';
+export { useAisStreamControl } from './hooks/useAisStreamControl';
+
 
