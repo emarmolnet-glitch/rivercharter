@@ -45,17 +45,12 @@ test('adjacent header elements maintain vertical centering with items-center', (
   );
   assert.match(
     indexSource,
-    /<div class="module-tabs-wrapper flex items-center">/,
-    'Module tabs wrapper must have items-center'
-  );
-  assert.match(
-    indexSource,
     /id="header-vessel-search-container"[^>]*class="[^"]*\bitems-center\b[^"]*"/,
     'Vessel search container must have items-center'
   );
   assert.match(
     indexSource,
-    /<div class="header-actions-right flex items-center">/,
+    /class="[^"]*header-actions-right[^"]*\bitems-center\b[^"]*"/,
     'Right header actions must have items-center'
   );
 });

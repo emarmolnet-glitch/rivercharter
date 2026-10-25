@@ -1,323 +1,207 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 // @ts-ignore
 import { getApiUrl } from './src/utils/apiConfig.js';
-
-const STORAGE_KEY = 'sea_charter_v2_session';
-
-// Elimina el modelo de datos estático Vessel en favor de la arquitectura modular RiverCharter
 import {
   type Tugboat,
   type Barge,
   type RiverVoyage,
   type VoyageBarge,
+  type SaveRiverVoyagePayload,
+  type BargeType,
 } from './src/types/rivercharter.js';
+import ConvoyBuilder from './src/components/ConvoyBuilder.js';
 
-export type { Tugboat, Barge, RiverVoyage, VoyageBarge };
+const STORAGE_KEY = 'rivercharter_v2_convoy_session';
+
+export type { Tugboat, Barge, RiverVoyage, VoyageBarge, SaveRiverVoyagePayload };
 
 // Interfaz modular para unidades fluviales (remolcadores, barcazas y convoyes)
 export interface FluvialFleetUnit {
+  id?: number;
   vessel_name: string;
-  dwt: number;
-  loa: string;
-  draft: string;
-  spd_ballast: number;
-  spd_laden: number;
-  cons_sea: number;
-  cons_port: number;
+  dwt?: number;
+  capacity?: number;
+  loa?: string;
+  draft?: string;
+  dynamic_draft?: number;
+  spd_ballast?: number;
+  spd_laden?: number;
+  cons_sea?: number;
+  cons_port?: number;
   unit_type?: 'tugboat' | 'barge' | 'convoy';
   motor?: string;
   daily_opex?: number;
   mmsi?: string;
-  capacity?: number;
-  dynamic_draft?: number;
   iot_tracking_id?: string;
+  tugboat_id?: number | null;
+  barge_ids?: number[];
 }
 
-export default function ShipComparison() {
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
+const DEFAULT_AVAILABLE_TUGBOATS: Tugboat[] = [
+  {
+    id: 1,
+    name: 'Río Paraná Star',
+    motor: 'Caterpillar 3516B 2x2000 BHP',
+    enginePowerHp: 4000,
+    dailyOpex: 3400,
+    mmsi: '740123456',
+    bollardPullTons: 45,
+    status: 'OPERATIONAL',
+  },
+  {
+    id: 2,
+    name: 'Empujador Hidrovía Master',
+    motor: 'Wärtsilä 6L20 2x1600 BHP',
+    enginePowerHp: 3200,
+    dailyOpex: 2900,
+    mmsi: '740654321',
+    bollardPullTons: 38,
+    status: 'OPERATIONAL',
+  },
+  {
+    id: 3,
+    name: 'Guaycurú Titan',
+    motor: 'Cummins QSK60 2x2200 BHP',
+    enginePowerHp: 4400,
+    dailyOpex: 3800,
+    mmsi: '740987654',
+    bollardPullTons: 52,
+    status: 'OPERATIONAL',
+  },
+  {
+    id: 4,
+    name: 'Remolcador San Lorenzo',
+    motor: 'MTU 16V4000 2x1800 BHP',
+    enginePowerHp: 3600,
+    dailyOpex: 3100,
+    mmsi: '740456789',
+    bollardPullTons: 42,
+    status: 'OPERATIONAL',
+  },
+];
 
-  // --- Form State hooks ---
-  const [name, setName] = useState<string>('');
-  const [dwt, setDwt] = useState<string | number>('');
-  const [loa, setLoa] = useState<string | number>('');
-  const [draft, setDraft] = useState<string | number>('');
-  const [speed, setSpeed] = useState<string | number>('');
-  const [consumption, setConsumption] = useState<string | number>('');
+const DEFAULT_AVAILABLE_BARGES: Barge[] = [
+  {
+    id: 101,
+    name: 'Barcaza Tolva T-101',
+    bargeNumber: 'B-PAR-101',
+    bargeType: 'HOPPER',
+    capacity: 1500,
+    dynamicDraft: 2.7,
+    iotTrackingId: 'IOT-BARGE-101',
+    status: 'AVAILABLE',
+  },
+  {
+    id: 102,
+    name: 'Barcaza Tolva T-102',
+    bargeNumber: 'B-PAR-102',
+    bargeType: 'HOPPER',
+    capacity: 1500,
+    dynamicDraft: 2.8,
+    iotTrackingId: 'IOT-BARGE-102',
+    status: 'AVAILABLE',
+  },
+  {
+    id: 103,
+    name: 'Barcaza Tanque Líquidos Q-201',
+    bargeNumber: 'B-PAR-201',
+    bargeType: 'TANKER',
+    capacity: 1800,
+    dynamicDraft: 3.1,
+    iotTrackingId: 'IOT-BARGE-201',
+    status: 'AVAILABLE',
+  },
+  {
+    id: 104,
+    name: 'Barcaza Cubierta Deck D-301',
+    bargeNumber: 'B-PAR-301',
+    bargeType: 'DECK',
+    capacity: 1200,
+    dynamicDraft: 2.4,
+    iotTrackingId: 'IOT-BARGE-301',
+    status: 'AVAILABLE',
+  },
+  {
+    id: 105,
+    name: 'Barcaza Portacontenedores C-401',
+    bargeNumber: 'B-PAR-401',
+    bargeType: 'CONTAINER_BARGE',
+    capacity: 2000,
+    dynamicDraft: 3.2,
+    iotTrackingId: 'IOT-BARGE-401',
+    status: 'AVAILABLE',
+  },
+  {
+    id: 106,
+    name: 'Barcaza Tolva T-103',
+    bargeNumber: 'B-PAR-103',
+    bargeType: 'HOPPER',
+    capacity: 1600,
+    dynamicDraft: 2.9,
+    iotTrackingId: 'IOT-BARGE-103',
+    status: 'AVAILABLE',
+  },
+];
 
-  // --- Initialization state for Draft Recovery ---
-  const [isInitialized, setIsInitialized] = useState<boolean>(false);
+export function ShipComparison() {
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // --- UI feedback states ---
+  // --------------------------------------------------------------------------
+  // ESTADO DEL FORMULARIO DE CONVOY FLUVIAL (Fase 2)
+  // Reemplaza el selector de buque oceánico único con tugboat_id y barge_ids
+  // --------------------------------------------------------------------------
+  const [tugboat_id, setTugboatId] = useState<number | null>(1);
+  const [barge_ids, setBargeIds] = useState<number[]>([101, 102]);
+
+  const [availableTugboats, setAvailableTugboats] = useState<Tugboat[]>(DEFAULT_AVAILABLE_TUGBOATS);
+  const [availableBarges, setAvailableBarges] = useState<Barge[]>(DEFAULT_AVAILABLE_BARGES);
+  const [selectedBargeToAdd, setSelectedBargeToAdd] = useState<number | ''>('');
+
+  // Itinerario y metadatos del viaje fluvial
+  const [voyageNumber, setVoyageNumber] = useState<string>('RV-2026-PAR-001');
+  const [riverName, setRiverName] = useState<string>('Hidrovía Paraná-Paraguay');
+  const [originTerminal, setOriginTerminal] = useState<string>('Terminal San Lorenzo Km 445');
+  const [destinationTerminal, setDestinationTerminal] = useState<string>('Terminal Nueva Palmira Km 0');
+  const [minWaterLevel, setMinWaterLevel] = useState<number>(2.6);
+
+  // Lista de convoyes / unidades guardadas en biblioteca local
+  const [savedConvoys, setSavedConvoys] = useState<FluvialFleetUnit[]>([]);
+
+  // Feedback de UI y estado de carga
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+  const [isInitialized, setIsInitialized] = useState<boolean>(false);
 
-  // --- State for the list of saved vessels displayed in the table ---
-  const [savedVessels, setSavedVessels] = useState<FluvialFleetUnit[]>([]);
+  // Remolcador actualmente asignado
+  const selectedTugboat = useMemo(() => {
+    return availableTugboats.find((t) => t.id === Number(tugboat_id)) || null;
+  }, [availableTugboats, tugboat_id]);
 
-  // --- Session cleanup function ---
-  const cleanSession = () => {
-    localStorage.removeItem(STORAGE_KEY);
-  };
+  // Barcazas acopladas actualmente
+  const coupledBarges = useMemo(() => {
+    return barge_ids
+      .map((id) => availableBarges.find((b) => b.id === id))
+      .filter((b): b is Barge => Boolean(b));
+  }, [barge_ids, availableBarges]);
 
-  // --- Clear Session helper function ---
-  const clearSession = () => {
-    localStorage.removeItem(STORAGE_KEY);
-  };
+  // Barcazas aún no acopladas
+  const uncoupledBarges = useMemo(() => {
+    return availableBarges.filter((b) => !barge_ids.includes(b.id));
+  }, [availableBarges, barge_ids]);
 
-  // --- Cleaning Corrupted Data ---
-  const clearOldKeys = () => {
-    localStorage.removeItem('sea_charter_session_data');
-    localStorage.removeItem('draft_auditoria');
-  };
+  // Métricas dinámicas del convoy
+  const totalCapacityMt = useMemo(() => {
+    return coupledBarges.reduce((sum, b) => sum + (Number(b.capacity) || 0), 0);
+  }, [coupledBarges]);
 
-  // --- Global Form State getter ---
-  const formData = {
-    name,
-    dwt,
-    loa,
-    draft,
-    speed,
-    consumption,
-  };
+  const maxDynamicDraft = useMemo(() => {
+    if (coupledBarges.length === 0) return 0;
+    return Math.max(...coupledBarges.map((b) => Number(b.dynamicDraft) || 0));
+  }, [coupledBarges]);
 
-  // --- Global Form State setter ---
-  const setFormData = (data: any) => {
-    if (data) {
-      if (data.name !== undefined) setName(data.name);
-      if (data.dwt !== undefined) setDwt(data.dwt);
-      if (data.loa !== undefined) setLoa(data.loa);
-      if (data.draft !== undefined) setDraft(data.draft);
-      if (data.speed !== undefined) setSpeed(data.speed);
-      if (data.consumption !== undefined) setConsumption(data.consumption);
-    }
-  };
+  const isDraftSafe = maxDynamicDraft <= minWaterLevel;
 
-  // --- Check if form has unsaved changes compared to last saved session ---
-  const hasChanges = () => {
-    const savedStr = localStorage.getItem(STORAGE_KEY);
-    if (!savedStr) {
-      return !!(name.trim() || dwt || loa || draft || speed || consumption);
-    }
-    try {
-      const savedData = JSON.parse(savedStr);
-      return (
-        name !== (savedData.name ?? '') ||
-        dwt !== (savedData.dwt ?? '') ||
-        loa !== (savedData.loa ?? '') ||
-        draft !== (savedData.draft ?? '') ||
-        speed !== (savedData.speed ?? '') ||
-        consumption !== (savedData.consumption ?? '')
-      );
-    } catch (e) {
-      return true;
-    }
-  };
-
-  // Export: The JSON is saved as an encoded string so the CSV file isn't broken
-  const exportToCSV = (data: any) => {
-    const jsonString = JSON.stringify(data);
-    const csvContent = "data:text/csv;charset=utf-8,json_data\n" + btoa(unescape(encodeURIComponent(jsonString))); // We use Base64 for maximum security
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    const rawFilename = `auditoria_${data.nombreBarco || data.name || 'sesion'}.csv`;
-    const safeFilename = rawFilename.replace(/[:\\/*?"<>|]/g, "_");
-    link.setAttribute("download", safeFilename);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  // --- Save Session action ---
-  const handleSaveSession = () => {
-    clearOldKeys();
-    if (formData && Object.keys(formData).length > 0) {
-      // Ensures text fields don't break the JSON format
-      const cleanData = JSON.parse(JSON.stringify(formData).replace(/[\r\n\t]/g, " "));
-      exportToCSV(cleanData);
-      showNotification('success', 'Session saved successfully');
-      alert("Session saved successfully");
-    }
-  };
-
-  // Import: Decodes the JSON regardless of the number of fields
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const result = event.target?.result as string;
-        if (!result || !result.trim()) {
-          throw new Error("Empty file");
-        }
-        const lines = result.split("\n");
-        if (lines.length < 2) {
-          throw new Error("Invalid file structure");
-        }
-        const text = lines[1]?.trim();
-        if (!text) {
-          throw new Error("No data row found");
-        }
-
-        // Safe decoder for UTF-8
-        const decodeBase64 = (str: string) => {
-          return decodeURIComponent(atob(str).split('').map(c =>
-            '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
-          ).join(''));
-        };
-
-        const decodedData = JSON.parse(decodeBase64(text)); // Decode the JSON
-        setFormData(decodedData);
-        showNotification('success', 'Session loaded');
-        alert("Session loaded");
-      } catch (err) {
-        alert("Error: El archivo no tiene el formato esperado. Asegúrate de cargar un archivo exportado desde la propia aplicación.");
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
-  };
-
-  // --- Load Session action ---
-  const handleLoadSession = () => {
-    fileInputRef.current?.click();
-  };
-
-  // --- Exit action ---
-  const handleExit = () => {
-    window.location.href = '/';
-  };
-
-  const handleSalir = () => {
-    handleExit();
-  };
-
-  // --- Hard Reset (Maintenance) ---
-  const hardReset = () => {
-    const confirmReset = window.confirm('Are you sure you want to perform a hard reset? This will clear all local storage data, including saved vessels and active sessions, and reload the page.');
-    if (confirmReset) {
-      localStorage.clear();
-      window.location.reload();
-    }
-  };
-
-  // --- Auto-save helper function ---
-  const autoSave = (currentData: {
-    name: string;
-    dwt: string | number;
-    loa: string | number;
-    draft: string | number;
-    speed: string | number;
-    consumption: string | number;
-  }) => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(currentData));
-  };
-
-  // --- Finish Audit action ---
-  const handleFinishAudit = () => {
-    cleanSession();
-    // Clear form input states
-    setName('');
-    setDwt('');
-    setLoa('');
-    setDraft('');
-    setSpeed('');
-    setConsumption('');
-    showNotification('success', 'Auditoría finalizada. El borrador ha sido limpiado.');
-  };
-
-  // --- Prevent closure (beforeunload event listener) ---
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      const hasUnsavedData = name.trim() || dwt || loa || draft || speed || consumption;
-      if (hasUnsavedData) {
-        e.preventDefault();
-        e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
-        return e.returnValue;
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
-  }, [name, dwt, loa, draft, speed, consumption]);
-
-  // --- Recovery on load (Mount effect) ---
-  useEffect(() => {
-    const draftStr = localStorage.getItem(STORAGE_KEY);
-    if (draftStr) {
-      try {
-        const draftData = JSON.parse(draftStr);
-        if (draftData) {
-          const recover = window.confirm('An incomplete session has been detected. Do you want to recover the data?');
-          if (recover) {
-            if (draftData.name !== undefined) setName(draftData.name);
-            if (draftData.dwt !== undefined) setDwt(draftData.dwt);
-            if (draftData.loa !== undefined) setLoa(draftData.loa);
-            if (draftData.draft !== undefined) setDraft(draftData.draft);
-            if (draftData.speed !== undefined) setSpeed(draftData.speed);
-            if (draftData.consumption !== undefined) setConsumption(draftData.consumption);
-            showNotification('success', 'Form data recovered successfully from draft.');
-          } else {
-            localStorage.removeItem(STORAGE_KEY);
-          }
-        }
-      } catch (e) {
-        console.error('Error parsing draft from localStorage:', e);
-      }
-    }
-    setIsInitialized(true);
-  }, []);
-
-  // --- Auto-save to LocalStorage effect ---
-  useEffect(() => {
-    if (!isInitialized) {
-      return;
-    }
-
-    const hasData = name.trim() || dwt || loa || draft || speed || consumption;
-    if (hasData) {
-      const formData = {
-        name,
-        dwt,
-        loa,
-        draft,
-        speed,
-        consumption,
-      };
-      autoSave(formData);
-    } else {
-      localStorage.removeItem(STORAGE_KEY);
-    }
-  }, [name, dwt, loa, draft, speed, consumption, isInitialized]);
-
-  // --- useEffect to load the vessels from localStorage on mount and automatically sync ---
-  useEffect(() => {
-    const loadVessels = () => {
-      const stored = localStorage.getItem('rodahmar_saved_vessels');
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed)) {
-            setSavedVessels(parsed);
-          }
-        } catch (e) {
-          console.error('Error parsing saved vessels:', e);
-        }
-      }
-    };
-
-    loadVessels();
-
-    // Listen for storage changes to sync across other tabs/components automatically
-    window.addEventListener('storage', loadVessels);
-    return () => {
-      window.removeEventListener('storage', loadVessels);
-    };
-  }, []);
-
-  // Helper to show inline notifications
+  // Notificaciones
   const showNotification = (type: 'success' | 'error' | 'info', text: string) => {
     setMessage({ type, text });
     setTimeout(() => {
@@ -325,411 +209,546 @@ export default function ShipComparison() {
     }, 5000);
   };
 
-  // --- 'Extract Data' function ---
-  const handleExtraerDatos = async () => {
-    if (!name.trim()) {
-      showNotification('error', 'Por favor, introduce un nombre de buque.');
+  // Limpieza de sesión
+  const cleanSession = () => {
+    localStorage.removeItem(STORAGE_KEY);
+  };
+
+  // Acciones en el panel dinámico de barcazas
+  const handleAddBarge = (id?: number) => {
+    const idToAdd = id !== undefined ? id : Number(selectedBargeToAdd);
+    if (!idToAdd || isNaN(idToAdd)) {
+      showNotification('error', 'Selecciona una barcaza válida para acoplar al convoy.');
+      return;
+    }
+    if (barge_ids.includes(idToAdd)) {
+      showNotification('error', 'Esta barcaza ya está acoplada al convoy.');
+      return;
+    }
+    setBargeIds((prev) => [...prev, idToAdd]);
+    setSelectedBargeToAdd('');
+    showNotification('success', `Barcaza #${idToAdd} acoplada al convoy.`);
+  };
+
+  const handleRemoveBarge = (idToRemove: number) => {
+    setBargeIds((prev) => prev.filter((id) => id !== idToRemove));
+    showNotification('info', `Barcaza #${idToRemove} desacoplada del convoy.`);
+  };
+
+  // Exportar a CSV para compatibilidad
+  const exportToCSV = (data: any) => {
+    const jsonString = JSON.stringify(data);
+    const csvContent = 'data:text/csv;charset=utf-8,json_data\n' + btoa(unescape(encodeURIComponent(jsonString)));
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    const rawFilename = `convoy_${data.voyage_number || data.vessel_name || 'sesion'}.csv`;
+    const safeFilename = rawFilename.replace(/[:\\/*?"<>|]/g, '_');
+    link.setAttribute('download', safeFilename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Guardar Sesión CSV
+  const handleSaveSession = () => {
+    const currentPayload: SaveRiverVoyagePayload = {
+      tugboat_id: Number(tugboat_id),
+      barge_ids: [...barge_ids],
+      voyage_number: voyageNumber,
+      river_name: riverName,
+      origin_terminal: originTerminal,
+      destination_terminal: destinationTerminal,
+      min_water_level: minWaterLevel,
+    };
+    exportToCSV(currentPayload);
+    showNotification('success', 'Sesión de convoy exportada exitosamente.');
+  };
+
+  // Cargar Sesión
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const result = event.target?.result as string;
+        if (!result || !result.trim()) throw new Error('Archivo vacío');
+        const lines = result.split('\n');
+        const text = lines[1]?.trim();
+        if (!text) throw new Error('Sin datos');
+        const decodeBase64 = (str: string) => {
+          return decodeURIComponent(
+            atob(str)
+              .split('')
+              .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+              .join('')
+          );
+        };
+        const parsed = JSON.parse(decodeBase64(text));
+        if (parsed.tugboat_id !== undefined) setTugboatId(parsed.tugboat_id);
+        if (Array.isArray(parsed.barge_ids)) setBargeIds(parsed.barge_ids);
+        if (parsed.voyage_number) setVoyageNumber(parsed.voyage_number);
+        showNotification('success', 'Sesión de convoy cargada con éxito.');
+      } catch (_) {
+        alert('Error al leer archivo de sesión.');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const handleExit = () => {
+    window.location.href = '/';
+  };
+
+  // --------------------------------------------------------------------------
+  // GUARDAR CONVOY FLUVIAL (Payload explícito con tugboat_id y barge_ids)
+  // --------------------------------------------------------------------------
+  const handleGuardarConvoy = async () => {
+    if (!tugboat_id) {
+      showNotification('error', 'Por favor, asigna un Remolcador (Tugboat) antes de guardar el viaje.');
       return;
     }
 
     setIsLoading(true);
-    setMessage({ type: 'info', text: 'Extrayendo especificaciones del buque con IA...' });
+
+    // Payload requerido por la especificación de Fase 2
+    const payload: SaveRiverVoyagePayload = {
+      tugboat_id: Number(tugboat_id),
+      barge_ids: [...barge_ids],
+      voyage_number: voyageNumber.trim() || `RV-${Date.now().toString().slice(-6)}`,
+      river_name: riverName.trim(),
+      origin_terminal: originTerminal.trim(),
+      destination_terminal: destinationTerminal.trim(),
+      min_water_level: Number(minWaterLevel),
+      metadata: {
+        totalCapacityMt,
+        maxDynamicDraft,
+        tugboatMotor: selectedTugboat?.motor,
+        tugboatDailyOpex: selectedTugboat?.dailyOpex,
+        bargeCount: barge_ids.length,
+      },
+    };
+
+    // Unidad para registrar en la lista de flota fluvial
+    const newConvoyUnit: FluvialFleetUnit = {
+      id: Date.now(),
+      vessel_name: `${selectedTugboat?.name || 'Convoy'} + ${barge_ids.length} barcazas (${payload.voyage_number})`,
+      dwt: totalCapacityMt,
+      capacity: totalCapacityMt,
+      draft: `${maxDynamicDraft.toFixed(2)}m`,
+      dynamic_draft: maxDynamicDraft,
+      unit_type: 'convoy',
+      motor: selectedTugboat?.motor,
+      daily_opex: selectedTugboat?.dailyOpex,
+      mmsi: selectedTugboat?.mmsi ?? undefined,
+      tugboat_id: Number(tugboat_id),
+      barge_ids: [...barge_ids],
+    };
 
     try {
-      const response = await fetch(getApiUrl('/api/ship-search'), {
+      // 1. Guardar en API backend si está disponible
+      const endpoint = getApiUrl('/api/v1/river-voyages');
+      await fetch(endpoint, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ ship_name: name.trim() }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }).catch((e) => {
+        console.warn('[ShipComparison] API save fallback to local state:', e);
       });
 
-      if (!response.ok) {
-        throw new Error('La extracción de datos falló.');
+      // 2. Persistir localmente en biblioteca
+      const updatedList = [
+        ...savedConvoys.filter((c) => c.vessel_name !== newConvoyUnit.vessel_name),
+        newConvoyUnit,
+      ];
+      localStorage.setItem('rodahmar_saved_vessels', JSON.stringify(updatedList, null, 2));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      setSavedConvoys(updatedList);
+
+      // 3. Notificar a través de evento global
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('rivercharter:convoy-saved', {
+            detail: {
+              ...payload,
+              tugboat: selectedTugboat,
+              barges: coupledBarges,
+            },
+          })
+        );
       }
 
-      const data = await response.json();
-
-      // Map incoming API data to corresponding react state setters
-      if (data.Vessel_Name && data.Vessel_Name !== 'N/A') {
-        setName(data.Vessel_Name);
-      }
-      if (data.DWT && data.DWT !== 'N/A') {
-        setDwt(Math.round(Number(data.DWT)));
-      }
-      if (data.LOA && data.LOA !== 'N/A') {
-        setLoa(data.LOA);
-      }
-      if (data.Draft && data.Draft !== 'N/A') {
-        setDraft(data.Draft);
-      }
-      
-      // Map Speed
-      if (data.Speed_Ballast && data.Speed_Ballast !== 'N/A') {
-        setSpeed(Number(data.Speed_Ballast));
-      } else if (data.Speed_Laden && data.Speed_Laden !== 'N/A') {
-        setSpeed(Number(data.Speed_Laden));
-      }
-
-      // Map Consumption
-      if (data.Cons_Sea && data.Cons_Sea !== 'N/A') {
-        setConsumption(Number(data.Cons_Sea));
-      } else if (data.Daily_Consumption && data.Daily_Consumption !== 'N/A') {
-        setConsumption(Number(data.Daily_Consumption));
-      }
-
-      showNotification('success', `🚢 Especificaciones de "${data.Vessel_Name || name.trim()}" extraídas con éxito.`);
+      showNotification(
+        'success',
+        `⚓ Convoy fluvial "${payload.voyage_number}" guardado: Remolcador #${payload.tugboat_id} y [${payload.barge_ids.join(', ')}] barcazas.`
+      );
     } catch (error) {
-      console.error('Error extracting vessel data:', error);
-      showNotification('error', 'No se pudieron extraer datos para este buque.');
+      showNotification('error', 'Error al guardar el viaje de convoy.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // --- 'Save' function ---
-  const handleGuardar = () => {
-    if (!name.trim()) {
-      showNotification('error', 'Por favor, ingrese un nombre para el buque.');
-      return;
-    }
+  const handleEliminarConvoy = (indexToDelete: number) => {
+    const updated = savedConvoys.filter((_, idx) => idx !== indexToDelete);
+    localStorage.setItem('rodahmar_saved_vessels', JSON.stringify(updated, null, 2));
+    setSavedConvoys(updated);
+    showNotification('info', 'Convoy eliminado de la biblioteca.');
+  };
 
-    // Create vessel object with current state values
-    const newVessel: FluvialFleetUnit = {
-      vessel_name: name.trim(),
-      dwt: dwt ? Number(dwt) : 0,
-      loa: loa ? String(loa) : '',
-      draft: draft ? String(draft) : '',
-      spd_ballast: speed ? Number(speed) : 12.0,
-      spd_laden: speed ? Number(speed) : 11.0,
-      cons_sea: consumption ? Number(consumption) : 10.0,
-      cons_port: 1.5,
-    };
-
-    // Read existing array from localStorage
-    const storedVesselsStr = localStorage.getItem('rodahmar_saved_vessels');
-    let savedList: FluvialFleetUnit[] = [];
-    if (storedVesselsStr) {
+  // Carga inicial y sincronización con localStorage
+  useEffect(() => {
+    const stored = localStorage.getItem('rodahmar_saved_vessels');
+    if (stored) {
       try {
-        savedList = JSON.parse(storedVesselsStr);
-        if (!Array.isArray(savedList)) {
-          savedList = [];
-        }
-      } catch (e) {
-        savedList = [];
-      }
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) setSavedConvoys(parsed);
+      } catch (_) {}
     }
-
-    // Avoid duplicates: case-insensitive check on vessel name
-    const isDuplicate = savedList.some(
-      (v) => (v.vessel_name || '').trim().toLowerCase() === newVessel.vessel_name.toLowerCase()
-    );
-
-    if (!isDuplicate) {
-      const updatedList = [...savedList, newVessel];
-      // Update localStorage
-      localStorage.setItem('rodahmar_saved_vessels', JSON.stringify(updatedList, null, 2));
-      // Set the state which triggers the automatic reload/re-render of the table
-      setSavedVessels(updatedList);
-      showNotification('success', `⚓ El buque "${newVessel.vessel_name}" ha sido guardado.`);
-      
-      // Cleanup the draft session
-      cleanSession();
-
-      // Clear form input states
-      setName('');
-      setDwt('');
-      setLoa('');
-      setDraft('');
-      setSpeed('');
-      setConsumption('');
-    } else {
-      showNotification('error', `El buque "${newVessel.vessel_name}" ya existe en la lista.`);
+    const savedSession = localStorage.getItem(STORAGE_KEY);
+    if (savedSession) {
+      try {
+        const parsed = JSON.parse(savedSession);
+        if (parsed.tugboat_id) setTugboatId(parsed.tugboat_id);
+        if (Array.isArray(parsed.barge_ids)) setBargeIds(parsed.barge_ids);
+        if (parsed.voyage_number) setVoyageNumber(parsed.voyage_number);
+      } catch (_) {}
     }
-  };
-
-  // --- Delete function ---
-  const handleEliminar = (indexToDelete: number) => {
-    const updatedList = savedVessels.filter((_, index) => index !== indexToDelete);
-    localStorage.setItem('rodahmar_saved_vessels', JSON.stringify(updatedList, null, 2));
-    setSavedVessels(updatedList);
-    showNotification('info', 'Buque eliminado de la biblioteca.');
-  };
+    setIsInitialized(true);
+  }, []);
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-6 text-slate-300 font-sans max-w-5xl mx-auto space-y-6">
-      {/* Header with nautical instrumentation feel */}
+    <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-6 text-slate-300 font-sans max-w-6xl mx-auto space-y-6">
+      {/* CABECERA */}
       <div className="border-b border-slate-800 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-indigo-950/50 border border-indigo-500/30 rounded-lg text-indigo-400">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          <div className="p-2.5 bg-cyan-950/60 border border-cyan-500/40 rounded-lg text-cyan-400">
+            {/* Icono de Motor / Propulsión */}
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
           </div>
           <div>
-            <h2 className="text-lg font-bold text-white tracking-wide uppercase">Biblioteca de Especificaciones de Buques</h2>
-            <p className="text-xs text-slate-500">Módulo de extracción por IA y persistencia local</p>
+            <h2 className="text-lg font-bold text-white tracking-wide uppercase">
+              Creador de Viajes Fluviales · Ensamblaje de Convoy
+            </h2>
+            <p className="text-xs text-slate-500">
+              Arquitectura modular RiverCharter: desacoplamiento de motor (Tugboat) y carga (Barges)
+            </p>
           </div>
         </div>
-        <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
-          <span className="hidden md:inline-block bg-emerald-950/40 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-md text-[10px] uppercase font-mono tracking-widest">
-            RODAHMAR ENGINE
-          </span>
-          {/* Session Actions Container */}
-          <div className="flex justify-end gap-2" id="session-actions">
-            <input
-              type="file"
-              ref={fileInputRef}
-              accept=".csv"
-              onChange={handleImport}
-              style={{ display: 'none' }}
-            />
-            <button
-              onClick={handleSaveSession}
-              className="h-9 w-9 rounded-lg border border-slate-300 bg-white text-slate-900 hover:bg-slate-50 hover:text-blue-900 hover:border-blue-900 transition flex items-center justify-center"
-              title="Guardar Sesión"
-              aria-label="Guardar Sesión"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M5 3h12l2 2v16H5z" />
-                <path d="M8 3v6h8V3" />
-                <path d="M8 21v-7h8v7" />
-                <path d="M10 17h4" />
-              </svg>
-            </button>
-            <button
-              onClick={handleLoadSession}
-              className="h-9 w-9 rounded-lg border border-slate-300 bg-white text-slate-900 hover:bg-slate-50 hover:text-blue-900 hover:border-blue-900 transition flex items-center justify-center"
-              title="Cargar Sesión"
-              aria-label="Cargar Sesión"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M3 7.5V19a2 2 0 0 0 2 2h14.2a2 2 0 0 0 1.95-1.55l1.3-6A2 2 0 0 0 20.5 11H7.2a2 2 0 0 0-1.95 1.55L3 19" />
-                <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6a2 2 0 0 1 2 2v2" />
-              </svg>
-            </button>
-            <button
-              onClick={hardReset}
-              className="bg-amber-600 text-white px-3 py-1.5 rounded hover:bg-amber-700 transition text-xs font-semibold flex items-center gap-1.5"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 8H18" />
-              </svg>
-              Hard Reset
-            </button>
-            <button
-              onClick={handleSalir}
-              className="h-9 w-9 rounded-lg border border-slate-300 bg-white text-slate-900 hover:bg-slate-50 hover:text-blue-900 hover:border-blue-900 transition flex items-center justify-center"
-              title="Salir"
-              aria-label="Salir"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M10 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" />
-                <path d="M16 17l5-5-5-5" />
-                <path d="M21 12H9" />
-              </svg>
-            </button>
-          </div>
+
+        {/* Acciones de Sesión */}
+        <div className="flex items-center gap-2">
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept=".csv"
+            onChange={handleImport}
+            style={{ display: 'none' }}
+          />
+          <button
+            onClick={handleSaveSession}
+            className="h-9 w-9 rounded-lg border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 hover:text-white transition flex items-center justify-center cursor-pointer"
+            title="Guardar Sesión CSV"
+            aria-label="Guardar Sesión CSV"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+          </button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="h-9 w-9 rounded-lg border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 hover:text-white transition flex items-center justify-center cursor-pointer"
+            title="Cargar Sesión CSV"
+            aria-label="Cargar Sesión CSV"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+          </button>
+          <button
+            onClick={handleExit}
+            className="h-9 w-9 rounded-lg border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 hover:text-white transition flex items-center justify-center cursor-pointer"
+            title="Salir"
+            aria-label="Salir"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+          </button>
         </div>
       </div>
 
-      {/* Notifications banner */}
+      {/* Notificación de feedback */}
       {message && (
-        <div className={`p-3 rounded-lg text-xs font-semibold flex items-center gap-2 border transition-all duration-300 ${
-          message.type === 'success' ? 'bg-emerald-950/40 border-emerald-500/30 text-emerald-300' :
-          message.type === 'error' ? 'bg-red-950/40 border-red-500/30 text-red-300' :
-          'bg-indigo-950/40 border-indigo-500/30 text-indigo-300'
-        }`}>
-          {message.type === 'info' && <span className="animate-spin h-3.5 w-3.5 border-2 border-slate-500 border-t-indigo-500 rounded-full inline-block" />}
+        <div
+          className={`p-3 rounded-lg text-xs font-semibold flex items-center gap-2 border transition-all ${
+            message.type === 'success'
+              ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300'
+              : message.type === 'error'
+              ? 'bg-rose-950/40 border-rose-500/40 text-rose-300'
+              : 'bg-cyan-950/40 border-cyan-500/40 text-cyan-300'
+          }`}
+        >
           <span>{message.text}</span>
         </div>
       )}
 
-      {/* Technical Input Panel and Save Form */}
+      {/* GRID PRINCIPAL: ENSAMBLAJE DE CONVOY */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* PANEL IZQUIERDO: SELECTOR DE TUGBOAT (1 col) */}
         <div className="md:col-span-1 bg-slate-950/60 border border-slate-800 rounded-lg p-4 space-y-4">
-          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800 pb-2">
-            Registro de Buque / Vessel Input
-          </h3>
+          <div className="border-b border-slate-800 pb-2">
+            <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-wider">
+              Asignación de Remolcador (Tugboat)
+            </h3>
+            <p className="text-[10px] text-slate-500">Unidad propulsora activa</p>
+          </div>
 
           <div className="space-y-3">
             <div>
-              <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Nombre del Buque *</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="flex-1 bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-semibold"
-                  placeholder="e.g. Acqua Stella"
-                  disabled={isLoading}
-                />
-                <button
-                  type="button"
-                  onClick={handleExtraerDatos}
-                  disabled={isLoading}
-                  className="bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-600 text-white text-xs font-bold px-3 py-1.5 rounded transition flex items-center gap-1 shrink-0"
-                  title="Extraer especificaciones con IA"
-                >
-                  {isLoading ? (
-                    <span className="animate-spin h-3 w-3 border-2 border-white border-t-transparent rounded-full" />
-                  ) : (
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M5 2a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 11-2 0V6H3a1 1 0 110-2h1V3a1 1 0 011-1zm0 10a1 1 0 011 1v1h1a1 1 0 110 2H6v1a1 1 0 11-2 0v-1H3a1 1 0 110-2h1v-1a1 1 0 011-1zM12 2a1 1 0 01.967.744L14.146 7.2 18.5 8.033a1 1 0 01.527 1.725l-3.3 2.768.96 4.414a1 1 0 01-1.503 1.09l-3.684-2.18-3.684 2.18a1 1 0 01-1.503-1.09l.96-4.414-3.3-2.768a1 1 0 01.527-1.725l4.354-.833 1.179-4.456A1 1 0 0112 2z" clipRule="evenodd" />
-                    </svg>
-                  )}
-                  IA
-                </button>
-              </div>
+              <label htmlFor="tugboat-select-main" className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                Remolcador Asignado *
+              </label>
+              <select
+                id="tugboat-select-main"
+                value={tugboat_id ?? ''}
+                onChange={(e) => setTugboatId(e.target.value ? Number(e.target.value) : null)}
+                className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-2 text-xs text-white font-bold focus:outline-none focus:border-cyan-500"
+              >
+                <option value="">— Seleccionar Remolcador —</option>
+                {availableTugboats.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} ({t.enginePowerHp} HP)
+                  </option>
+                ))}
+              </select>
             </div>
 
-            <div className="grid grid-cols-2 gap-2.5">
-              <div>
-                <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Capacidad DWT</label>
-                <input
-                  type="number"
-                  value={dwt}
-                  onChange={(e) => setDwt(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-mono"
-                  placeholder="TM"
-                />
+            {selectedTugboat && (
+              <div className="bg-slate-900/90 border border-cyan-500/30 rounded p-3 text-xs space-y-1.5 shadow-sm">
+                <div className="font-bold text-white flex items-center justify-between">
+                  <span>{selectedTugboat.name}</span>
+                  <span className="text-[10px] text-cyan-400 font-mono">ID: #{selectedTugboat.id}</span>
+                </div>
+                <div className="text-[11px] text-slate-400">
+                  <span className="text-slate-500">Motor:</span> <strong className="text-slate-200">{selectedTugboat.motor}</strong>
+                </div>
+                <div className="text-[11px] text-slate-400">
+                  <span className="text-slate-500">Potencia:</span> <span className="font-mono text-cyan-300">{selectedTugboat.enginePowerHp} HP</span>
+                </div>
+                <div className="text-[11px] text-slate-400">
+                  <span className="text-slate-500">OPEX Diario:</span> <span className="font-mono text-emerald-400">${selectedTugboat.dailyOpex?.toLocaleString()} USD/d</span>
+                </div>
+                {selectedTugboat.mmsi && (
+                  <div className="text-[11px] text-slate-400">
+                    <span className="text-slate-500">MMSI AIS:</span> <span className="font-mono text-slate-300">{selectedTugboat.mmsi}</span>
+                  </div>
+                )}
               </div>
-              <div>
-                <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1 font-mono">Eslora (LOA)</label>
-                <input
-                  type="text"
-                  value={loa}
-                  onChange={(e) => setLoa(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-mono"
-                  placeholder="e.g. 180m"
-                />
-              </div>
-            </div>
+            )}
 
-            <div className="grid grid-cols-2 gap-2.5">
+            <div className="pt-2 border-t border-slate-800 space-y-2">
               <div>
-                <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Calado Max / Draft</label>
+                <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">ID de Viaje</label>
                 <input
                   type="text"
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-mono"
-                  placeholder="e.g. 10.5m"
+                  value={voyageNumber}
+                  onChange={(e) => setVoyageNumber(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-cyan-500"
                 />
               </div>
+
               <div>
-                <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Velocidad (kt)</label>
+                <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Corredor Fluvial</label>
+                <input
+                  type="text"
+                  value={riverName}
+                  onChange={(e) => setRiverName(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Origen</label>
+                  <input
+                    type="text"
+                    value={originTerminal}
+                    onChange={(e) => setOriginTerminal(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-white truncate focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">Destino</label>
+                  <input
+                    type="text"
+                    value={destinationTerminal}
+                    onChange={(e) => setDestinationTerminal(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-white truncate focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">
+                  Estiaje Mínimo (m)
+                </label>
                 <input
                   type="number"
                   step="0.1"
-                  value={speed}
-                  onChange={(e) => setSpeed(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-mono"
-                  placeholder="Nudos"
+                  value={minWaterLevel}
+                  onChange={(e) => setMinWaterLevel(Number(e.target.value))}
+                  className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-cyan-500"
                 />
               </div>
             </div>
 
-            <div>
-              <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Consumo de Mar (t/d)</label>
-              <input
-                type="number"
-                step="0.1"
-                value={consumption}
-                onChange={(e) => setConsumption(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-mono"
-                placeholder="Ton/Día"
-              />
-              {consumption && !isNaN(Number(consumption)) && (
-                <span className="text-[10px] text-slate-400 font-mono block mt-1">
-                  Consumo Neto (incluye 5% de margen por mal tiempo): {(Number(consumption) * 1.05).toFixed(2)} t/d
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div className="pt-2 grid grid-cols-2 gap-2.5">
             <button
               type="button"
-              onClick={handleGuardar}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-2 px-3 rounded transition flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-950/20"
+              id="btn-guardar-convoy"
+              onClick={handleGuardarConvoy}
+              disabled={isLoading || !tugboat_id}
+              className="w-full bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 disabled:text-slate-600 text-white text-xs font-bold py-2.5 px-3 rounded transition flex items-center justify-center gap-1.5 shadow-lg shadow-cyan-950/20 cursor-pointer"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-              </svg>
-              Guardar / Save
-            </button>
-            <button
-              type="button"
-              onClick={handleFinishAudit}
-              className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-2 px-3 rounded transition flex items-center justify-center gap-1.5 shadow-lg shadow-blue-950/20"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Finish Audit
+              <span>⚓ Guardar Convoy Fluvial</span>
             </button>
           </div>
         </div>
 
-        {/* Database List Display */}
-        <div className="md:col-span-2 bg-slate-950/30 border border-slate-800 rounded-lg p-4 flex flex-col">
-          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800 pb-2 mb-3 flex items-center justify-between">
-            <span>Buques Guardados / Saved Fleet</span>
-            <span className="text-[10px] font-mono text-slate-600 font-semibold">{savedVessels.length} buques</span>
-          </h3>
+        {/* PANEL DERECHO: PANEL DINÁMICO DE BARCAZAS (2 cols) */}
+        <div className="md:col-span-2 bg-slate-950/40 border border-slate-800 rounded-lg p-4 space-y-4 flex flex-col justify-between">
+          <div className="space-y-3">
+            <div className="border-b border-slate-800 pb-2 flex items-center justify-between">
+              <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                Panel Dinámico de Barcazas Acopladas
+              </h3>
+              <span className="text-[10px] font-mono text-cyan-400">
+                {barge_ids.length} barcaza{barge_ids.length === 1 ? '' : 's'} · {totalCapacityMt.toLocaleString()} MT
+              </span>
+            </div>
 
-          <div className="flex-1 overflow-x-auto">
-            {savedVessels.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center py-12 text-center text-slate-600">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 mb-2 stroke-current" fill="none" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0a2 2 0 01-2 2H6a2 2 0 01-2-2m16 0V9a2 2 0 00-2-2H6a2 2 0 00-2 2v4" />
-                </svg>
-                <p className="text-xs font-semibold">Biblioteca de buques vacía.</p>
-                <p className="text-[10px] text-slate-700 max-w-xs mt-1">Busque especificaciones de un buque por su nombre usando la extracción con IA o ingréselas manualmente.</p>
-              </div>
-            ) : (
-              <table className="w-full text-left text-xs font-mono border-collapse">
-                <thead>
-                  <tr className="text-[10px] text-slate-500 uppercase border-b border-slate-800/80">
-                    <th className="py-2.5 px-3 font-semibold">Nombre</th>
-                    <th className="py-2.5 px-3 font-semibold text-right">DWT</th>
-                    <th className="py-2.5 px-3 font-semibold text-center">LOA</th>
-                    <th className="py-2.5 px-3 font-semibold text-center">Draft</th>
-                    <th className="py-2.5 px-3 font-semibold text-right">Vel.</th>
-                    <th className="py-2.5 px-3 font-semibold text-right">Cons.</th>
-                    <th className="py-2.5 px-3 font-semibold text-center"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60">
-                  {savedVessels.map((v, idx) => (
-                    <tr key={idx} className="hover:bg-slate-900/40 transition-colors group">
-                      <td className="py-2.5 px-3 font-bold text-white max-w-[120px] truncate">{v.vessel_name}</td>
-                      <td className="py-2.5 px-3 text-right text-indigo-400 font-semibold">{(v.dwt || 0).toLocaleString()}</td>
-                      <td className="py-2.5 px-3 text-center text-slate-400">{v.loa || '-'}</td>
-                      <td className="py-2.5 px-3 text-center text-slate-400">{v.draft || '-'}</td>
-                      <td className="py-2.5 px-3 text-right text-slate-300">{v.spd_ballast || v.spd_laden || '-'} kt</td>
-                      <td className="py-2.5 px-3 text-right text-slate-300">{v.cons_sea || '-'} t/d</td>
-                      <td className="py-2.5 px-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => handleEliminar(idx)}
-                          className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400 p-1 rounded transition-all"
-                          title="Eliminar Buque"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
-                      </td>
-                    </tr>
+            {/* BARRA DE AÑADIR BARCAZA */}
+            <div className="flex flex-col sm:flex-row items-center gap-2 bg-slate-900 p-2.5 rounded-lg border border-slate-800">
+              <select
+                value={selectedBargeToAdd}
+                onChange={(e) => setSelectedBargeToAdd(e.target.value ? Number(e.target.value) : '')}
+                className="w-full sm:flex-1 bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white"
+              >
+                <option value="">— Seleccionar barcaza disponible para acoplar —</option>
+                {uncoupledBarges.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name} [{b.bargeType}] · {b.capacity} MT · Calado {b.dynamicDraft}m
+                  </option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                onClick={() => handleAddBarge()}
+                disabled={!selectedBargeToAdd}
+                className="w-full sm:w-auto bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 disabled:text-slate-600 text-white text-xs font-bold px-3 py-1.5 rounded transition whitespace-nowrap cursor-pointer"
+              >
+                + Añadir Barcaza
+              </button>
+            </div>
+
+            {/* LISTA DE BARCAZAS ACOPLADAS */}
+            <div className="space-y-2 max-h-[300px] overflow-y-auto">
+              {coupledBarges.length === 0 ? (
+                <div className="py-8 text-center text-slate-500 text-xs border border-dashed border-slate-800 rounded-lg">
+                  No hay barcazas acopladas a este viaje. Selecciona una barcaza arriba para incorporarla al convoy.
+                </div>
+              ) : (
+                coupledBarges.map((barge, index) => (
+                  <div
+                    key={barge.id}
+                    className="flex items-center justify-between p-2.5 bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-lg transition"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-5 h-5 rounded-full bg-cyan-950 border border-cyan-500/30 text-cyan-400 text-[10px] font-mono font-bold flex items-center justify-center">
+                        {index + 1}
+                      </span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-white">{barge.name}</span>
+                          <span className="text-[9px] bg-slate-800 text-slate-300 px-1.5 py-0.2 rounded font-mono">
+                            {barge.bargeType}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-2">
+                          <span>Capacidad: <b className="text-slate-200">{Number(barge.capacity).toLocaleString()} MT</b></span>
+                          <span>•</span>
+                          <span>Calado: <b className="text-slate-200">{Number(barge.dynamicDraft).toFixed(2)}m</b></span>
+                          {barge.iotTrackingId && (
+                            <>
+                              <span>•</span>
+                              <span className="text-cyan-400 font-mono">IoT: {barge.iotTrackingId}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveBarge(barge.id)}
+                      className="text-slate-500 hover:text-rose-400 p-1.5 rounded hover:bg-slate-800 transition cursor-pointer"
+                      title="Desacoplar Barcaza"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* TABLA DE CONVOYES / FLOTA GUARDADA */}
+          <div className="pt-3 border-t border-slate-800 space-y-2">
+            <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
+              <span>Biblioteca de Convoyes y Flota Guardada</span>
+              <span className="font-mono text-slate-600">{savedConvoys.length} registros</span>
+            </h4>
+
+            <div className="max-h-[140px] overflow-y-auto">
+              {savedConvoys.length === 0 ? (
+                <p className="text-[11px] text-slate-600 italic">No hay convoyes guardados en la biblioteca local.</p>
+              ) : (
+                <div className="divide-y divide-slate-800/80 text-xs">
+                  {savedConvoys.map((c, idx) => (
+                    <div key={idx} className="py-1.5 flex items-center justify-between group">
+                      <div>
+                        <span className="font-bold text-white text-[11px]">{c.vessel_name}</span>
+                        <span className="text-[10px] text-slate-400 ml-2 font-mono">
+                          {c.capacity || c.dwt} MT · Calado: {c.draft}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleEliminarConvoy(idx)}
+                        className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-rose-400 p-1 transition cursor-pointer"
+                        title="Eliminar"
+                      >
+                        ✕
+                      </button>
+                    </div>
                   ))}
-                </tbody>
-              </table>
-            )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
     </div>
   );
 }
+
+export { ConvoyBuilder };
+export default ShipComparison;
