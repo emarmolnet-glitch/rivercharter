@@ -206,6 +206,31 @@ export interface FluvialPdaExpenses {
 }
 
 /**
+ * Gestión de Geometría de Convoyes y Esclusado Doble (Double Lockage)
+ */
+export interface ConvoyGeometryResult {
+  bargeCount: number;
+  columns: number;
+  rows: number;
+  bargeLengthFeet: number;
+  bargeBeamFeet: number;
+  tugboatLengthFeet: number;
+  totalLengthFeet: number; // (rows * 195) + 150
+  totalBeamFeet: number;   // columns * 35
+  lockLengthFeet: number;  // 600
+  lockWidthFeet: number;   // 110
+  exceedsLength: boolean;
+  exceedsBeam: boolean;
+  requiresDoubleLockage: boolean;
+  lockCount: number;
+  additionalHours: number; // +3.5h por esclusa si requiresDoubleLockage
+  maneuverFuelTonsPerHour: number;
+  maneuverFuelTonsTotal: number;
+  maneuverFuelCostTotal: number;
+  infoMessage?: string;
+}
+
+/**
  * Gestión de Tiempos y Demoras Fluviales
  */
 export interface FluvialDelays {
@@ -218,6 +243,11 @@ export interface FluvialDelays {
   vConvoyWaterKnots?: number; // Velocidad del convoy en agua calma
   speedDownstreamKnots?: number; // SOG bajada
   speedUpstreamKnots?: number; // SOG subida
+  lockCount?: number; // Número de esclusas en la ruta
+  requiresDoubleLockage?: boolean; // Requiere maniobra de esclusado doble
+  doubleLockageHours?: number; // Horas totales inyectadas por esclusado doble
+  convoyLengthFeet?: number; // Eslora total del convoy en pies
+  convoyBeamFeet?: number; // Manga total del convoy en pies
 }
 
 /**
@@ -243,6 +273,8 @@ export interface FluvialExecutiveMetrics {
   linearMeters?: number;
   truckCount?: number;
   bidirectionalSailing?: unknown;
+  geometry?: ConvoyGeometryResult;
+  requiresDoubleLockage?: boolean;
 }
 
 /**

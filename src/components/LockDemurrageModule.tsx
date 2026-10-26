@@ -23,6 +23,12 @@ export interface LockDemurrageModuleProps {
   baseVoyageCost?: number; // Costo base (Motor + Carga)
   fuelPricePerTon?: number;
   initialEntries?: WaitingTimeEntry[];
+  requiresDoubleLockage?: boolean;
+  lockCount?: number;
+  convoyLengthFeet?: number;
+  convoyBeamFeet?: number;
+  doubleLockageHours?: number;
+  maneuverFuelTonsPerHour?: number;
   onDemurrageChange?: (data: {
     waitingHours: number;
     demurrageCost: number;
@@ -33,6 +39,7 @@ export interface LockDemurrageModuleProps {
 }
 
 const COMMON_REASONS = [
+  'Maniobra de Esclusado Doble (Double Lockage)',
   'Tráfico / Congestión en Esclusa',
   'Espera de Giro / Inspección de Aduana',
   'Mantenimiento de Compuerta / Vía Fluvial',
@@ -49,6 +56,12 @@ export function LockDemurrageModule({
   baseVoyageCost = 0,
   fuelPricePerTon = DEFAULT_BUNKER_PRICE_USD_TON,
   initialEntries,
+  requiresDoubleLockage = false,
+  lockCount = 1,
+  convoyLengthFeet,
+  convoyBeamFeet,
+  doubleLockageHours,
+  maneuverFuelTonsPerHour,
   onDemurrageChange,
 }: LockDemurrageModuleProps) {
   const [entries, setEntries] = useState<WaitingTimeEntry[]>(() => {
@@ -72,20 +85,26 @@ export function LockDemurrageModule({
   const [notes, setNotes] = useState('');
   const [isFormOpen, setIsFormOpen] = useState(false);
 
-  // Horas acumuladas de espera
-  const totalWaitingHours = useMemo(() => {
+  // Horas acumuladas de espera manual
+  const manualWaitingHours = useMemo(() => {
     return entries.reduce((acc, item) => acc + (Number(item.waitingHours) || 0), 0);
   }, [entries]);
 
-  // Recálculo automático del sobrecosto operativo en ralentí
+  // Recálculo automático del sobrecosto operativo en ralentí y maniobra
   const demurrageBreakdown: DemurrageCostBreakdown = useMemo(() => {
     return calculateDemurrageCost({
-      waitingHours: totalWaitingHours,
+      waitingHours: manualWaitingHours,
       dailyOpex: Number(dailyOpex) || 0,
       idleFuelTonsPerHour: DEFAULT_IDLE_FUEL_TONS_PER_HOUR,
       fuelPricePerTon: Number(fuelPricePerTon) || DEFAULT_BUNKER_PRICE_USD_TON,
+      requiresDoubleLockage,
+      lockCount,
+      doubleLockageHours,
+      maneuverFuelTonsPerHour,
     });
-  }, [totalWaitingHours, dailyOpex, fuelPricePerTon]);
+  }, [manualWaitingHours, dailyOpex, fuelPricePerTon, requiresDoubleLockage, lockCount, doubleLockageHours, maneuverFuelTonsPerHour]);
+
+  const totalWaitingHours = demurrageBreakdown.waitingHours;
 
   // Gasto total del viaje sumando el sobrecosto de demoras
   const recalculatedTotalVoyageCost = useMemo(() => {
@@ -175,6 +194,28 @@ export function LockDemurrageModule({
           <span>{isFormOpen ? '✕ Cerrar' : '+ Registrar Tiempo de Espera'}</span>
         </button>
       </div>
+
+      {/* PANEL INFORMATIVO: MANIOBRA DE ESCLUSADO DOBLE */}
+      {requiresDoubleLockage && (
+        <div
+          role="region"
+          id="lock-module-double-lockage-alert"
+          data-testid="lock-module-double-lockage-alert"
+          className="p-3.5 rounded-lg border border-amber-500/40 bg-amber-950/30 text-amber-200 text-xs flex items-start gap-3 shadow-inner"
+        >
+          <div className="p-2 bg-amber-500/20 text-amber-300 rounded shrink-0 text-base">
+            ⚡
+          </div>
+          <div className="space-y-1">
+            <span className="font-bold text-amber-300 uppercase tracking-wide block">
+              Maniobra de Esclusado Doble Requerida
+            </span>
+            <p className="text-amber-100 font-medium leading-relaxed" id="lock-module-double-lockage-message">
+              Maniobra de Esclusado Doble Requerida: El convoy ({convoyLengthFeet || 1125} ft x {convoyBeamFeet || 105} ft) excede la cámara estándar (600x110). Se han añadido automáticamente +3.5h y consumos de maniobra por cada esclusa de la ruta.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* TARJETAS RESUMEN DE IMPACTO FINANCIERO */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
