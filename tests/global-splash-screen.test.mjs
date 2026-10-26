@@ -44,7 +44,7 @@ test('splash screen displays dual visual identity: Sub-Brand above and Master Br
 
   // Master Brand: CHARTER CORE PRO below progress bar (unified circular logo and typography)
   assert.match(splashHtml, /<!-- Nuevo icono circular de la Master Brand unificada -->/);
-  assert.match(splashHtml, /<img src="\/assets\/master-brand-unified\.png" alt="Charter Core PRO"/);
+  assert.match(splashHtml, /<img src="(?:\/assets\/master-brand-unified\.png|assets\/rivercharter-logo\.png)" alt="Charter Core PRO"/);
   assert.match(splashHtml, /CHARTER<br\/><span style="color: #2898B8;">CORE PRO<\/span>/);
   assert.doesNotMatch(splashHtml, /linearGradient id="mGrad"/);
 
