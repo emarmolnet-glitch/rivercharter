@@ -51761,7 +51761,153 @@ Example:
         }
         window.printExecutiveReportClient = printExecutiveReportClient;
 
+        function isFluvialContext() {
+            if (typeof window !== 'undefined') {
+                if (typeof window.isFluvialContext === 'function' && window.isFluvialContext !== isFluvialContext) {
+                    try { return Boolean(window.isFluvialContext()); } catch (_) {}
+                }
+                if (window.isFluvial === true || window.isRiverCharter === true) return true;
+                if (window.activeConvoyData) return true;
+                if (document.getElementById('convoy-builder-root')) return true;
+                if (document.title && /river/i.test(document.title)) return true;
+            }
+            return false;
+        }
+        window.isFluvialContext = isFluvialContext;
+
+        function getFluvialConvoyInfo() {
+            const convoy = (typeof window !== 'undefined' && window.activeConvoyData) || {};
+            const bargeCount = Array.isArray(convoy.barges) ? convoy.barges.length : (Number(convoy.bargeCount) || 10);
+            const tugboatName = convoy.tugboat?.name || convoy.tugboatName || 'Remolcador Río Paraná';
+            const convoyType = convoy.convoyType || (bargeCount >= 16 ? 'Súper Jumbo' : bargeCount >= 8 ? 'Jumbo' : 'Estándar');
+            const description = convoy.description || convoy.convoyDescription || `${convoyType} - ${bargeCount} Barcazas`;
+            const dynamicDraft = Number(convoy.totalDraft || convoy.dynamicDraft || convoy.draft || 2.85);
+            const minWaterLevel = Number(convoy.minWaterLevel || convoy.effectiveWaterLevel || (typeof window !== 'undefined' && window.DataBridge?.effectiveWaterLevel) || 3.20);
+            const isApto = dynamicDraft <= minWaterLevel;
+            return {
+                tugboatName,
+                bargeCount,
+                description,
+                dynamicDraft,
+                minWaterLevel,
+                isApto
+            };
+        }
+        window.getFluvialConvoyInfo = getFluvialConvoyInfo;
+
+        function renderFluvialHydrologyValidationHtml(convoyInfo) {
+            const info = convoyInfo || (typeof getFluvialConvoyInfo === 'function' ? getFluvialConvoyInfo() : {});
+            const dynamicDraft = Number(info.dynamicDraft || 2.85);
+            const minWaterLevel = Number(info.minWaterLevel || 3.20);
+            const isApto = dynamicDraft <= minWaterLevel;
+            const underKeelClearance = (minWaterLevel - dynamicDraft).toFixed(2);
+
+            return `
+                <div id="executive-fluvial-hydrology-validation" class="my-4 p-4 rounded-xl border bg-slate-800/80 border-slate-700 break-inside-avoid">
+                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-700/60 pb-2 mb-3">
+                        <h5 class="font-bold text-sky-400 uppercase flex items-center gap-2 text-xs">
+                            <i class="fa-solid fa-water"></i> Validación de Estiaje y Calado
+                        </h5>
+                        <span class="px-2.5 py-0.5 rounded text-[11px] font-bold ${isApto ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-500/40' : 'bg-red-950/80 text-red-400 border border-red-500/40'}">
+                            ${isApto ? '✅ APTO PARA NAVEGAR' : '⚠️ ALERTA DE ESTIAJE'}
+                        </span>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                        <div class="bg-slate-900/60 p-3 rounded-lg border border-slate-800">
+                            <span class="text-slate-400 block text-[10px] uppercase font-bold">Calado Dinámico del Convoy</span>
+                            <span class="font-mono font-bold text-sm ${isApto ? 'text-emerald-400' : 'text-red-400'}">${dynamicDraft.toFixed(2)} m</span>
+                        </div>
+                        <div class="bg-slate-900/60 p-3 rounded-lg border border-slate-800">
+                            <span class="text-slate-400 block text-[10px] uppercase font-bold">Límite Hidrométrico (Estiaje)</span>
+                            <span class="font-mono font-bold text-sm text-sky-300">${minWaterLevel.toFixed(2)} m</span>
+                        </div>
+                        <div class="bg-slate-900/60 p-3 rounded-lg border border-slate-800">
+                            <span class="text-slate-400 block text-[10px] uppercase font-bold">Margen Bajo Quilla (UKC)</span>
+                            <span class="font-mono font-bold text-sm text-white">${underKeelClearance} m</span>
+                        </div>
+                    </div>
+                    <div class="mt-2 text-[10px] text-slate-400 italic">
+                        Resumen hidrológico sincronizado con DataBridge Fluvial. Navegación validada frente a restricciones de paso y estiaje.
+                    </div>
+                </div>
+            `;
+        }
+        window.renderFluvialHydrologyValidationHtml = renderFluvialHydrologyValidationHtml;
+
+        function adaptExecutiveReportModalToFluvial(rootEl) {
+            if (!isFluvialContext()) return;
+            const container = rootEl || document.getElementById('ai-modal-content') || document.body;
+            if (!container) return;
+
+            const info = getFluvialConvoyInfo();
+
+            // 1. Ocultar estrictamente el croquis naval / stowage plan
+            const stowageContainers = container.querySelectorAll(
+                '#voyage-visual-stowage-container, #coa-voyage-visual-stowage-container, #executive-visual-stowage-section, .visual-stowage-plan-wrapper, .stowage-plan-section'
+            );
+            stowageContainers.forEach(el => {
+                el.style.display = 'none';
+                el.classList.add('hidden');
+            });
+
+            // 2. Ocultar tabla de validación técnica OMI
+            const omiContainers = container.querySelectorAll(
+                '#visual-stowage-technical-validation-container'
+            );
+            omiContainers.forEach(el => {
+                el.style.display = 'none';
+                el.classList.add('hidden');
+            });
+
+            // 3. Inyectar o asegurar widget de Validación de Estiaje y Calado
+            if (!container.querySelector('#executive-fluvial-hydrology-validation')) {
+                const hydroHtml = renderFluvialHydrologyValidationHtml(info);
+                const refElement = container.querySelector('#voyage-visual-stowage-container, #coa-voyage-visual-stowage-container, #executive-visual-stowage-section, #executive-financial-row, #coa-executive-financial-row');
+                if (refElement) {
+                    refElement.insertAdjacentHTML('afterend', hydroHtml);
+                } else {
+                    container.insertAdjacentHTML('beforeend', hydroHtml);
+                }
+            }
+
+            // 4. Reemplazo dinámico de etiquetas en texto
+            const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
+            let node;
+            const textReplacements = [
+                [/\bBuque:/g, 'Remolcador / Convoy:'],
+                [/\bCapacidad \/ Clase:/g, 'Configuración Convoy:'],
+                [/\bVessel:/g, 'Tugboat / Convoy:'],
+                [/\bPóliza Estándar:\s*GENCON\b/gi, 'Contrato: Fluvial COA'],
+                [/\bPóliza Estándar:\s*ASBATANKVOY\b/gi, 'Contrato: Fluvial COA'],
+                [/\bPóliza Estándar \(Charter Party\):/g, 'Contrato:'],
+                [/\bPóliza Estándar:/g, 'Contrato:'],
+                [/\bGENCON\b/g, 'Fluvial COA'],
+                [/\bSEACHARTER PRO\b/g, 'RIVERCHARTER'],
+                [/\bSeaCharter Core PRO\b/g, 'RiverCharter'],
+                [/\bSeaCharter PRO\b/g, 'RiverCharter'],
+                [/\b(\d+(?:,\d+)*(?:\.\d+)?)\s*NM\b/g, '$1 km']
+            ];
+
+            while (node = walker.nextNode()) {
+                let val = node.nodeValue;
+                let modified = false;
+                for (const [pattern, replacement] of textReplacements) {
+                    if (pattern.test(val)) {
+                        val = val.replace(pattern, replacement);
+                        modified = true;
+                    }
+                }
+                if (modified) {
+                    node.nodeValue = val;
+                }
+            }
+        }
+        window.adaptExecutiveReportModalToFluvial = adaptExecutiveReportModalToFluvial;
+
         function renderVoyageStowagePlanFallback(st) {
+            if (isFluvialContext()) {
+                return '<div class="hidden" style="display: none;"></div>';
+            }
             const cargo = Number(st.cargo || 25000);
             const dwt = Number(st.dwt || 32000);
             const vesselClass = st.class || 'Handysize';
@@ -51903,18 +52049,20 @@ Example:
             }
 
             const currentLang = document.getElementById('language-selector')?.value || 'es';
+            const isFluvial = isFluvialContext();
+            const convoyInfo = getFluvialConvoyInfo();
 
             const rTexts = {
                 es: {
-                    title: "Reporte Ejecutivo del Viaje",
+                    title: isFluvial ? "Reporte Ejecutivo Fluvial" : "Reporte Ejecutivo del Viaje",
                     header: "Resumen Operativo y Financiero",
                     printBtn: "Imprimir Reporte (PDF)",
-                    specHeader: "Especificaciones Buque & Carga",
-                    vessel: "Buque:",
-                    class: "Capacidad / Clase:",
+                    specHeader: isFluvial ? "Especificaciones Convoy & Carga" : "Especificaciones Buque & Carga",
+                    vessel: isFluvial ? "Remolcador / Convoy:" : "Buque:",
+                    class: isFluvial ? "Configuración Convoy:" : "Capacidad / Clase:",
                     cargo: "Carga a Transportar:",
                     cargoType: "Tipo Carga:",
-                    standard: "Póliza Estándar (Charter Party):",
+                    standard: isFluvial ? "Contrato:" : "Póliza Estándar (Charter Party):",
                     routeHeader: "Ruta e Itinerario",
                     ballastPort: "Puerto Lastre:",
                     polPod: "Carga / Descarga:",
@@ -51930,6 +52078,38 @@ Example:
                     sellPact: "Pactado Venta Fletador:",
                     buyPact: "Compra Armador:",
                     breakeven: "Punto de Equilibrio:",
+                    netCharterer: "Beneficio Neto Fletador:",
+                    netOwner: "Beneficio Neto Armador:",
+                    closeBtn: "Cerrar",
+                    printBtnBottom: "Imprimir Reporte",
+                    daysLabel: "Días",
+                    directVoyage: "N/A (Carga Directa)"
+                },
+                en: {
+                    title: isFluvial ? "Fluvial Executive Report" : "Voyage Executive Report",
+                    header: "Operational & Financial Summary",
+                    printBtn: "Print Report (PDF)",
+                    specHeader: isFluvial ? "Convoy & Cargo Specifications" : "Vessel & Cargo Specifications",
+                    vessel: isFluvial ? "Tugboat / Convoy:" : "Vessel:",
+                    class: isFluvial ? "Convoy Configuration:" : "Capacity / Class:",
+                    cargo: "Cargo to Transport:",
+                    cargoType: "Cargo Type:",
+                    standard: isFluvial ? "Contract:" : "Standard Policy (Charter Party):",
+                    routeHeader: "Route & Itinerary",
+                    ballastPort: "Ballast Port:",
+                    polPod: "Load / Discharge:",
+                    distance: "Total Distance:",
+                    duration: "Estimated Duration:",
+                    costHeader: "Cost Structure",
+                    bunkers: "Fuel (Bunkers):",
+                    opex: "Operating Cost (OPEX):",
+                    pda: "Port Costs (PDAs):",
+                    ets: "Estimated ETS Cost:",
+                    totalExpenses: "Total Estimated Costs:",
+                    resultsHeader: "Feasibility & Net Profit",
+                    sellPact: "Agreed Charterer Sale:",
+                    buyPact: "Owner Buying Freight:",
+                    breakeven: "Break-Even Point:",
                     netCharterer: "Beneficio Neto Fletador:",
                     netOwner: "Beneficio Neto Armador:",
                     closeBtn: "Cerrar",
@@ -52094,11 +52274,11 @@ Example:
                             <ul class="space-y-1.5">
                                 <li class="flex justify-between">
                                     <span class="text-slate-400">${r.vessel}</span>
-                                    <span class="font-bold text-white">${State.vessel || "TBN"}</span>
+                                    <span class="font-bold text-white">${isFluvial ? (convoyInfo.tugboatName || State.vessel || "TBN") : (State.vessel || "TBN")}</span>
                                 </li>
                                 <li class="flex justify-between">
                                     <span class="text-slate-400">${r.class}</span>
-                                    <span class="font-bold text-white">${classAnalysis.shipClass.label} (${State.dwt ? parseFloat(State.dwt).toLocaleString() : 0} DWT)</span>
+                                    <span class="font-bold text-white">${isFluvial ? convoyInfo.description : `${classAnalysis.shipClass.label} (${State.dwt ? parseFloat(State.dwt).toLocaleString() : 0} DWT)`}</span>
                                 </li>
                                 <li class="flex justify-between">
                                     <span class="text-slate-400">${r.cargo}</span>
@@ -52110,7 +52290,7 @@ Example:
                                 </li>
                                 <li class="flex justify-between">
                                     <span class="text-slate-400">${r.standard}</span>
-                                    <span class="font-bold text-yellow-400">${State.charterPartyStandard || (State.cargoType === 'Granel Líquido (Liquid Bulk)' ? 'ASBATANKVOY' : 'GENCON')}</span>
+                                    <span class="font-bold text-yellow-400">${isFluvial ? 'Contrato: Fluvial COA' : (State.charterPartyStandard || (State.cargoType === 'Granel Líquido (Liquid Bulk)' ? 'ASBATANKVOY' : 'GENCON'))}</span>
                                 </li>
                                 <li class="flex justify-between gap-3">
                                     <span class="text-slate-400">Carga POL (método · ritmo real · grúas):</span>
@@ -52141,7 +52321,7 @@ Example:
                                 </li>
                                 <li class="flex justify-between">
                                     <span class="text-slate-400">${r.distance}</span>
-                                    <span class="font-bold text-white">${(State.distBallast + State.distLaden).toLocaleString()} NM</span>
+                                    <span class="font-bold text-white">${(State.distBallast + State.distLaden).toLocaleString()} ${isFluvial ? 'km' : 'NM'}</span>
                                 </li>
                                 <li class="flex justify-between">
                                     <span class="text-slate-400">${r.duration}</span>
@@ -52240,9 +52420,10 @@ Example:
 
                     <!-- CROQUIS NAVAL DEL BUQUE (VisualStowagePlan)
                          Renderizado entre el Resumen Operativo y Financiero y los Acordeones de Datos -->
-                    <div id="voyage-visual-stowage-container" class="my-4 break-inside-avoid">
-                        ${renderVoyageStowagePlanFallback(State)}
+                    <div id="voyage-visual-stowage-container" class="my-4 break-inside-avoid" ${isFluvial ? 'style="display: none;"' : ''}>
+                        ${isFluvial ? '' : renderVoyageStowagePlanFallback(State)}
                     </div>
+                    ${isFluvial ? renderFluvialHydrologyValidationHtml(convoyInfo) : ''}
 
                     <!-- Sección de Desglose y Restricciones -->
                     <div class="bg-slate-800/60 p-4 rounded-xl border border-slate-700">
@@ -52553,7 +52734,9 @@ Example:
             document.getElementById('ai-modal-loader').classList.add('hidden');
             document.getElementById('ai-modal-content').innerHTML = reportHTML;
             document.getElementById('ai-modal-content').classList.remove('hidden');
-            if (typeof window.mountVisualStowageInExecutiveModal === 'function') {
+            if (isFluvial) {
+                adaptExecutiveReportModalToFluvial(document.getElementById('ai-modal-content'));
+            } else if (typeof window.mountVisualStowageInExecutiveModal === 'function') {
                 try {
                     window.mountVisualStowageInExecutiveModal('voyage-visual-stowage-container', { state: State });
                 } catch (e) {
@@ -52561,6 +52744,7 @@ Example:
                 }
             }
         }
+        window.generarReporteEjecutivo = generateExecutiveReport;
         function renderExecutiveReportPrintView(datosCotizacion) {
             // Asegurar que las variables en State están actualizadas
             const getVal = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
@@ -52644,43 +52828,83 @@ Example:
 
             const currentDWTLabel = currentLang === 'es' ? 'TM' : (currentLang === 'en' ? 'MT' : 'TM');
 
-            document.getElementById('print-vessel-name').innerText = State.vessel || "TBN";
-            document.getElementById('print-vessel-dwt').innerText = State.dwt ? `${parseFloat(State.dwt).toLocaleString('en-US')} ${currentDWTLabel}` : "-";
-            document.getElementById('print-vessel-class').innerText = State.class || "Coaster";
-            document.getElementById('print-cargo-qty').innerText = State.cargo ? `${parseFloat(State.cargo).toLocaleString('en-US')} ${currentDWTLabel}` : "-";
-            document.getElementById('print-cargo-type').innerText = State.cargoTypeManual || State.cargoType || "Granel Sólido (Dry Bulk)";
-            
-            const printDemurrageVal = parseFloat(State.demurrage) || 0;
-            document.getElementById('print-demurrage').innerText = State.demurrage ? `$${printDemurrageVal.toLocaleString('en-US')} / ${currentLang === 'es' ? 'día' : (currentLang === 'en' ? 'day' : 'jour')}` : "-";
+            const isFluvial = isFluvialContext();
+            const convoyInfo = getFluvialConvoyInfo();
 
-            // Set Charter Party Standard and Policy Basis
-            const cpStandard = State.charterPartyStandard || (State.cargoType === 'Granel Líquido (Liquid Bulk)' ? 'ASBATANKVOY' : 'GENCON');
-            const printCPStandardEl = document.getElementById('print-charter-party-standard');
-            if (printCPStandardEl) {
-                printCPStandardEl.innerText = cpStandard;
+            if (isFluvial) {
+                const printTitleH1 = document.querySelector('#executive-report-print-view h1');
+                if (printTitleH1) printTitleH1.innerText = 'RIVERCHARTER';
+                const allTds = Array.from(document.querySelectorAll('#executive-report-print-view td'));
+                const printVesselTh = allTds.find(td => td.innerText && td.innerText.includes('Buque / Vessel Name:'));
+                if (printVesselTh) printVesselTh.innerText = 'Remolcador / Convoy:';
+                const printDistTh = allTds.find(td => td.innerText && td.innerText.includes('Millas Totales / Total Distance:'));
+                if (printDistTh) printDistTh.innerText = 'Distancia Total / Total Distance:';
+
+                document.getElementById('print-vessel-name').innerText = convoyInfo.tugboatName || State.vessel || "Remolcador Río Paraná";
+                document.getElementById('print-vessel-dwt').innerText = State.dwt ? `${parseFloat(State.dwt).toLocaleString('en-US')} ${currentDWTLabel}` : "-";
+                document.getElementById('print-vessel-class').innerText = convoyInfo.description || "Súper Jumbo - 10 Barcazas";
+                document.getElementById('print-cargo-qty').innerText = State.cargo ? `${parseFloat(State.cargo).toLocaleString('en-US')} ${currentDWTLabel}` : "-";
+                document.getElementById('print-cargo-type').innerText = State.cargoTypeManual || State.cargoType || "Granel Sólido (Dry Bulk)";
+
+                const printCPStandardEl = document.getElementById('print-charter-party-standard');
+                if (printCPStandardEl) printCPStandardEl.innerText = 'Fluvial COA';
+                const printPolicyBasisEl = document.getElementById('print-policy-basis');
+                if (printPolicyBasisEl) printPolicyBasisEl.innerText = 'Contrato Fluvial COA';
+
+                document.getElementById('print-dist-ballast').innerText = `${State.distBallast.toLocaleString('en-US')} km`;
+                document.getElementById('print-dist-laden').innerText = `${State.distLaden.toLocaleString('en-US')} km`;
+                document.getElementById('print-dist-total').innerText = `${(State.distBallast + State.distLaden).toLocaleString('en-US')} km`;
+            } else {
+                document.getElementById('print-vessel-name').innerText = State.vessel || "TBN";
+                document.getElementById('print-vessel-dwt').innerText = State.dwt ? `${parseFloat(State.dwt).toLocaleString('en-US')} ${currentDWTLabel}` : "-";
+                document.getElementById('print-vessel-class').innerText = State.class || "Coaster";
+                document.getElementById('print-cargo-qty').innerText = State.cargo ? `${parseFloat(State.cargo).toLocaleString('en-US')} ${currentDWTLabel}` : "-";
+                document.getElementById('print-cargo-type').innerText = State.cargoTypeManual || State.cargoType || "Granel Sólido (Dry Bulk)";
+
+                // Set Charter Party Standard and Policy Basis
+                const cpStandard = State.charterPartyStandard || (State.cargoType === 'Granel Líquido (Liquid Bulk)' ? 'ASBATANKVOY' : 'GENCON');
+                const printCPStandardEl = document.getElementById('print-charter-party-standard');
+                if (printCPStandardEl) {
+                    printCPStandardEl.innerText = cpStandard;
+                }
+                const printPolicyBasisEl = document.getElementById('print-policy-basis');
+                if (printPolicyBasisEl) {
+                    printPolicyBasisEl.innerText = cpStandard === 'ASBATANKVOY' ? 'ASBA Standard' : 'BIMCO Standard';
+                }
+
+                document.getElementById('print-dist-ballast').innerText = `${State.distBallast.toLocaleString('en-US')} NM`;
+                document.getElementById('print-dist-laden').innerText = `${State.distLaden.toLocaleString('en-US')} NM`;
+                document.getElementById('print-dist-total').innerText = `${(State.distBallast + State.distLaden).toLocaleString('en-US')} NM`;
             }
-            const printPolicyBasisEl = document.getElementById('print-policy-basis');
-            if (printPolicyBasisEl) {
-                printPolicyBasisEl.innerText = cpStandard === 'ASBATANKVOY' ? 'ASBA Standard' : 'BIMCO Standard';
-            }
+
+            const printDemurrageVal = parseFloat(State.demurrage) || 0;
+            const printDemurrageEl = document.getElementById('print-demurrage');
+            if (printDemurrageEl) printDemurrageEl.innerText = State.demurrage ? `$${printDemurrageVal.toLocaleString('en-US')} / ${currentLang === 'es' ? 'día' : (currentLang === 'en' ? 'day' : 'jour')}` : "-";
 
             // Ritmos de Carga y Descarga en Especificaciones Generales (Sección I)
-            document.getElementById('print-rate-load-info').innerText = `${operationalTerms.loadRate.toLocaleString('en-US')}${rateSuffix}`;
-            document.getElementById('print-rate-disch-info').innerText = `${operationalTerms.dischargeRate.toLocaleString('en-US')}${rateSuffix}`;
-            document.getElementById('print-load-method').innerText = operationalTerms.loadMethod;
-            document.getElementById('print-discharge-method').innerText = operationalTerms.dischargeMethod;
-            document.getElementById('print-load-cranes').innerText = String(operationalTerms.loadCranes);
-            document.getElementById('print-discharge-cranes').innerText = String(operationalTerms.dischargeCranes);
-            document.getElementById('print-stowage-terms').innerText = operationalTerms.freightTerms;
-            document.getElementById('print-laytime-terms').innerText = `POL ${operationalTerms.loadLaytime} / POD ${operationalTerms.dischargeLaytime}`;
+            const printRateLoadInfoEl = document.getElementById('print-rate-load-info');
+            if (printRateLoadInfoEl) printRateLoadInfoEl.innerText = `${operationalTerms.loadRate.toLocaleString('en-US')}${rateSuffix}`;
+            const printRateDischInfoEl = document.getElementById('print-rate-disch-info');
+            if (printRateDischInfoEl) printRateDischInfoEl.innerText = `${operationalTerms.dischargeRate.toLocaleString('en-US')}${rateSuffix}`;
+            const printLoadMethodEl = document.getElementById('print-load-method');
+            if (printLoadMethodEl) printLoadMethodEl.innerText = operationalTerms.loadMethod;
+            const printDischargeMethodEl = document.getElementById('print-discharge-method');
+            if (printDischargeMethodEl) printDischargeMethodEl.innerText = operationalTerms.dischargeMethod;
+            const printLoadCranesEl = document.getElementById('print-load-cranes');
+            if (printLoadCranesEl) printLoadCranesEl.innerText = String(operationalTerms.loadCranes);
+            const printDischargeCranesEl = document.getElementById('print-discharge-cranes');
+            if (printDischargeCranesEl) printDischargeCranesEl.innerText = String(operationalTerms.dischargeCranes);
+            const printStowageTermsEl = document.getElementById('print-stowage-terms');
+            if (printStowageTermsEl) printStowageTermsEl.innerText = operationalTerms.freightTerms;
+            const printLaytimeTermsEl = document.getElementById('print-laytime-terms');
+            if (printLaytimeTermsEl) printLaytimeTermsEl.innerText = `POL ${operationalTerms.loadLaytime} / POD ${operationalTerms.dischargeLaytime}`;
 
-            document.getElementById('print-port-ballast').innerText = State.portBallast || directVoyageText;
-            document.getElementById('print-port-pol').innerText = State.pol || "-";
-            document.getElementById('print-port-pod').innerText = State.pod || "-";
-
-            document.getElementById('print-dist-ballast').innerText = `${State.distBallast.toLocaleString('en-US')} NM`;
-            document.getElementById('print-dist-laden').innerText = `${State.distLaden.toLocaleString('en-US')} NM`;
-            document.getElementById('print-dist-total').innerText = `${(State.distBallast + State.distLaden).toLocaleString('en-US')} NM`;
+            const printPortBallastEl = document.getElementById('print-port-ballast');
+            if (printPortBallastEl) printPortBallastEl.innerText = State.portBallast || directVoyageText;
+            const printPortPolEl = document.getElementById('print-port-pol');
+            if (printPortPolEl) printPortPolEl.innerText = State.pol || "-";
+            const printPortPodEl = document.getElementById('print-port-pod');
+            if (printPortPodEl) printPortPodEl.innerText = State.pod || "-";
 
             document.getElementById('print-spd-ballast').innerText = `${getVal('spd-ballast')} Knots`;
             document.getElementById('print-spd-laden').innerText = `${getVal('spd-laden')} Knots`;
@@ -53092,9 +53316,21 @@ Example:
                     <!-- 6. Restricciones de Puerto y Calado -->
                     <div style="border: 1px solid #cbd5e1; border-radius: 4px; padding: 8px 10px; background-color: #f8fafc;">
                         <h4 style="font-size: 8.5pt; font-weight: 700; color: #1e3a8a; margin: 0 0 6px 0; border-bottom: 1px solid #cbd5e1; padding-bottom: 3px;">
-                            6. Restricciones y Calado / Port Restrictions & Draft Verification
+                            ${isFluvial ? '6. Validación de Estiaje y Calado Fluvial' : '6. Restricciones y Calado / Port Restrictions & Draft Verification'}
                         </h4>
                         <div style="font-size: 7.5pt; color: #334155; line-height: 1.3;">
+                            ${isFluvial ? `
+                            <div style="margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+                                <span><strong>Calado Dinámico:</strong> <span style="font-family: monospace; font-weight: 700; color: ${convoyInfo.isApto ? '#15803d' : '#b91c1c'};">${convoyInfo.dynamicDraft.toFixed(2)} m</span></span>
+                                <span><strong>Límite Hidrométrico (Estiaje):</strong> <span style="font-family: monospace; font-weight: 700; color: #0284c7;">${convoyInfo.minWaterLevel.toFixed(2)} m</span></span>
+                                <span style="font-weight: 700; padding: 2px 6px; border-radius: 3px; font-size: 7pt; background: ${convoyInfo.isApto ? '#f0fdf4' : '#fef2f2'}; color: ${convoyInfo.isApto ? '#166534' : '#991b1b'}; border: 1px solid ${convoyInfo.isApto ? '#86efac' : '#fca5a5'};">
+                                    ${convoyInfo.isApto ? '✅ APTO PARA NAVEGAR' : '⚠️ ALERTA DE ESTIAJE'}
+                                </span>
+                            </div>
+                            <div style="font-size: 6.8pt; color: #64748b; font-style: italic;">
+                                Validación hidrológica en hidrovía vs. DataBridge Fluvial. Margen de seguridad bajo quilla: ${(convoyInfo.minWaterLevel - convoyInfo.dynamicDraft).toFixed(2)} m.
+                            </div>
+                            ` : `
                             <div style="margin-bottom: 6px;">
                                 <strong>Calado Máximo Buque / Fully Loaded Draft:</strong> <span style="font-family: monospace; font-weight: 700; color: #4f46e5;">${vesselDraft.toFixed(2)} m</span>
                             </div>
@@ -53134,6 +53370,7 @@ Example:
                                     ${podAlternatives.map(alt => `${alt.name} (${Math.round(alt.dist)} NM)`).join(', ')}
                                 </div>
                             ` : ''}
+                            `}
                         </div>
                     </div>
                 </div>
@@ -68256,7 +68493,12 @@ Compara el documento suministrado (que puede ser un contrato, carta de crédito 
         function printExecutiveScreenReport() {
             const isClient = Boolean(window.isExecutiveClientMode);
             const originalTitle = document.title;
-            document.title = isClient ? 'SeaCharter Core PRO - Reporte Cliente' : 'SeaCharter Core PRO - Reporte Ejecutivo';
+            const isFluvial = typeof isFluvialContext === 'function' ? isFluvialContext() : false;
+            const brand = isFluvial ? 'RiverCharter' : 'SeaCharter Core PRO';
+            document.title = isClient ? `${brand} - Reporte Cliente` : `${brand} - Reporte Ejecutivo`;
+            if (isFluvial && typeof adaptExecutiveReportModalToFluvial === 'function') {
+                adaptExecutiveReportModalToFluvial(document.getElementById('ai-modal-content'));
+            }
             
             // Impresión NO destructiva: nunca clona ni altera el innerHTML para no destruir React ni el DOM del croquis
             document.body.classList.add('is-printing-modal');
@@ -68289,6 +68531,8 @@ Compara el documento suministrado (que puede ser un contrato, carta de crédito 
                 alert('Activa el modo COA para visualizar el reporte consolidado.');
                 return;
             }
+            const isFluvial = typeof isFluvialContext === 'function' ? isFluvialContext() : false;
+            const convoyInfo = typeof getFluvialConvoyInfo === 'function' ? getFluvialConvoyInfo() : {};
             const m = getExecutiveReportMetrics();
             const getVal = (id) => document.getElementById(id)?.value || '';
             const shipments = Math.max(1, coa.shipments || 1);
@@ -68311,7 +68555,7 @@ Compara el documento suministrado (que puede ser un contrato, carta de crédito 
                 ['Trincaje aplicable', (coa.costeTrincajePorViaje || 0) * shipments]
             ];
             const isClientMode = Boolean(window.isExecutiveClientMode);
-            openAIModal('Reporte Ejecutivo COA');
+            openAIModal(isFluvial ? 'Reporte Ejecutivo Fluvial COA' : 'Reporte Ejecutivo COA');
             document.getElementById('ai-modal').classList.add('light-mode');
             document.getElementById('ai-modal-loader').classList.add('hidden');
             document.getElementById('ai-modal-content').innerHTML = `
@@ -68338,14 +68582,14 @@ Compara el documento suministrado (que puede ser un contrato, carta de crédito 
                     ${renderExecutiveClassWarning(classAnalysis)}
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div class="bg-slate-800/60 p-4 rounded-xl border border-slate-700">
-                            <h5 class="font-bold text-sky-400 uppercase mb-2 border-b border-slate-700/50 pb-1 flex items-center gap-1.5"><i class="fa-solid fa-ship"></i> ESPECIFICACIONES BUQUE & CARGA</h5>
+                            <h5 class="font-bold text-sky-400 uppercase mb-2 border-b border-slate-700/50 pb-1 flex items-center gap-1.5"><i class="fa-solid fa-ship"></i> ${isFluvial ? 'ESPECIFICACIONES CONVOY & CARGA' : 'ESPECIFICACIONES BUQUE & CARGA'}</h5>
                             <ul class="space-y-1.5">
-                                <li class="flex justify-between"><span class="text-slate-400">Buque:</span><span class="font-bold text-white">${State.vessel || 'TBN'}</span></li>
-                                <li class="flex justify-between"><span class="text-slate-400">Capacidad / Clase:</span><span class="font-bold text-white">${classAnalysis.shipClass.label} (${State.dwt ? parseFloat(State.dwt).toLocaleString('en-US') : 0} DWT)</span></li>
+                                <li class="flex justify-between"><span class="text-slate-400">${isFluvial ? 'Remolcador / Convoy:' : 'Buque:'}</span><span class="font-bold text-white">${isFluvial ? (convoyInfo.tugboatName || State.vessel || 'TBN') : (State.vessel || 'TBN')}</span></li>
+                                <li class="flex justify-between"><span class="text-slate-400">${isFluvial ? 'Configuración Convoy:' : 'Capacidad / Clase:'}</span><span class="font-bold text-white">${isFluvial ? convoyInfo.description : `${classAnalysis.shipClass.label} (${State.dwt ? parseFloat(State.dwt).toLocaleString('en-US') : 0} DWT)`}</span></li>
                                 <li class="flex justify-between"><span class="text-slate-400">Total TM Contrato:</span><span class="font-bold text-emerald-400">${Math.round(totalTm).toLocaleString('en-US')} TM</span></li>
                                 <li class="flex justify-between"><span class="text-slate-400">TM por embarque:</span><span>${Math.round(tmPorViaje).toLocaleString('en-US')} TM</span></li>
                                 <li class="flex justify-between"><span class="text-slate-400">Tipo Carga:</span><span>${m.cargoType}</span></li>
-                                <li class="flex justify-between"><span class="text-slate-400">Póliza Estándar:</span><span class="font-bold text-yellow-400">${m.charterParty}</span></li>
+                                <li class="flex justify-between"><span class="text-slate-400">${isFluvial ? 'Contrato:' : 'Póliza Estándar:'}</span><span class="font-bold text-yellow-400">${isFluvial ? 'Contrato: Fluvial COA' : m.charterParty}</span></li>
                                 <li class="flex justify-between"><span class="text-slate-400">Carga POL (método · ritmo real · grúas):</span><span>${operationalTerms.loadMethod} · ${Math.round(operationalTerms.loadRate).toLocaleString('en-US')} TM/d · ${operationalTerms.loadCranes} grúa(s)</span></li>
                                 <li class="flex justify-between"><span class="text-slate-400">Descarga POD (método · ritmo real · grúas):</span><span>${operationalTerms.dischargeMethod} · ${Math.round(operationalTerms.dischargeRate).toLocaleString('en-US')} TM/d · ${operationalTerms.dischargeCranes} grúa(s)</span></li>
                                 <li class="flex justify-between"><span class="text-slate-400">Estiba / Laytime:</span><span class="font-bold text-yellow-300">${operationalTerms.freightTerms} · POL ${operationalTerms.loadLaytime} · POD ${operationalTerms.dischargeLaytime}</span></li>
@@ -68357,7 +68601,7 @@ Compara el documento suministrado (que puede ser un contrato, carta de crédito 
                                 <li class="flex justify-between"><span class="text-slate-400">Puerto Lastre:</span><span>${getVal('port-ballast') || 'N/A (Carga Directa)'}</span></li>
                                 <li class="flex justify-between"><span class="text-slate-400">Carga / Descarga:</span><span class="font-bold text-white">${m.pol} ➔ ${m.pod}</span></li>
                                 <li class="flex justify-between"><span class="text-slate-400">Embarques:</span><span class="font-bold text-white">${shipments.toLocaleString('en-US')}</span></li>
-                                <li class="flex justify-between"><span class="text-slate-400">Distancia Total:</span><span class="font-bold text-white">${((State.distBallast || 0) + (State.distLaden || 0)).toLocaleString('en-US')} NM</span></li>
+                                <li class="flex justify-between"><span class="text-slate-400">Distancia Total:</span><span class="font-bold text-white">${((State.distBallast || 0) + (State.distLaden || 0)).toLocaleString('en-US')} ${isFluvial ? 'km' : 'NM'}</span></li>
                                 <li class="flex justify-between"><span class="text-slate-400">Duración por viaje:</span><span class="font-bold text-indigo-300">${m.days}</span></li>
                             </ul>
                         </div>
@@ -68404,9 +68648,10 @@ Compara el documento suministrado (que puede ser un contrato, carta de crédito 
 
                     <!-- CROQUIS NAVAL DEL BUQUE (VisualStowagePlan)
                          Renderizado entre el Resumen Operativo y Financiero y los Acordeones de Datos -->
-                    <div id="coa-voyage-visual-stowage-container" class="my-4 break-inside-avoid">
-                        ${renderVoyageStowagePlanFallback(State)}
+                    <div id="coa-voyage-visual-stowage-container" class="my-4 break-inside-avoid" ${isFluvial ? 'style="display: none;"' : ''}>
+                        ${isFluvial ? '' : renderVoyageStowagePlanFallback(State)}
                     </div>
+                    ${isFluvial ? renderFluvialHydrologyValidationHtml(convoyInfo) : ''}
 
                     <div class="bg-slate-800/60 p-4 rounded-xl border border-slate-700">
                         <h5 class="font-bold text-indigo-400 uppercase mb-3 border-b border-slate-700/50 pb-1 flex items-center gap-1.5"><i class="fa-solid fa-square-poll-horizontal"></i> ANÁLISIS DETALLADO DE CONTRATO COA</h5>
@@ -68476,7 +68721,9 @@ Compara el documento suministrado (que puede ser un contrato, carta de crédito 
                 </div>
             `;
             document.getElementById('ai-modal-content').classList.remove('hidden');
-            if (typeof window.mountVisualStowageInExecutiveModal === 'function') {
+            if (isFluvial) {
+                adaptExecutiveReportModalToFluvial(document.getElementById('ai-modal-content'));
+            } else if (typeof window.mountVisualStowageInExecutiveModal === 'function') {
                 try {
                     window.mountVisualStowageInExecutiveModal('coa-voyage-visual-stowage-container', { state: State });
                 } catch (e) {

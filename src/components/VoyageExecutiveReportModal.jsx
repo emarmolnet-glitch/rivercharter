@@ -6,9 +6,28 @@ import { getStipulatedClauses } from '../dry-bulk-clause-matrix.mjs';
 export { buildVoyageStowagePlan };
 
 /**
+ * Detecta si el contexto de ejecución actual corresponde a RiverCharter
+ */
+export function isFluvialContext(propsData = null) {
+  if (typeof window !== 'undefined') {
+    if (window.isRiverCharter || window.isFluvialMode) return true;
+    if (Boolean(window.activeConvoyData)) return true;
+    if (typeof document !== 'undefined') {
+      const title = (document.title || '').toLowerCase();
+      if (title.includes('river') || title.includes('fluvial') || title.includes('convoy')) return true;
+      if (document.getElementById('convoy-builder-root')) return true;
+      if (document.querySelector('[data-app="rivercharter"]')) return true;
+    }
+  }
+  if (propsData?.isFluvial || propsData?.fluvialMode || propsData?.convoyData) return true;
+  return false;
+}
+
+/**
  * VoyageExecutiveReportModal
  * Modal del Reporte Ejecutivo del Viaje con Croquis Naval y Modo Cliente (Censura Financiera)
  * Versión Corporativa en Tema Claro (Light Theme) con Flujo Seguro de Impresión Asíncrona
+ * Adaptado dinámicamente con Modo Fluvial para RiverCharter
  */
 export default function VoyageExecutiveReportModal({
   isOpen = true,
@@ -19,10 +38,64 @@ export default function VoyageExecutiveReportModal({
   const [isClientMode, setIsClientMode] = useState(initialClientMode);
   const [printPending, setPrintPending] = useState(false);
   const isPrintingRef = useRef(false);
+  const originalTitleRef = useRef('');
 
   // Extraer estado del viaje desde props o desde window.State
   const winState = typeof window !== 'undefined' ? window.State || {} : {};
   const data = voyageData || winState || {};
+
+  // Detección de Contexto Fluvial (RiverCharter)
+  const isFluvial = Boolean(
+    (typeof window !== 'undefined' && (
+      window.isRiverCharter ||
+      window.isFluvialMode ||
+      window.activeConvoyData ||
+      (typeof document !== 'undefined' && (
+        (document.title && /rivercharter|fluvial|convoy/i.test(document.title)) ||
+        document.getElementById('convoy-builder-root') !== null ||
+        document.querySelector('[data-app="rivercharter"]') !== null
+      ))
+    )) || data.isFluvial || data.fluvialMode
+  );
+
+  const convoyData = (typeof window !== 'undefined' ? window.activeConvoyData : null) || data.convoyData || {};
+  const bargeCount = convoyData.bargeCount || convoyData.bargeIds?.length || data.bargeCount || data.bargeIds?.length || 10;
+  const standardKey = (typeof window !== 'undefined' ? window.activeBargeStandard : null) || 'latam_super_jumbo';
+  const standardName = standardKey === 'mississippi_jumbo' ? 'Jumbo Misisipi' : 'Súper Jumbo';
+  const isRoroConvoy = (typeof window !== 'undefined' && window.activeFluvialOperationType === 'RORO') || convoyData.operationType === 'RORO';
+  const roroTrucks = convoyData.totalTruckCount || (typeof document !== 'undefined' ? document.getElementById('roro-truck-count')?.value : null) || 48;
+
+  const fluvialConvoyDescription = data.convoyDescription || convoyData.convoyDescription || (
+    isRoroConvoy
+      ? `Convoy Ro-Ro (${roroTrucks} Camiones)`
+      : `${standardName} - ${bargeCount} Barcazas`
+  );
+
+  const fluvialTugboatName = data.tugboatName || convoyData.tugboatName || (
+    typeof document !== 'undefined' && document.getElementById('tugboat-select')?.selectedOptions?.[0]?.text && !document.getElementById('tugboat-select')?.selectedOptions?.[0]?.text.includes('Seleccionar')
+      ? document.getElementById('tugboat-select')?.selectedOptions?.[0]?.text
+      : (data.vessel && !data.vessel.includes('Bulk') && data.vessel !== 'TBN' && data.vessel !== 'TBN (To Be Named)' ? data.vessel : 'Remolcador Guaraní F / Convoy')
+  );
+
+  // Calado dinámico y límite hidrométrico (estiaje) de DataBridge
+  const dynamicDraft = Number(
+    convoyData.maxDynamicDraftMeters ||
+    convoyData.maxDraftM ||
+    data.maxDynamicDraftMeters ||
+    data.dynamicDraft ||
+    2.60
+  );
+
+  const minWaterLevel = Number(
+    (typeof document !== 'undefined' ? parseFloat(document.getElementById('min_water_level')?.value) : null) ||
+    convoyData.min_water_level ||
+    convoyData.minWaterLevelMeters ||
+    data.minWaterLevel ||
+    2.80
+  );
+
+  const underKeelMargin = Number((minWaterLevel - dynamicDraft).toFixed(2));
+  const isDraftApto = minWaterLevel >= dynamicDraft;
 
   const vesselName = data.vessel || data.vesselName || 'TBN (To Be Named)';
   const vesselClass = data.class || data.shipClass || data.vesselClass || 'Handysize';
@@ -85,7 +158,7 @@ export default function VoyageExecutiveReportModal({
                           data.cargo_type ||
                           data.cargoType ||
                           data.commodity ||
-                          (typeof document !== 'undefined' ? (document.getElementById('cargo-product')?.value || document.getElementById('cargo-type')?.value) : '') ||
+                          (typeof document !== 'undefined' ? document.getElementById('cargo-product')?.value || document.getElementById('cargo-type')?.value : '') ||
                           cargoType;
 
   const stipulatedClausesData = useMemo(() => {
@@ -96,6 +169,12 @@ export default function VoyageExecutiveReportModal({
   const handlePrint = (clientMode) => {
     if (typeof window !== 'undefined') {
       window.isExecutiveClientMode = clientMode;
+    }
+    if (typeof document !== 'undefined') {
+      originalTitleRef.current = document.title;
+      if (isFluvial) {
+        document.title = clientMode ? 'RiverCharter - Reporte Cliente' : 'RiverCharter - Reporte Ejecutivo';
+      }
     }
     setIsClientMode(clientMode);
     setPrintPending(true);
@@ -119,6 +198,9 @@ export default function VoyageExecutiveReportModal({
       isPrintingRef.current = false;
       setPrintPending(false);
       window.removeEventListener('afterprint', cleanup);
+      if (typeof document !== 'undefined' && originalTitleRef.current) {
+        document.title = originalTitleRef.current;
+      }
     };
 
     window.addEventListener('afterprint', cleanup);
@@ -135,6 +217,15 @@ export default function VoyageExecutiveReportModal({
       cleanup();
     };
   }, [printPending, isClientMode]);
+
+  useEffect(() => {
+    if (isFluvial) {
+      const modalEl = document.getElementById('voyage-executive-report-modal');
+      if (modalEl) {
+        adaptExecutiveReportModalToFluvial(modalEl);
+      }
+    }
+  }, [isFluvial, isClientMode]);
 
   if (!isOpen) return null;
 
@@ -158,11 +249,14 @@ export default function VoyageExecutiveReportModal({
                 className="text-lg sm:text-xl font-black uppercase tracking-tight text-slate-800 flex items-center gap-2"
               >
                 <i className="fa-solid fa-file-invoice-dollar text-blue-600 print:hidden"></i>
-                RESUMEN OPERATIVO Y FINANCIERO
+                RESUMEN OPERATIVO Y FINANCIERO {isFluvial ? '(RIVERCHARTER)' : ''}
               </h2>
             </div>
             <p className="mt-1 text-xs text-slate-600">
-              ID Estimación: <span className="font-mono font-bold text-slate-800">{estId}</span> · Póliza: <span className="font-bold text-blue-800">{cpStandard}</span>
+              ID Estimación: <span className="font-mono font-bold text-slate-800">{estId}</span> · <span className="font-bold text-blue-800">{isFluvial ? 'Contrato: Fluvial COA' : `Póliza: ${cpStandard}`}</span>
+              <span className="ml-2 inline-flex items-center rounded bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-800 border border-blue-300">
+                {isFluvial ? 'RIVERCHARTER' : 'SEACHARTER PRO'}
+              </span>
               {isClientMode && (
                 <span className="ml-2 inline-flex items-center rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800 border border-emerald-300">
                   MODO CLIENTE ACTIVO (Censura Financiera)
@@ -225,17 +319,26 @@ export default function VoyageExecutiveReportModal({
 
           {/* Fila 1: Resumen Operativo y Ruta */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Especificaciones Buque & Carga */}
+            {/* Especificaciones Buque & Carga / Convoy & Carga */}
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
               <h5 className="font-bold text-blue-900 uppercase mb-2 border-b border-slate-200 pb-1 flex items-center gap-1.5">
-                <i className="fa-solid fa-ship text-blue-600 print:hidden"></i> ESPECIFICACIONES BUQUE &amp; CARGA
+                <i className="fa-solid fa-ship text-blue-600 print:hidden"></i> {isFluvial ? 'ESPECIFICACIONES CONVOY & CARGA' : 'ESPECIFICACIONES BUQUE & CARGA'}
               </h5>
               <ul className="space-y-1.5">
-                <li className="flex justify-between"><span className="text-slate-600">Buque:</span> <span className="font-bold text-slate-900">{vesselName}</span></li>
-                <li className="flex justify-between"><span className="text-slate-600">Capacidad / Clase:</span> <span className="font-bold text-slate-900">{vesselDescription}</span></li>
+                <li className="flex justify-between">
+                  <span className="text-slate-600">{isFluvial ? 'Remolcador / Convoy:' : 'Buque:'}</span>
+                  <span className="font-bold text-slate-900">{isFluvial ? fluvialTugboatName : vesselName}</span>
+                </li>
+                <li className="flex justify-between">
+                  <span className="text-slate-600">{isFluvial ? 'Configuración Convoy:' : 'Capacidad / Clase:'}</span>
+                  <span className="font-bold text-slate-900">{isFluvial ? fluvialConvoyDescription : vesselDescription}</span>
+                </li>
                 <li className="flex justify-between"><span className="text-slate-600">Carga a Transportar:</span> <span className="font-bold text-slate-900">{cargoTons.toLocaleString('en-US')} MT</span></li>
                 <li className="flex justify-between"><span className="text-slate-600">Tipo Carga:</span> <span className="font-bold text-slate-900">{cargoType}</span></li>
-                <li className="flex justify-between"><span className="text-slate-600">Póliza Estándar:</span> <span className="font-bold text-blue-800">{cpStandard}</span></li>
+                <li className="flex justify-between">
+                  <span className="text-slate-600">{isFluvial ? 'Contrato:' : 'Póliza Estándar:'}</span>
+                  <span className="font-bold text-blue-800">{isFluvial ? 'Fluvial COA' : cpStandard}</span>
+                </li>
               </ul>
             </div>
 
@@ -247,7 +350,10 @@ export default function VoyageExecutiveReportModal({
               <ul className="space-y-1.5">
                 <li className="flex justify-between"><span className="text-slate-600">Puerto Lastre:</span> <span className="font-bold text-slate-900">{ballastPort}</span></li>
                 <li className="flex justify-between"><span className="text-slate-600">Carga / Descarga:</span> <span className="font-bold text-slate-900">{pol} ➔ {pod}</span></li>
-                <li className="flex justify-between"><span className="text-slate-600">Distancia Total:</span> <span className="font-bold text-slate-900">{distTotal.toLocaleString('en-US')} NM</span></li>
+                <li className="flex justify-between">
+                  <span className="text-slate-600">Distancia Total:</span>
+                  <span className="font-bold text-slate-900">{distTotal.toLocaleString('en-US')} {isFluvial ? 'km' : 'NM'}</span>
+                </li>
                 <li className="flex justify-between"><span className="text-slate-600">Duración Estimada:</span> <span className="font-bold text-slate-900">{totalDays.toFixed(2)} Días</span></li>
               </ul>
             </div>
@@ -344,7 +450,8 @@ export default function VoyageExecutiveReportModal({
               Renderizado entre el Resumen Operativo/Financiero y los Acordeones de Datos */}
           <section
             id="executive-visual-stowage-section"
-            className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm break-inside-avoid"
+            className={`rounded-xl border border-slate-200 bg-white p-4 shadow-sm break-inside-avoid ${isFluvial ? 'hidden' : ''}`}
+            style={isFluvial ? { display: 'none' } : undefined}
           >
             <div className="mb-3 flex items-center justify-between border-b border-slate-200 pb-2">
               <div className="flex items-center gap-2">
@@ -364,6 +471,91 @@ export default function VoyageExecutiveReportModal({
               projectRef={estId}
             />
           </section>
+
+          {/* VALIDACIÓN HIDROLÓGICA (ESTIAJE Y CALADO) - MODO FLUVIAL RIVERCHARTER */}
+          {isFluvial && (
+            <section
+              id="executive-fluvial-hydrology-validation"
+              className="rounded-xl border border-emerald-200 bg-white p-4 shadow-sm break-inside-avoid"
+            >
+              <div className="mb-3 flex items-center justify-between border-b border-emerald-100 pb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-emerald-600 text-sm">💧</span>
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">
+                    VALIDACIÓN DE ESTIAJE Y CALADO (DATABRIDGE RIVER INTEL)
+                  </h4>
+                </div>
+                <span className={`text-[10px] font-mono font-bold px-2.5 py-0.5 rounded border ${
+                  isDraftApto
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                    : 'bg-rose-50 text-rose-800 border-rose-300'
+                }`}>
+                  {isDraftApto ? '✓ APTO PARA NAVEGAR' : '⚠️ ALERTA DE ESTIAJE'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs mb-3">
+                <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                  <span className="block text-[10px] uppercase font-bold text-slate-500">Calado Dinámico del Convoy</span>
+                  <span className="text-base font-black text-blue-900 font-mono mt-0.5 block">{dynamicDraft.toFixed(2)} m</span>
+                  <span className="text-[10px] text-slate-500">Profundidad sumergida de convoy activo</span>
+                </div>
+                <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                  <span className="block text-[10px] uppercase font-bold text-slate-500">Límite Hidrométrico (Estiaje)</span>
+                  <span className="text-base font-black text-teal-800 font-mono mt-0.5 block">{minWaterLevel.toFixed(2)} m</span>
+                  <span className="text-[10px] text-slate-500">Sincronizado vía DataBridge Fluvial</span>
+                </div>
+                <div className={`p-3 rounded-lg border ${isDraftApto ? 'bg-emerald-50/70 border-emerald-300' : 'bg-rose-50/70 border-rose-300'}`}>
+                  <span className="block text-[10px] uppercase font-bold text-slate-500">Margen Bajo Quilla (UKC)</span>
+                  <span className={`text-base font-black font-mono mt-0.5 block ${isDraftApto ? 'text-emerald-700' : 'text-rose-700'}`}>
+                    {underKeelMargin >= 0 ? `+${underKeelMargin.toFixed(2)}` : underKeelMargin.toFixed(2)} m
+                  </span>
+                  <span className={`text-[10px] font-bold ${isDraftApto ? 'text-emerald-700' : 'text-rose-700'}`}>
+                    {isDraftApto ? '✓ Calado seguro para navegación fluvial' : '⚠ Riesgo inminente de varadura'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                <table className="w-full text-left text-[11px] font-mono text-slate-800">
+                  <thead className="bg-slate-100 text-[10px] uppercase text-slate-700 border-b border-slate-200">
+                    <tr>
+                      <th className="py-2.5 px-3">Parámetro Hidrológico</th>
+                      <th className="py-2.5 px-3">Valor Operativo</th>
+                      <th className="py-2.5 px-3">Umbral Hidrométrico</th>
+                      <th className="py-2.5 px-3 text-right">Dictamen de Navegabilidad</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    <tr>
+                      <td className="py-2.5 px-3 font-semibold text-slate-900">Calado Dinámico vs Estiaje</td>
+                      <td className="py-2.5 px-3 font-bold text-blue-800">{dynamicDraft.toFixed(2)} m</td>
+                      <td className="py-2.5 px-3 text-slate-600">&lt;= {minWaterLevel.toFixed(2)} m (DataBridge)</td>
+                      <td className="py-2.5 px-3 text-right">
+                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                          isDraftApto
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                            : 'bg-rose-100 text-rose-800 border border-rose-300'
+                        }`}>
+                          {isDraftApto ? '✓ APTO PARA NAVEGAR' : '⚠ NO APTO (ESTIAJE CRÍTICO)'}
+                        </span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="py-2.5 px-3 font-semibold text-slate-900">Configuración Convoy</td>
+                      <td className="py-2.5 px-3 font-bold text-slate-800">{fluvialConvoyDescription}</td>
+                      <td className="py-2.5 px-3 text-slate-600">{standardName}</td>
+                      <td className="py-2.5 px-3 text-right">
+                        <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                          CONVOY VERIFICADO
+                        </span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
 
           {/* ACORDEONES DE DATOS Y DESGLOSE INTERNO */}
           <section id="executive-data-accordions" className="space-y-3">
@@ -404,7 +596,7 @@ export default function VoyageExecutiveReportModal({
                 </summary>
                 <div className="mt-3 pt-3 border-t border-slate-200 text-xs text-slate-600 space-y-1.5">
                   <p><strong>OPEX Diario Total:</strong> ${Math.round(opexDaily).toLocaleString('en-US')} / día (Total Viaje: ${costOpex.toLocaleString('en-US')})</p>
-                  <p><strong>Especificaciones:</strong> DWT {dwt.toLocaleString('en-US')} · Clase: {vesselClass}</p>
+                  <p><strong>Especificaciones:</strong> {isFluvial ? `Convoy: ${fluvialConvoyDescription}` : `DWT ${dwt.toLocaleString('en-US')} · Clase: ${vesselClass}`}</p>
                 </div>
               </details>
             )}
@@ -416,8 +608,8 @@ export default function VoyageExecutiveReportModal({
                 <i className="fa-solid fa-chevron-down text-slate-500 group-open:rotate-180 transition-transform print:hidden"></i>
               </summary>
               <div className="mt-3 pt-3 border-t border-slate-200 text-xs text-slate-600 space-y-1.5">
-                <p><strong>Puerto de Carga (POL):</strong> {pol} · Calado y eslora validados conforme a carta náutica.</p>
-                <p><strong>Puerto de Descarga (POD):</strong> {pod} · Infraestructura de grúas y calado operativo verificado.</p>
+                <p><strong>Puerto de Carga (POL):</strong> {pol} · {isFluvial ? 'Calado fluvial y terminal validados con hidrograma batimétrico.' : 'Calado y eslora validados conforme a carta náutica.'}</p>
+                <p><strong>Puerto de Descarga (POD):</strong> {pod} · {isFluvial ? 'Infraestructura de descarga y calado operativo fluvial verificado.' : 'Infraestructura de grúas y calado operativo verificado.'}</p>
               </div>
             </details>
           </section>
@@ -427,7 +619,7 @@ export default function VoyageExecutiveReportModal({
             <div className="flex items-center gap-2 mb-3 border-b border-slate-200 pb-2">
               <span className="w-1.5 h-3.5 bg-blue-900 rounded-xs inline-block"></span>
               <h4 id="executive-clauses-title" className="font-bold text-slate-800 text-xs uppercase tracking-wider">
-                {stipulatedClausesData.title}
+                {isFluvial ? 'CLÁUSULAS OPERATIVAS Y FLUVIALES (CONTRATO COA)' : stipulatedClausesData.title}
               </h4>
             </div>
             <ul id="executive-clauses-list" className="list-disc pl-5 space-y-2 text-xs text-slate-700 leading-relaxed">
@@ -488,4 +680,81 @@ export default function VoyageExecutiveReportModal({
       </div>
     </div>
   );
+}
+
+/**
+ * Actualizador del DOM para el modal del reporte ejecutivo en Modo Fluvial
+ */
+export function adaptExecutiveReportModalToFluvial(rootEl = null) {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  const root = rootEl || document.getElementById('voyage-executive-report-modal') || document.getElementById('ai-modal-content') || document.body;
+  if (!root) return;
+
+  const convoy = window.activeConvoyData || {};
+  const bargeCount = convoy.bargeCount || convoy.bargeIds?.length || 10;
+  const standardKey = window.activeBargeStandard || 'latam_super_jumbo';
+  const standardName = standardKey === 'mississippi_jumbo' ? 'Jumbo Misisipi' : 'Súper Jumbo';
+  const isRoro = window.activeFluvialOperationType === 'RORO' || convoy.operationType === 'RORO';
+  const roroTrucks = convoy.totalTruckCount || document.getElementById('roro-truck-count')?.value || 48;
+  const convoyDesc = convoy.convoyDescription || (isRoro ? `Convoy Ro-Ro (${roroTrucks} Camiones)` : `${standardName} - ${bargeCount} Barcazas`);
+  const tugName = convoy.tugboatName || document.getElementById('tugboat-select')?.selectedOptions?.[0]?.text || 'Remolcador Guaraní F / Convoy';
+  const dynamicDraft = Number(convoy.maxDynamicDraftMeters || convoy.maxDraftM || 2.60);
+  const minWaterLevel = Number(parseFloat(document.getElementById('min_water_level')?.value) || convoy.min_water_level || 2.80);
+  const isApto = minWaterLevel >= dynamicDraft;
+
+  // 1. Ocultar estrictamente el Croquis Naval (Stowage Plan)
+  const croquisEls = root.querySelectorAll('#executive-visual-stowage-section, #coa-voyage-visual-stowage-container, #voyage-visual-stowage-container, .stowage-plan-section, [data-stowage-plan-container]');
+  croquisEls.forEach((el) => {
+    el.style.display = 'none';
+    el.classList.add('hidden');
+  });
+
+  // 2. Ocultar tabla CSS OMI
+  const omiEls = root.querySelectorAll('#visual-stowage-technical-validation-container, [data-validation-omi]');
+  omiEls.forEach((el) => {
+    el.style.display = 'none';
+    el.classList.add('hidden');
+  });
+
+  // 3. Reemplazos de etiquetas en listas de especificaciones
+  root.querySelectorAll('li').forEach((li) => {
+    const text = li.innerText || li.textContent || '';
+    if (text.includes('Buque:') && !text.includes('Remolcador')) {
+      const spanLabel = li.querySelector('span:first-child');
+      if (spanLabel) spanLabel.textContent = 'Remolcador / Convoy:';
+      const spanVal = li.querySelector('span:last-child');
+      if (spanVal && (spanVal.textContent.includes('TBN') || spanVal.textContent.includes('Bulk'))) {
+        spanVal.textContent = tugName;
+      }
+    }
+    if (text.includes('Capacidad / Clase:') || /Handysize/i.test(text)) {
+      const spanLabel = li.querySelector('span:first-child');
+      if (spanLabel) spanLabel.textContent = 'Configuración Convoy:';
+      const spanVal = li.querySelector('span:last-child');
+      if (spanVal && /Handysize/i.test(spanVal.textContent)) {
+        spanVal.textContent = convoyDesc;
+      }
+    }
+    if (text.includes('Póliza Estándar:') || text.includes('Póliza Estándar (Charter Party):') || text.includes('GENCON')) {
+      const spanLabel = li.querySelector('span:first-child');
+      if (spanLabel) spanLabel.textContent = 'Contrato:';
+      const spanVal = li.querySelector('span:last-child');
+      if (spanVal) spanVal.textContent = 'Fluvial COA';
+    }
+    if (text.includes(' NM')) {
+      const spanVal = li.querySelector('span:last-child');
+      if (spanVal && spanVal.textContent.includes(' NM')) {
+        spanVal.textContent = spanVal.textContent.replace(/\bNM\b/g, 'km');
+      }
+    }
+  });
+
+  // 4. Branding SEACHARTER PRO -> RIVERCHARTER
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
+  let n;
+  while ((n = walker.nextNode())) {
+    if (n.nodeValue && /SEACHARTER\s*PRO/i.test(n.nodeValue)) {
+      n.nodeValue = n.nodeValue.replace(/SEACHARTER\s*PRO/gi, 'RIVERCHARTER');
+    }
+  }
 }

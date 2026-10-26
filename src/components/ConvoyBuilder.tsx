@@ -609,11 +609,21 @@ export function ConvoyBuilder({
 
   // Sincronización continua hacia componentes o scripts externos
   useEffect(() => {
+    const stdName = (typeof window !== 'undefined' && (window as any).activeBargeStandardData?.name) || (standardKey === 'mississippi_jumbo' ? 'Misisipi Jumbo' : 'Súper Jumbo');
+    const convoyDesc = isRoro
+      ? `Convoy Ro-Ro (${totalTruckCount} Camiones)`
+      : `${stdName} - ${bargeIds.length} Barcazas`;
+
     onConvoyChange?.({
       tugboatId,
+      tugboatName: selectedTugboat?.name || 'Remolcador Guaraní F / Convoy',
       bargeIds,
+      bargeCount: bargeIds.length,
+      convoyDescription: convoyDesc,
       totalCapacityMt: isRoro ? (totalTruckCount * 25) : totalCapacityMt,
       maxDynamicDraftMeters: maxDynamicDraft,
+      min_water_level: effectiveWaterLevel,
+      minWaterLevelMeters: effectiveWaterLevel,
       operationType,
       totalLinearMeters,
       totalTruckCount,
@@ -626,7 +636,10 @@ export function ConvoyBuilder({
     } as any);
   }, [
     tugboatId,
+    selectedTugboat,
     bargeIds,
+    standardKey,
+    effectiveWaterLevel,
     totalCapacityMt,
     maxDynamicDraft,
     operationType,
