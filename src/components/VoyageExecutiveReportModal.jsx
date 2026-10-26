@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import VisualStowagePlan, { resolveVesselProfile, MemoizedVisualStowagePlan } from './VisualStowagePlan.jsx';
+import FluvialStowagePlan from './FluvialStowagePlan.jsx';
 import { buildVoyageStowagePlan } from '../voyage-stowage-builder.mjs';
 import { getStipulatedClauses } from '../dry-bulk-clause-matrix.mjs';
 
@@ -65,11 +66,15 @@ export default function VoyageExecutiveReportModal({
   const isRoroConvoy = (typeof window !== 'undefined' && window.activeFluvialOperationType === 'RORO') || convoyData.operationType === 'RORO';
   const roroTrucks = convoyData.totalTruckCount || (typeof document !== 'undefined' ? document.getElementById('roro-truck-count')?.value : null) || 48;
 
-  const fluvialConvoyDescription = data.convoyDescription || convoyData.convoyDescription || (
-    isRoroConvoy
-      ? `Convoy Ro-Ro (${roroTrucks} Camiones)`
-      : `${standardName} - ${bargeCount} Barcazas`
-  );
+  const convoyDesc = (typeof window !== 'undefined' && window.activeBargeStandard)
+    ? `Convoy ${window.activeBargeStandard} - ${window.activeBargeCount || bargeCount || 10} Barcazas`
+    : (data.convoyDescription || convoyData.convoyDescription || (
+        isRoroConvoy
+          ? `Convoy Ro-Ro (${roroTrucks} Camiones)`
+          : `${standardName} - ${bargeCount} Barcazas`
+      ) || 'Convoy Fluvial (TBN)');
+
+  const fluvialConvoyDescription = convoyDesc;
 
   const fluvialTugboatName = data.tugboatName || convoyData.tugboatName || (
     typeof document !== 'undefined' && document.getElementById('tugboat-select')?.selectedOptions?.[0]?.text && !document.getElementById('tugboat-select')?.selectedOptions?.[0]?.text.includes('Seleccionar')
@@ -446,30 +451,37 @@ export default function VoyageExecutiveReportModal({
             </div>
           </div>
 
-          {/* CROQUIS DEL BUQUE (VisualStowagePlan)
+          {/* CROQUIS NAVAL Y PLANO DE ESTIBA MATRICIAL / CONVOY FLUVIAL
               Renderizado entre el Resumen Operativo/Financiero y los Acordeones de Datos */}
           <section
             id="executive-visual-stowage-section"
-            className={`rounded-xl border border-slate-200 bg-white p-4 shadow-sm break-inside-avoid ${isFluvial ? 'hidden' : ''}`}
-            style={isFluvial ? { display: 'none' } : undefined}
+            className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm break-inside-avoid"
           >
             <div className="mb-3 flex items-center justify-between border-b border-slate-200 pb-2">
               <div className="flex items-center gap-2">
-                <span className="text-blue-600 text-sm">📐</span>
+                <span className="text-blue-600 text-sm">{isFluvial ? '🚢' : '📐'}</span>
                 <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">
-                  CROQUIS NAVAL Y PLANO DE ESTIBA MATRICIAL
+                  {isFluvial ? 'CONVOY FLUVIAL Y PLANO DE ESTIBA MATRICIAL' : 'CROQUIS NAVAL Y PLANO DE ESTIBA MATRICIAL'}
                 </h4>
               </div>
               <span className="text-[10px] font-mono font-bold text-slate-600">
-                {vesselDescription}
+                {isFluvial ? (convoyDesc || fluvialConvoyDescription || 'Convoy Fluvial (TBN)') : (vesselDescription || 'Handysize Bulk Carrier')}
               </span>
             </div>
 
-            <VisualStowagePlan
-              stowagePlan={stowagePlan}
-              vesselType={resolvedVesselType}
-              projectRef={estId}
-            />
+            {isFluvial ? (
+              <FluvialStowagePlan
+                convoyData={convoyData}
+                stowagePlan={stowagePlan}
+                projectRef={estId}
+              />
+            ) : (
+              <VisualStowagePlan
+                stowagePlan={stowagePlan}
+                vesselType={resolvedVesselType}
+                projectRef={estId}
+              />
+            )}
           </section>
 
           {/* VALIDACIÓN HIDROLÓGICA (ESTIAJE Y CALADO) - MODO FLUVIAL RIVERCHARTER */}
@@ -702,11 +714,11 @@ export function adaptExecutiveReportModalToFluvial(rootEl = null) {
   const minWaterLevel = Number(parseFloat(document.getElementById('min_water_level')?.value) || convoy.min_water_level || 2.80);
   const isApto = minWaterLevel >= dynamicDraft;
 
-  // 1. Ocultar estrictamente el Croquis Naval (Stowage Plan)
-  const croquisEls = root.querySelectorAll('#executive-visual-stowage-section, #coa-voyage-visual-stowage-container, #voyage-visual-stowage-container, .stowage-plan-section, [data-stowage-plan-container]');
-  croquisEls.forEach((el) => {
-    el.style.display = 'none';
-    el.classList.add('hidden');
+  // 1. Asegurar visualización del plano fluvial #stowage-plan-fluvial y sección de estiba
+  const fluvialEls = root.querySelectorAll('#stowage-plan-fluvial, #executive-visual-stowage-section, #voyage-visual-stowage-container, #coa-voyage-visual-stowage-container');
+  fluvialEls.forEach((el) => {
+    el.style.display = '';
+    el.classList.remove('hidden');
   });
 
   // 2. Ocultar tabla CSS OMI
