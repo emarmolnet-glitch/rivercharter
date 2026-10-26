@@ -21,6 +21,174 @@ export const DEFAULT_DESIGN_DRAFT = 3.66; // Calado de Diseño máximo (12 ft / 
 export const DEFAULT_TPC = 4.5; // Toneladas por Centímetro de Inmersión (MT/cm) para barcazas estándar/Jumbo
 export const DEFAULT_UKC = 0.30; // Margen de seguridad bajo la quilla (m) (Under Keel Clearance)
 
+// Dimensiones Base (Pies) - Arquitectura Naval Fluvial y Esclusas Misisipi
+export const STANDARD_BARGE_LOA_FEET = 195; // Barcaza Jumbo estándar: Eslora (LOA) = 195 ft
+export const STANDARD_BARGE_BEAM_FEET = 35; // Barcaza Jumbo estándar: Manga (Beam) = 35 ft
+export const STANDARD_TUGBOAT_LOA_FEET = 150; // Empujador promedio: Eslora = 150 ft
+export const STANDARD_LOCK_LENGTH_FEET = 600; // Esclusa estándar del Misisipi (Main Chamber): 600 ft (Largo)
+export const STANDARD_LOCK_WIDTH_FEET = 110; // Esclusa estándar del Misisipi (Main Chamber): 110 ft (Ancho)
+export const DOUBLE_LOCKAGE_ADDITIONAL_HOURS_PER_LOCK = 3.5; // Inyección de +3.5 horas por esclusa si requiere esclusado doble
+export const DEFAULT_MANEUVER_FUEL_TONS_PER_HOUR = 0.15; // Consumo específico de maniobra/puerto (MT/hora)
+
+export interface ConvoyGeometryParams {
+  bargeCount: number;
+  lockCount?: number;
+  customColumns?: number;
+  customRows?: number;
+  enginePowerHp?: number | null;
+  sailingFuelTonsPerDay?: number;
+  fuelPricePerTon?: number;
+  bargeLoaFeet?: number;
+  bargeBeamFeet?: number;
+  tugboatLoaFeet?: number;
+  lockLengthFeet?: number;
+  lockWidthFeet?: number;
+  maneuverFuelTonsPerHour?: number;
+}
+
+export interface ConvoyGeometryResult {
+  bargeCount: number;
+  columns: number;
+  rows: number;
+  bargeLengthFeet: number;
+  bargeBeamFeet: number;
+  tugboatLengthFeet: number;
+  totalLengthFeet: number; // Eslora Total Convoy (ft) = (Filas de barcazas × 195) + 150 (Empujador)
+  totalBeamFeet: number;   // Manga Total Convoy (ft) = Columnas de barcazas × 35
+  lockLengthFeet: number;  // 600 ft
+  lockWidthFeet: number;   // 110 ft
+  exceedsLength: boolean;
+  exceedsBeam: boolean;
+  requiresDoubleLockage: boolean;
+  lockCount: number;
+  additionalHours: number; // +3.5h por cada esclusa de la ruta si requiresDoubleLockage
+  maneuverFuelTonsPerHour: number;
+  maneuverFuelTonsTotal: number;
+  maneuverFuelCostTotal: number;
+  infoMessage?: string;
+  formula: string;
+}
+
+/**
+ * Determina la disposición óptima del convoy (columnas y filas) en base al número total de barcazas.
+ * En esclusas estándar (ancho 110 ft), el ancho máximo para entrar de frente son 3 barcazas Jumbo (3 × 35 = 105 ft).
+ * Ejemplo: 15 barcazas = 3 columnas x 5 filas.
+ */
+export function calculateConvoyArrangement(
+  bargeCount: number,
+  customColumns?: number,
+  customRows?: number
+): { columns: number; rows: number } {
+  if (customColumns && customColumns > 0) {
+    const cols = Math.max(1, Math.round(customColumns));
+    const rows = customRows && customRows > 0 ? Math.max(1, Math.round(customRows)) : Math.ceil(Math.max(1, bargeCount) / cols);
+    return { columns: cols, rows: Math.max(1, rows) };
+  }
+
+  const count = Math.max(0, Math.round(bargeCount));
+  if (count <= 0) return { columns: 0, rows: 0 };
+  if (count === 1) return { columns: 1, rows: 1 };
+  if (count === 2) return { columns: 2, rows: 1 };
+  if (count === 4) return { columns: 2, rows: 2 };
+
+  // Disposición estándar para cuencas con esclusas: máx 3 columnas de ancho (105 ft <= 110 ft)
+  const columns = 3;
+  const rows = Math.ceil(count / columns);
+  return { columns, rows };
+}
+
+/**
+ * Consumo de combustible del remolcador a régimen de puerto/maniobra durante esclusado.
+ * Durante el esclusado y desacople de convoy, el motor trabaja típicamente a ~40% MCR (régimen de maniobra).
+ */
+export function calculateManeuverFuelPerHour(
+  enginePowerHp?: number | null,
+  sailingFuelTonsPerDay?: number
+): number {
+  const hp = Number(enginePowerHp) || 0;
+  if (hp > 0) {
+    // hp * 0.40 load factor * 200 g/BHP-h / 1,000,000
+    const tonsPerHour = (hp * 0.40 * 200) / 1_000_000;
+    return Number(Math.max(0.08, tonsPerHour).toFixed(3));
+  }
+  if (sailingFuelTonsPerDay && sailingFuelTonsPerDay > 0) {
+    // Aproximadamente 50% del régimen de navegación de crucero
+    return Number(((sailingFuelTonsPerDay / 24) * 0.50).toFixed(3));
+  }
+  return DEFAULT_MANEUVER_FUEL_TONS_PER_HOUR;
+}
+
+/**
+ * Motor de Esclusado Doble (Double Lockage) y Geometría de Convoyes
+ * 
+ * 1. Determina columnas y filas óptimas (ej. 15 barcazas = 3 col x 5 fil).
+ * 2. Eslora Total Convoy (ft) = (Filas × 195) + 150 (Empujador).
+ * 3. Manga Total Convoy (ft) = Columnas × 35.
+ * 4. Compara contra la cámara de 600 ft x 110 ft. Si excede, requiresDoubleLockage = true.
+ * 5. Por cada esclusa en la ruta, inyecta +3.5h y suma el consumo de maniobra.
+ */
+export function calculateConvoyGeometry(params: ConvoyGeometryParams): ConvoyGeometryResult {
+  const bargeCount = Math.max(0, Number(params.bargeCount) || 0);
+  const lockCount = Math.max(0, Number(params.lockCount !== undefined ? params.lockCount : 1));
+  const fuelPricePerTon = Math.max(0, Number(params.fuelPricePerTon || DEFAULT_BUNKER_PRICE_USD_TON));
+
+  const bargeLoaFeet = Number(params.bargeLoaFeet) || STANDARD_BARGE_LOA_FEET;
+  const bargeBeamFeet = Number(params.bargeBeamFeet) || STANDARD_BARGE_BEAM_FEET;
+  const tugboatLoaFeet = Number(params.tugboatLoaFeet) || STANDARD_TUGBOAT_LOA_FEET;
+  const lockLengthFeet = Number(params.lockLengthFeet) || STANDARD_LOCK_LENGTH_FEET;
+  const lockWidthFeet = Number(params.lockWidthFeet) || STANDARD_LOCK_WIDTH_FEET;
+
+  const { columns, rows } = calculateConvoyArrangement(bargeCount, params.customColumns, params.customRows);
+
+  const totalLengthFeet = rows > 0 ? Number(((rows * bargeLoaFeet) + tugboatLoaFeet).toFixed(1)) : 0;
+  const totalBeamFeet = columns > 0 ? Number((columns * bargeBeamFeet).toFixed(1)) : 0;
+
+  const exceedsLength = totalLengthFeet > lockLengthFeet;
+  const exceedsBeam = totalBeamFeet > lockWidthFeet;
+  const requiresDoubleLockage = exceedsLength || exceedsBeam;
+
+  const maneuverFuelTonsPerHour = params.maneuverFuelTonsPerHour !== undefined && params.maneuverFuelTonsPerHour !== null
+    ? Math.max(0, Number(params.maneuverFuelTonsPerHour))
+    : calculateManeuverFuelPerHour(params.enginePowerHp, params.sailingFuelTonsPerDay);
+
+  let additionalHours = 0;
+  let maneuverFuelTonsTotal = 0;
+  let maneuverFuelCostTotal = 0;
+  let infoMessage: string | undefined;
+
+  if (requiresDoubleLockage && lockCount > 0) {
+    additionalHours = Number((lockCount * DOUBLE_LOCKAGE_ADDITIONAL_HOURS_PER_LOCK).toFixed(2));
+    maneuverFuelTonsTotal = Number((additionalHours * maneuverFuelTonsPerHour).toFixed(3));
+    maneuverFuelCostTotal = Number((maneuverFuelTonsTotal * fuelPricePerTon).toFixed(2));
+    infoMessage = `Maniobra de Esclusado Doble Requerida: El convoy (${totalLengthFeet} ft x ${totalBeamFeet} ft) excede la cámara estándar (600x110). Se han añadido automáticamente +3.5h y consumos de maniobra por cada esclusa de la ruta.`;
+  }
+
+  const formula = `Convoy (${columns} col × ${rows} fil = ${bargeCount} barcazas) -> Eslora: ${totalLengthFeet} ft (${rows}×${bargeLoaFeet} + ${tugboatLoaFeet}) | Manga: ${totalBeamFeet} ft (${columns}×${bargeBeamFeet}) vs Esclusa (${lockLengthFeet}×${lockWidthFeet} ft) -> ${requiresDoubleLockage ? `DOBLE ESCLUSADO (+${additionalHours}h en ${lockCount} esclusas)` : 'ESCLUSADO SIMPLE (Cabe en cámara)'}`;
+
+  return {
+    bargeCount,
+    columns,
+    rows,
+    bargeLengthFeet: bargeLoaFeet,
+    bargeBeamFeet: bargeBeamFeet,
+    tugboatLengthFeet: tugboatLoaFeet,
+    totalLengthFeet,
+    totalBeamFeet,
+    lockLengthFeet,
+    lockWidthFeet,
+    exceedsLength,
+    exceedsBeam,
+    requiresDoubleLockage,
+    lockCount,
+    additionalHours,
+    maneuverFuelTonsPerHour,
+    maneuverFuelTonsTotal,
+    maneuverFuelCostTotal,
+    infoMessage,
+    formula,
+  };
+}
+
 export interface HydrostaticDraftParams {
   minWaterLevel?: number;
   ukc?: number;
@@ -247,6 +415,11 @@ export interface DemurrageCostParams {
   idleFuelTonsPerDay?: number;
   fuelPricePerTon?: number;
   idleHourlyRateOverride?: number;
+  // Módulo de Esclusado Doble (Double Lockage)
+  lockCount?: number;
+  requiresDoubleLockage?: boolean;
+  doubleLockageHours?: number;
+  maneuverFuelTonsPerHour?: number;
 }
 
 export interface DemurrageCostBreakdown {
@@ -263,6 +436,14 @@ export interface DemurrageCostBreakdown {
   hourlyIdleTotalRate: number;
   totalDemurrageCost: number;
   formula: string;
+  // Desglose de Esclusado Doble (Double Lockage)
+  requiresDoubleLockage?: boolean;
+  doubleLockageHours?: number;
+  maneuverFuelTonsPerHour?: number;
+  totalManeuverFuelTons?: number;
+  maneuverFuelCost?: number;
+  doubleLockageOpexCost?: number;
+  doubleLockageTotalCost?: number;
 }
 
 export interface FluvialPdaExpenses {
@@ -332,6 +513,9 @@ export interface FluvialExecutiveMetrics {
   risGroundingRisk?: 'SAFE' | 'WARNING' | 'CRITICAL';
   bidirectionalSailing?: BidirectionalSailingResult;
   shedding?: TonnageSheddingResult;
+  geometry?: ConvoyGeometryResult;
+  convoyGeometry?: ConvoyGeometryResult;
+  requiresDoubleLockage?: boolean;
 }
 
 export interface FluvialVoyageEstimateParams {
@@ -381,6 +565,17 @@ export interface FluvialVoyageEstimateParams {
   designDraft?: number;
   lightshipDraft?: number;
   tpc?: number;
+  // Parámetros de Esclusado Doble y Geometría de Convoy
+  lockCount?: number;
+  convoyColumns?: number;
+  convoyRows?: number;
+  bargeLoaFeet?: number;
+  bargeBeamFeet?: number;
+  tugboatLoaFeet?: number;
+  lockLengthFeet?: number;
+  lockWidthFeet?: number;
+  maneuverFuelTonsPerHour?: number;
+  customConvoyGeometry?: Partial<ConvoyGeometryParams>;
 }
 
 export interface FluvialEstimateResult {
@@ -403,6 +598,9 @@ export interface FluvialEstimateResult {
   totalEffectiveDays: number;
   executiveSummary: FluvialExecutiveMetrics;
   shedding?: TonnageSheddingResult;
+  geometry?: ConvoyGeometryResult;
+  convoyGeometry?: ConvoyGeometryResult;
+  requiresDoubleLockage?: boolean;
   summary: string;
 }
 
@@ -619,42 +817,67 @@ export function calculateFluvialPda(params: FluvialPdaExpenses = {}): FluvialPda
 }
 
 /**
- * Sobrecosto Operativo del Remolcador en Ralentí por Demoras (Esclusas / Aduanas)
- * Recalcula automáticamente el coste OPEX por hora/día en espera más el consumo de combustible en standby.
- * Multiplica automáticamente el OPEX y el consumo en ralentí del remolcador.
+ * Sobrecosto Operativo del Remolcador en Ralentí y Maniobra por Demoras (Esclusas / Aduanas)
+ * Recalcula automáticamente el coste OPEX por hora/día en espera más el consumo de combustible en standby o maniobra.
+ * Integra el esclusado doble (Double Lockage) inyectando horas de maniobra y combustible activo del remolcador.
  */
 export function calculateDemurrageCost(params: DemurrageCostParams): DemurrageCostBreakdown {
-  const lockHours = (Number(params.lockWaitHours) || 0) + ((Number(params.lockWaitDays) || 0) * 24);
-  const customsHours = (Number(params.customsDelayHours) || 0) + ((Number(params.customsDelayDays) || 0) * 24);
-  const computedDelayHours = lockHours + customsHours;
+  const dailyOpex = Math.max(0, Number(params.dailyOpex) || 0);
+  const hourlyOpexRate = Number((dailyOpex / 24).toFixed(2));
+  const fuelPricePerTon = Math.max(0, Number(params.fuelPricePerTon ?? DEFAULT_BUNKER_PRICE_USD_TON));
 
-  const waitingHours = computedDelayHours > 0
+  // Módulo de Esclusado Doble (Double Lockage)
+  const requiresDoubleLockage = Boolean(params.requiresDoubleLockage);
+  const lockCount = Math.max(0, Number(params.lockCount !== undefined ? params.lockCount : 1));
+
+  let doubleLockageHours = 0;
+  if (params.doubleLockageHours !== undefined && params.doubleLockageHours !== null) {
+    doubleLockageHours = Math.max(0, Number(params.doubleLockageHours));
+  } else if (requiresDoubleLockage) {
+    doubleLockageHours = Number((lockCount * DOUBLE_LOCKAGE_ADDITIONAL_HOURS_PER_LOCK).toFixed(2));
+  }
+
+  const maneuverFuelTonsPerHour = params.maneuverFuelTonsPerHour !== undefined && params.maneuverFuelTonsPerHour !== null
+    ? Math.max(0, Number(params.maneuverFuelTonsPerHour))
+    : DEFAULT_MANEUVER_FUEL_TONS_PER_HOUR;
+
+  const baseLockHours = (Number(params.lockWaitHours) || 0) + ((Number(params.lockWaitDays) || 0) * 24);
+  const customsHours = (Number(params.customsDelayHours) || 0) + ((Number(params.customsDelayDays) || 0) * 24);
+  const computedDelayHours = baseLockHours + customsHours;
+
+  const baseWaitingHours = computedDelayHours > 0
     ? computedDelayHours
     : Math.max(0, Number(params.waitingHours) || 0);
 
+  const waitingHours = Number((baseWaitingHours + doubleLockageHours).toFixed(2));
   const totalDelayDays = Number((waitingHours / 24).toFixed(2));
-  const dailyOpex = Math.max(0, Number(params.dailyOpex) || 0);
+  const totalLockWaitHours = Number((baseLockHours + doubleLockageHours).toFixed(2));
 
+  // Consumo y OPEX en ralentí (esperas estáticas en fondeo / aduanas / cola)
   const idleFuelTonsPerHour = params.idleFuelTonsPerDay !== undefined && params.idleFuelTonsPerDay !== null
     ? Math.max(0, Number(params.idleFuelTonsPerDay) / 24)
     : Math.max(0, Number(params.idleFuelTonsPerHour ?? DEFAULT_IDLE_FUEL_TONS_PER_HOUR));
 
-  const fuelPricePerTon = Math.max(0, Number(params.fuelPricePerTon ?? DEFAULT_BUNKER_PRICE_USD_TON));
-
-  const hourlyOpexRate = Number((dailyOpex / 24).toFixed(2));
-  const idleOpexCost = Number((waitingHours * hourlyOpexRate).toFixed(2));
-
-  const totalIdleFuelTons = Number((waitingHours * idleFuelTonsPerHour).toFixed(3));
+  const totalIdleFuelTons = Number((baseWaitingHours * idleFuelTonsPerHour).toFixed(3));
   const idleFuelCost = Number((totalIdleFuelTons * fuelPricePerTon).toFixed(2));
+  const idleOpexCost = Number((baseWaitingHours * hourlyOpexRate).toFixed(2));
+
+  // Consumo y OPEX a régimen de maniobra (esclusado doble activo)
+  const totalManeuverFuelTons = Number((doubleLockageHours * maneuverFuelTonsPerHour).toFixed(3));
+  const maneuverFuelCost = Number((totalManeuverFuelTons * fuelPricePerTon).toFixed(2));
+  const doubleLockageOpexCost = Number((doubleLockageHours * hourlyOpexRate).toFixed(2));
+  const doubleLockageTotalCost = Number((doubleLockageOpexCost + maneuverFuelCost).toFixed(2));
 
   const hourlyIdleTotalRate = Number((hourlyOpexRate + (idleFuelTonsPerHour * fuelPricePerTon)).toFixed(2));
-  const totalDemurrageCost = Number((idleOpexCost + idleFuelCost).toFixed(2));
+  const totalDemurrageCost = Number((idleOpexCost + idleFuelCost + doubleLockageOpexCost + maneuverFuelCost).toFixed(2));
 
-  const formula = `${waitingHours.toFixed(1)} h espera (${totalDelayDays} d) × ($${hourlyOpexRate}/h OPEX + $${(idleFuelTonsPerHour * fuelPricePerTon).toFixed(2)}/h fuel ralentí) = $${totalDemurrageCost.toLocaleString()} USD`;
+  const formula = doubleLockageHours > 0
+    ? `${waitingHours.toFixed(1)} h espera total (${baseWaitingHours.toFixed(1)}h ralentí + ${doubleLockageHours.toFixed(1)}h esclusado doble) × OPEX + fuel (ralentí $${idleFuelCost.toLocaleString()} + maniobra $${maneuverFuelCost.toLocaleString()}) = $${totalDemurrageCost.toLocaleString()} USD`
+    : `${waitingHours.toFixed(1)} h espera (${totalDelayDays} d) × ($${hourlyOpexRate}/h OPEX + $${(idleFuelTonsPerHour * fuelPricePerTon).toFixed(2)}/h fuel ralentí) = $${totalDemurrageCost.toLocaleString()} USD`;
 
   return {
     waitingHours,
-    lockWaitHours: lockHours,
+    lockWaitHours: totalLockWaitHours,
     customsDelayHours: customsHours,
     totalDelayDays,
     hourlyOpexRate,
@@ -666,6 +889,13 @@ export function calculateDemurrageCost(params: DemurrageCostParams): DemurrageCo
     hourlyIdleTotalRate,
     totalDemurrageCost,
     formula,
+    requiresDoubleLockage,
+    doubleLockageHours,
+    maneuverFuelTonsPerHour,
+    totalManeuverFuelTons,
+    maneuverFuelCost,
+    doubleLockageOpexCost,
+    doubleLockageTotalCost,
   };
 }
 
@@ -714,6 +944,16 @@ export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): Fluv
     designDraft,
     lightshipDraft,
     tpc,
+    lockCount,
+    convoyColumns,
+    convoyRows,
+    bargeLoaFeet,
+    bargeBeamFeet,
+    tugboatLoaFeet,
+    lockLengthFeet,
+    lockWidthFeet,
+    maneuverFuelTonsPerHour,
+    customConvoyGeometry,
   } = params;
 
   // 0. Navegación Bidireccional (Vector de Corriente del Río)
@@ -782,7 +1022,30 @@ export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): Fluv
     defaultDailyRatePerBarge,
   });
 
-  // 3. Demoras en esclusas / aduanas (Multiplica automáticamente OPEX y combustible ralentí del remolcador)
+  // Geometría del Convoy y Detección de Esclusado Doble (Double Lockage)
+  const resolvedBargeCount = Math.max(1, barges.length || 1);
+  const resolvedLockCount = lockCount !== undefined
+    ? Math.max(0, Number(lockCount))
+    : (pda?.lockDues ? 1 : 1);
+
+  const convoyGeometry = calculateConvoyGeometry({
+    bargeCount: resolvedBargeCount,
+    lockCount: resolvedLockCount,
+    customColumns: convoyColumns,
+    customRows: convoyRows,
+    enginePowerHp: tugboat.enginePowerHp,
+    sailingFuelTonsPerDay: baseSailingConsumption,
+    fuelPricePerTon: resolvedFuelPrice,
+    bargeLoaFeet,
+    bargeBeamFeet,
+    tugboatLoaFeet,
+    lockLengthFeet,
+    lockWidthFeet,
+    maneuverFuelTonsPerHour,
+    ...customConvoyGeometry,
+  });
+
+  // 3. Demoras en esclusas / aduanas (Multiplica automáticamente OPEX, combustible ralentí y combustible de maniobra por esclusado doble)
   const demurrageCost = calculateDemurrageCost({
     waitingHours,
     lockWaitHours,
@@ -793,6 +1056,10 @@ export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): Fluv
     idleFuelTonsPerHour,
     idleFuelTonsPerDay,
     fuelPricePerTon: resolvedFuelPrice,
+    lockCount: resolvedLockCount,
+    requiresDoubleLockage: convoyGeometry.requiresDoubleLockage,
+    doubleLockageHours: convoyGeometry.additionalHours,
+    maneuverFuelTonsPerHour: convoyGeometry.maneuverFuelTonsPerHour,
   });
 
   // 4. Gastos Portuarios y Fluviales (PDAs de Hidrovía)
@@ -882,7 +1149,7 @@ export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): Fluv
   const dailyNetProfit = totalEffectiveDays > 0 ? Number((netProfit / totalEffectiveDays).toFixed(2)) : 0;
 
   // Time Charter Equivalent (TCE) diario (Sin estimatedLandSavings en la cuenta del buque):
-  const totalFuelCost = Number((motorCost.estimatedFuelCost + demurrageCost.idleFuelCost).toFixed(2));
+  const totalFuelCost = Number((motorCost.estimatedFuelCost + demurrageCost.idleFuelCost + (demurrageCost.maneuverFuelCost || 0)).toFixed(2));
   const voyageExpenses = Number((totalFuelCost + pdaCost.totalPdaCost + cargoCost.totalCargoCost + safeTransshipment).toFixed(2));
   const dailyTce = totalEffectiveDays > 0
     ? Number(((grossFreightRevenue - voyageExpenses) / totalEffectiveDays).toFixed(2))
@@ -923,6 +1190,9 @@ export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): Fluv
     risGroundingRisk,
     bidirectionalSailing,
     shedding,
+    geometry: convoyGeometry,
+    convoyGeometry,
+    requiresDoubleLockage: convoyGeometry.requiresDoubleLockage,
     summary: shedding.isDraftRestricted
       ? `Beneficio Neto: $${netProfit.toLocaleString()} USD | Sostenibilidad: ${sustainability.formattedMetric} | Costo/TM: $${costPerCargoTon} (Merma Falso Flete: ${lostTonnage} MT) | TCE: $${dailyTce.toLocaleString()}/d`
       : `Beneficio Neto: $${netProfit.toLocaleString()} USD | Sostenibilidad: ${sustainability.formattedMetric} | Costo/TM: $${costPerCargoTon} | TCE: $${dailyTce.toLocaleString()}/d`,
@@ -945,6 +1215,9 @@ export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): Fluv
     lostTonnage,
     maxAdmissibleDraft,
     shedding,
+    geometry: convoyGeometry,
+    convoyGeometry,
+    requiresDoubleLockage: convoyGeometry.requiresDoubleLockage,
     costPerCargoTon,
     nominalCostPerTon,
     costPerDay,

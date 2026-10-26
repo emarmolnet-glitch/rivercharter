@@ -10809,6 +10809,53 @@
                             </div>
                         </div>
 
+                        <!-- Panel Informativo de Geometría de Convoy y Esclusado Doble (Double Lockage) -->
+                        <div id="fluvial-double-lockage-panel" class="hidden my-3 p-4 rounded-xl border border-amber-300 bg-amber-50 text-slate-800 shadow-sm transition-all" data-testid="fluvial-double-lockage-panel">
+                            <div class="flex items-start gap-3">
+                                <div class="p-2.5 rounded-lg bg-amber-100 text-amber-800 shrink-0 text-lg">
+                                    <i class="fa-solid fa-lock"></i>
+                                </div>
+                                <div class="flex-1">
+                                    <div class="flex flex-wrap items-center justify-between gap-2">
+                                        <span class="text-xs font-bold text-amber-950 uppercase tracking-wide flex items-center gap-1.5">
+                                            <span class="inline-block w-2 h-2 rounded-full bg-amber-600 animate-pulse"></span>
+                                            Alerta de Esclusado · Restricción Geométrica de Convoy
+                                        </span>
+                                        <span id="fluvial-lockage-tag" class="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-amber-200/80 text-amber-900 border border-amber-300">
+                                            Double Lockage Requerido (+3.5h/esclusa)
+                                        </span>
+                                    </div>
+                                    <p id="fluvial-double-lockage-msg" class="text-xs text-amber-900 font-semibold mt-1 leading-relaxed">
+                                        Maniobra de Esclusado Doble Requerida: El convoy (XXX ft x YY ft) excede la cámara estándar (600x110). Se han añadido automáticamente +3.5h y consumos de maniobra por cada esclusa de la ruta.
+                                    </p>
+                                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 pt-2.5 border-t border-amber-200/80 text-[11px]">
+                                        <div class="bg-white/80 p-2 rounded border border-amber-200">
+                                            <span class="text-slate-500 block text-[10px]">Disposición:</span>
+                                            <span id="lockage-arrangement" class="font-mono font-bold text-slate-800">-- col × -- fil</span>
+                                        </div>
+                                        <div class="bg-white/80 p-2 rounded border border-amber-200">
+                                            <span class="text-slate-500 block text-[10px]">Eslora Convoy (ft):</span>
+                                            <span id="lockage-convoy-length" class="font-mono font-bold text-slate-800">-- ft</span>
+                                        </div>
+                                        <div class="bg-white/80 p-2 rounded border border-amber-200">
+                                            <span class="text-slate-500 block text-[10px]">Manga Convoy (ft):</span>
+                                            <span id="lockage-convoy-beam" class="font-mono font-bold text-slate-800">-- ft</span>
+                                        </div>
+                                        <div class="bg-white/80 p-2 rounded border border-amber-200">
+                                            <span class="text-slate-500 block text-[10px]">Cámara Estándar:</span>
+                                            <span class="font-mono font-bold text-slate-700">600 ft × 110 ft</span>
+                                        </div>
+                                    </div>
+                                    <div class="mt-2.5 text-xs text-amber-950 flex flex-wrap items-center justify-between gap-2 font-medium bg-amber-100/70 p-2 rounded border border-amber-200">
+                                        <span>Impacto Operativo de Esclusado Doble:</span>
+                                        <span id="lockage-delay-impact" class="font-mono font-bold text-rose-800">
+                                            +3.5h y consumos de maniobra por esclusa
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div id="route-configurator-root"></div>
 
                         <!-- Open-Meteo Marine Weather Section -->
@@ -77370,9 +77417,32 @@ window.actualizarGrabCapacityVisibility = function() {
                 nodeHandlingDays = parseFloat(document.getElementById('fluvial-handling-delay-days')?.value) || 0;
             }
 
+            // 2.5 Geometría del Convoy y Motor de Esclusado Doble (Double Lockage)
+            // Dimensiones Base (Pies):
+            // Barcaza Jumbo estándar: Eslora = 195 ft, Manga = 35 ft. Empujador: 150 ft. Cámara: 600×110 ft.
+            let convoyCols = 3;
+            if (bargeCount <= 1) convoyCols = 1;
+            else if (bargeCount === 2 || bargeCount === 4) convoyCols = 2;
+            const convoyRows = Math.ceil(Math.max(1, bargeCount) / convoyCols);
+            const convoyLengthFt = (convoyRows * 195) + 150;
+            const convoyBeamFt = convoyCols * 35;
+            const requiresDoubleLockage = (convoyLengthFt > 600 || convoyBeamFt > 110);
+
+            const routeLockCount = parseFloat(document.getElementById('convoy-lock-count')?.value) || 2;
+            let doubleLockageHours = 0;
+            let maneuverFuelCost = 0;
+            let maneuverFuelTons = 0;
+            if (requiresDoubleLockage) {
+                doubleLockageHours = routeLockCount * 3.5;
+                maneuverFuelTons = doubleLockageHours * 0.15;
+                const currentFuelPrice = parseFloat(document.getElementById('fluvial-fuel-price')?.value) || 780;
+                maneuverFuelCost = maneuverFuelTons * currentFuelPrice;
+            }
+
             const lockWaitDays = parseFloat(document.getElementById('fluvial-lock-wait-days')?.value) || 0;
             const customsDelayDays = parseFloat(document.getElementById('fluvial-customs-delay-days')?.value) || 0;
-            const delayDays = lockWaitDays + customsDelayDays + nodeHandlingDays;
+            const doubleLockageDays = doubleLockageHours / 24;
+            const delayDays = lockWaitDays + customsDelayDays + nodeHandlingDays + doubleLockageDays;
             const totalDays = Math.max(0.5, sailingDays + delayDays);
 
             // 3. Alertas RIS, Cartografía Dinámica y Motor Hidrostático de Estiaje
@@ -77449,7 +77519,8 @@ window.actualizarGrabCapacityVisibility = function() {
             const fuelIdleRate = parseFloat(document.getElementById('fluvial-fuel-idle-rate')?.value) || 0.8;
             const fuelPrice = parseFloat(document.getElementById('fluvial-fuel-price')?.value) || 780;
 
-            const fuelTons = (fuelSailingRate * fuelMultiplier * sailingDays) + (fuelIdleRate * delayDays);
+            const idleDelayDays = Math.max(0, delayDays - doubleLockageDays);
+            const fuelTons = (fuelSailingRate * fuelMultiplier * sailingDays) + (fuelIdleRate * idleDelayDays) + maneuverFuelTons;
             const totalBunkerCost = fuelTons * fuelPrice;
             const totalMotorCost = tugTotalOpex + totalBunkerCost;
 
@@ -77522,6 +77593,30 @@ window.actualizarGrabCapacityVisibility = function() {
                 }
             }
 
+            // Feedback Visual: Panel Informativo Reactivo de Esclusado Doble (Double Lockage)
+            const panelLockage = document.getElementById('fluvial-double-lockage-panel');
+            if (panelLockage) {
+                if (requiresDoubleLockage) {
+                    panelLockage.classList.remove('hidden');
+                    const elMsg = document.getElementById('fluvial-double-lockage-msg');
+                    if (elMsg) {
+                        elMsg.textContent = `Maniobra de Esclusado Doble Requerida: El convoy (${convoyLengthFt} ft x ${convoyBeamFt} ft) excede la cámara estándar (600x110). Se han añadido automáticamente +3.5h y consumos de maniobra por cada esclusa de la ruta.`;
+                    }
+                    const elArrangement = document.getElementById('lockage-arrangement');
+                    if (elArrangement) elArrangement.textContent = `${convoyCols} col × ${convoyRows} fil (${bargeCount} barcazas)`;
+                    const elLength = document.getElementById('lockage-convoy-length');
+                    if (elLength) elLength.textContent = `${convoyLengthFt} ft`;
+                    const elBeam = document.getElementById('lockage-convoy-beam');
+                    if (elBeam) elBeam.textContent = `${convoyBeamFt} ft`;
+                    const elDelayImpact = document.getElementById('lockage-delay-impact');
+                    if (elDelayImpact) {
+                        elDelayImpact.textContent = `+${doubleLockageHours.toFixed(1)}h (+${(doubleLockageHours / 24).toFixed(2)}d) en ${routeLockCount} esclusas | Maniobra: $${Math.round(maneuverFuelCost).toLocaleString()} USD`;
+                    }
+                } else {
+                    panelLockage.classList.add('hidden');
+                }
+            }
+
             // Sincronizar en activeConvoyData
             if (!window.activeConvoyData) window.activeConvoyData = {};
             window.activeConvoyData.maxAdmissibleDraft = maxAdmissibleDraft;
@@ -77530,6 +77625,13 @@ window.actualizarGrabCapacityVisibility = function() {
             window.activeConvoyData.lostTonnage = lostTonnage;
             window.activeConvoyData.isDraftRestricted = isEstiajeActive;
             window.activeConvoyData.totalCapacityMt = totalCapacity;
+            window.activeConvoyData.requiresDoubleLockage = requiresDoubleLockage;
+            window.activeConvoyData.convoyLengthFt = convoyLengthFt;
+            window.activeConvoyData.convoyBeamFt = convoyBeamFt;
+            window.activeConvoyData.convoyCols = convoyCols;
+            window.activeConvoyData.convoyRows = convoyRows;
+            window.activeConvoyData.doubleLockageHours = doubleLockageHours;
+            window.activeConvoyData.lockCount = routeLockCount;
 
             // Actualización Dinámica del Submódulo Bimodal (Puertos / Ruta)
             const elImpactText = document.getElementById('intermodal-impact-text');

@@ -16,9 +16,18 @@ import {
   calculateFluvialPda,
   calculateDefaultBargeRate,
   calculateBidirectionalSailing,
+  calculateConvoyGeometry,
+  calculateConvoyArrangement,
+  STANDARD_LOCK_LENGTH_FEET,
+  STANDARD_LOCK_WIDTH_FEET,
+  STANDARD_BARGE_LOA_FEET,
+  STANDARD_BARGE_BEAM_FEET,
+  STANDARD_TUGBOAT_LOA_FEET,
+  DOUBLE_LOCKAGE_ADDITIONAL_HOURS_PER_LOCK,
   DEFAULT_CONVOY_SPEED_WATER_KNOTS,
   DEFAULT_RIVER_CURRENT_KNOTS,
   type FluvialEstimateResult,
+  type ConvoyGeometryResult,
 } from '../services/fluvialEstimator.js';
 import {
   DATABRIDGE_FLUVIAL_STANDARDS,
@@ -522,6 +531,19 @@ export function ConvoyBuilder({
   const [distLadenNm, setDistLadenNm] = useState<number>(600);
   const [distBallastNm, setDistBallastNm] = useState<number>(0);
 
+  // Módulo de Geometría de Convoyes y Esclusado Doble (Double Lockage)
+  const [lockCount, setLockCount] = useState<number>(2); // Número de esclusas en la ruta
+
+  const convoyGeometry: ConvoyGeometryResult = useMemo(() => {
+    return calculateConvoyGeometry({
+      bargeCount: bargeIds.length,
+      lockCount: Math.max(0, Number(lockCount)),
+      enginePowerHp: selectedTugboat?.enginePowerHp,
+      sailingFuelTonsPerDay: Number(sailingFuelTonsPerDay) || 0,
+      fuelPricePerTon: Number(fuelPricePerTon) || 680,
+    });
+  }, [bargeIds.length, lockCount, selectedTugboat?.enginePowerHp, sailingFuelTonsPerDay, fuelPricePerTon]);
+
   // Cálculo de velocidad sobre fondo (SOG) y tiempos por sentido
   const bidirectionalResult = useMemo(() => {
     return calculateBidirectionalSailing({
@@ -534,7 +556,7 @@ export function ConvoyBuilder({
   }, [distLadenNm, distBallastNm, convoySpeedWaterKnots, riverCurrentKnots, ladenDirection]);
 
   const [navigationDays, setNavigationDays] = useState<number>(() => bidirectionalResult.totalNavigationDays || 7);
-  const [lockWaitDays, setLockWaitDays] = useState<number>(1.5); // Tiempos de espera en esclusas
+  const [lockWaitDays, setLockWaitDays] = useState<number>(1.5); // Tiempos de espera base en esclusas
   const [customsDelayDays, setCustomsDelayDays] = useState<number>(1.0); // Demoras aduaneras
 
   // Sincronizar automáticamente días calculados por hidrodinámica bidireccional si las distancias cambian
@@ -598,6 +620,7 @@ export function ConvoyBuilder({
       fuelPricePerTon: Number(fuelPricePerTon) || 680,
       barges: bargesInput,
       defaultCouplingDays: totalOperationalDays,
+      lockCount: Math.max(0, Number(lockCount)),
       lockWaitDays: Number(lockWaitDays) || 0,
       customsDelayDays: Number(customsDelayDays) || 0,
       pda: fluvialPdaExpenses,
@@ -630,6 +653,7 @@ export function ConvoyBuilder({
     coupledBarges,
     totalOperationalDays,
     bargeDailyRates,
+    lockCount,
     lockWaitDays,
     customsDelayDays,
     fluvialPdaExpenses,
@@ -830,9 +854,13 @@ export function ConvoyBuilder({
         bargeCount: bargeIds.length,
         barges: coupledBarges,
         financialEstimate: decoupledEstimate,
+        geometry: convoyGeometry,
+        requiresDoubleLockage: convoyGeometry.requiresDoubleLockage,
         delays: {
           navigationDays,
+          lockCount,
           lockWaitDays,
+          doubleLockageHours: convoyGeometry.additionalHours,
           customsDelayDays,
           totalDelayDays,
           totalOperationalDays,
@@ -1009,6 +1037,63 @@ export function ConvoyBuilder({
             </div>
             <div className="text-[10px] font-bold text-rose-600 font-mono">
               +${breakEvenDiff.toFixed(2)}/MT (+{((breakEvenDiff / (nominalCostPerTon || 1)) * 100).toFixed(1)}%)
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* -------------------------------------------------------------------- */}
+      {/* PANEL INFORMATIVO: GEOMETRÍA DE CONVOY Y ESCLUSADO DOBLE (DOUBLE LOCKAGE) */}
+      {/* -------------------------------------------------------------------- */}
+      {convoyGeometry.requiresDoubleLockage && (
+        <div
+          role="region"
+          id="double-lockage-alert"
+          data-testid="double-lockage-alert"
+          className="p-4 rounded-xl border border-amber-300 bg-amber-50 text-slate-800 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4"
+        >
+          <div className="flex items-start gap-3.5">
+            <div className="p-2.5 bg-amber-100 border border-amber-200 rounded-lg text-amber-800 text-2xl shrink-0">
+              ⚡
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h4 className="font-bold text-amber-950 text-xs sm:text-sm uppercase tracking-wider">
+                  Maniobra de Esclusado Doble Requerida
+                </h4>
+                <span className="bg-amber-200 text-amber-900 text-[10px] font-bold px-2 py-0.5 rounded font-mono uppercase">
+                  Convoy Excede Cámara 600×110 ft
+                </span>
+              </div>
+              <p className="text-xs text-amber-900 leading-relaxed font-semibold" id="double-lockage-message">
+                Maniobra de Esclusado Doble Requerida: El convoy ({convoyGeometry.totalLengthFeet} ft x {convoyGeometry.totalBeamFeet} ft) excede la cámara estándar (600x110). Se han añadido automáticamente +3.5h y consumos de maniobra por cada esclusa de la ruta.
+              </p>
+              <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-amber-950">
+                <span className="bg-white/90 border border-amber-200 px-2 py-0.5 rounded">
+                  Disposición: <strong>{convoyGeometry.columns} columnas × {convoyGeometry.rows} filas</strong>
+                </span>
+                <span className="bg-white/90 border border-amber-200 px-2 py-0.5 rounded">
+                  Eslora: <strong>{convoyGeometry.totalLengthFeet} ft</strong> (Cámara: 600 ft)
+                </span>
+                <span className="bg-white/90 border border-amber-200 px-2 py-0.5 rounded">
+                  Manga: <strong>{convoyGeometry.totalBeamFeet} ft</strong> (Cámara: 110 ft)
+                </span>
+                <span className="bg-white/90 border border-amber-200 px-2 py-0.5 rounded">
+                  Esclusas: <strong>{convoyGeometry.lockCount}</strong> (+{convoyGeometry.additionalHours}h)
+                </span>
+                <span className="bg-white/90 border border-amber-200 px-2 py-0.5 rounded">
+                  Fuel Maniobra: <strong>{convoyGeometry.maneuverFuelTonsTotal} MT</strong> (${convoyGeometry.maneuverFuelCostTotal.toLocaleString()} USD)
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className="shrink-0 bg-white border border-amber-200 rounded-lg p-3 text-right">
+            <div className="text-[10px] uppercase font-bold text-slate-500">Demora Automática Esclusas</div>
+            <div className="text-sm font-black font-mono text-amber-900 mt-0.5">
+              +{convoyGeometry.additionalHours} horas (+{(convoyGeometry.additionalHours / 24).toFixed(2)} días)
+            </div>
+            <div className="text-[10px] font-bold text-rose-600 font-mono">
+              +${convoyGeometry.maneuverFuelCostTotal.toLocaleString()} USD Fuel Maniobra
             </div>
           </div>
         </div>
@@ -1240,9 +1325,19 @@ export function ConvoyBuilder({
                       2. Arreglo Dinámico de Barcazas (Carga)
                     </h3>
                   </div>
-                  <span className="text-[10px] font-mono text-blue-700 font-bold bg-blue-50 border border-blue-200 px-2 py-0.5 rounded">
-                    {coupledBarges.length} Barcazas Acopladas ({isRoro ? `${totalLinearMeters} m lin · ${totalTruckCount} camiones` : `${totalCapacityMt.toLocaleString()} MT`})
-                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] font-mono text-blue-700 font-bold bg-blue-50 border border-blue-200 px-2 py-0.5 rounded">
+                      {coupledBarges.length} Barcazas Acopladas ({isRoro ? `${totalLinearMeters} m lin · ${totalTruckCount} camiones` : `${totalCapacityMt.toLocaleString()} MT`})
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-700 font-semibold bg-slate-100 border border-slate-200 px-2 py-0.5 rounded" title="Geometría del convoy: Eslora Total × Manga">
+                      {convoyGeometry.totalLengthFeet} ft LOA × {convoyGeometry.totalBeamFeet} ft Manga ({convoyGeometry.columns}c × {convoyGeometry.rows}f)
+                    </span>
+                    {convoyGeometry.requiresDoubleLockage && (
+                      <span className="text-[10px] font-mono font-bold bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded" title="Convoy excede cámara de esclusa 600×110 ft">
+                        ⚠️ Doble Esclusado (+{convoyGeometry.additionalHours}h)
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* SELECTOR DE TIPO DE OPERACIÓN: GRANEL VS RO-RO */}
@@ -2056,7 +2151,7 @@ export function ConvoyBuilder({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
               <div className="bg-white border border-slate-200 rounded-lg p-3 space-y-1">
                 <label className="block text-[10px] font-bold text-slate-600 uppercase">Días Estimados de Navegación</label>
                 <input
@@ -2071,7 +2166,30 @@ export function ConvoyBuilder({
               </div>
 
               <div className="bg-white border border-purple-200 rounded-lg p-3 space-y-1 shadow-sm">
-                <label className="block text-[10px] font-bold text-purple-700 uppercase">Tiempos de Espera en Esclusas (días)</label>
+                <label htmlFor="convoy-lock-count" className="block text-[10px] font-bold text-purple-700 uppercase flex items-center justify-between">
+                  <span>Esclusas en la Ruta</span>
+                  <span className={`font-mono text-[9px] font-bold px-1.5 py-0.5 rounded ${convoyGeometry.requiresDoubleLockage ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-800'}`}>
+                    {convoyGeometry.requiresDoubleLockage ? 'Doble (+3.5h/esc)' : 'Simple (Normal)'}
+                  </span>
+                </label>
+                <input
+                  id="convoy-lock-count"
+                  type="number"
+                  step="1"
+                  min="0"
+                  value={lockCount}
+                  onChange={(e) => setLockCount(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                  className="w-full bg-white border border-slate-200 rounded px-2.5 py-1.5 text-xs text-slate-900 font-mono font-bold"
+                />
+                <span className="text-[10px] text-slate-600 block">
+                  {convoyGeometry.requiresDoubleLockage
+                    ? `+${convoyGeometry.additionalHours}h inyectadas automáticamente`
+                    : 'Convoy cabe en cámara (600×110 ft)'}
+                </span>
+              </div>
+
+              <div className="bg-white border border-purple-200 rounded-lg p-3 space-y-1 shadow-sm">
+                <label className="block text-[10px] font-bold text-purple-700 uppercase">Demora Esclusas Acumulada (días)</label>
                 <input
                   type="number"
                   step="0.25"
@@ -2080,7 +2198,9 @@ export function ConvoyBuilder({
                   onChange={(e) => setLockWaitDays(Number(e.target.value))}
                   className="w-full bg-white border border-slate-200 rounded px-2.5 py-1.5 text-xs text-slate-900 font-mono font-bold"
                 />
-                <span className="text-[10px] text-slate-600">Congestión y paso en esclusas ({(lockWaitDays * 24).toFixed(0)} horas)</span>
+                <span className="text-[10px] text-slate-600">
+                  Total {(lockWaitDays * 24).toFixed(1)}h {convoyGeometry.requiresDoubleLockage ? `(incluye +${convoyGeometry.additionalHours}h maniobra)` : ''}
+                </span>
               </div>
 
               <div className="bg-white border border-purple-200 rounded-lg p-3 space-y-1 shadow-sm">
@@ -2107,13 +2227,19 @@ export function ConvoyBuilder({
                   + <b>${(totalDelayDays * calculatedDailyOpex).toLocaleString()} USD</b> de OPEX remolcador (tripulación/seguros en espera)
                   <br />
                   + <b>${(totalDelayDays * idleFuelTonsPerDay * fuelPricePerTon).toLocaleString()} USD</b> de combustible en ralentí
+                  {convoyGeometry.requiresDoubleLockage && (
+                    <>
+                      <br />
+                      + <b>${convoyGeometry.maneuverFuelCostTotal.toLocaleString()} USD</b> de combustible de maniobra ({convoyGeometry.maneuverFuelTonsTotal} MT por esclusado doble en {convoyGeometry.lockCount} esclusas)
+                    </>
+                  )}
                 </p>
               </div>
 
               <div className="text-right shrink-0">
                 <span className="text-[10px] uppercase font-bold text-slate-600 block">Sobrecosto Total Demoras</span>
                 <span className="text-base font-mono font-black text-rose-300">
-                  +${((totalDelayDays * calculatedDailyOpex) + (totalDelayDays * idleFuelTonsPerDay * fuelPricePerTon)).toLocaleString()} USD
+                  +${((totalDelayDays * calculatedDailyOpex) + (totalDelayDays * idleFuelTonsPerDay * fuelPricePerTon) + (convoyGeometry.requiresDoubleLockage ? convoyGeometry.maneuverFuelCostTotal : 0)).toLocaleString()} USD
                 </span>
               </div>
             </div>
