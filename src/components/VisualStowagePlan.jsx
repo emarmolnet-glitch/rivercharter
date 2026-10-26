@@ -59,12 +59,29 @@ export function adaptRoRoJustification(text = '', profile = 'HANDYSIZE') {
  * @param {string} [props.vesselType] - Tipo o descripción del buque
  * @param {string} [props.projectRef] - Referencia del proyecto / expediente
  */
+export function isFluvialContext() {
+  if (typeof window !== 'undefined') {
+    if (typeof window.isFluvialContext === 'function' && window.isFluvialContext !== isFluvialContext) {
+      try { return Boolean(window.isFluvialContext()); } catch (_) {}
+    }
+    if (window.isRiverCharter || window.isFluvialMode || window.activeConvoyData) return true;
+    if (typeof document !== 'undefined') {
+      if (document.title && /rivercharter|fluvial|convoy/i.test(document.title)) return true;
+      if (document.getElementById('convoy-builder-root')) return true;
+      if (document.querySelector('[data-app="rivercharter"]')) return true;
+    }
+  }
+  return false;
+}
+
 export function VisualStowagePlan({
   stowagePlan = null,
   vesselType = 'Handysize MPP 32.000 DWT',
   projectRef = '',
 }) {
   const profile = resolveVesselProfile(vesselType, stowagePlan?.vesselModel?.type || '');
+
+  const isFluvial = isFluvialContext();
 
   const rawHolds = Array.isArray(stowagePlan?.holds) ? stowagePlan.holds : [];
   const deck = stowagePlan?.weatherDeck || {};
@@ -175,7 +192,7 @@ export function VisualStowagePlan({
         <div className="flex items-center gap-2.5 flex-wrap">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 shadow-[0_0_6px_rgba(5,150,105,0.4)]" />
           <span className="text-xs font-black uppercase tracking-wider text-slate-900">
-            UNIVERSAL STOWAGE ENGINE · SEACHARTER PRO
+            UNIVERSAL STOWAGE ENGINE · {isFluvial ? 'RIVERCHARTER' : 'SEACHARTER PRO'}
           </span>
           <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 font-bold">
             CORTE ESQUEMÁTICO 2D
@@ -692,7 +709,11 @@ export function VisualStowagePlan({
       {/* ==================================================================== */}
       {/* SECCIÓN OBLIGATORIA: TABLA DE VALIDACIÓN TÉCNICA E HIDRODINÁMICA   */}
       {/* ==================================================================== */}
-      <div className="mt-4 pt-4 border-t border-slate-200">
+      <div
+        id="visual-stowage-technical-validation-container"
+        className={`mt-4 pt-4 border-t border-slate-200 ${isFluvial ? 'hidden' : ''}`}
+        style={isFluvial ? { display: 'none' } : undefined}
+      >
         <div className="flex items-center justify-between mb-2">
           <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
             <span className="text-emerald-700">⚖️</span>
@@ -798,6 +819,65 @@ export function VisualStowagePlan({
           </table>
         </div>
       </div>
+
+      {/* VALIDACIÓN DE ESTIAJE Y CALADO EN MODO FLUVIAL */}
+      {isFluvial && (() => {
+        const convoy = typeof window !== 'undefined' ? window.activeConvoyData : null;
+        const dynamicDraft = Number(convoy?.maxDynamicDraftMeters || convoy?.maxDraftM || 2.60);
+        const minWaterLevel = Number(
+          (typeof document !== 'undefined' ? parseFloat(document.getElementById('min_water_level')?.value) : null) ||
+          convoy?.min_water_level ||
+          convoy?.minWaterLevelMeters ||
+          2.80
+        );
+        const isDraftApto = minWaterLevel >= dynamicDraft;
+        return (
+          <div id="visual-stowage-fluvial-validation-container" className="mt-4 pt-4 border-t border-emerald-200">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
+                <span className="text-emerald-700">💧</span>
+                <span>VALIDACIÓN DE ESTIAJE Y CALADO (DATABRIDGE RIVER INTEL)</span>
+              </h4>
+              <span className={`text-[10px] font-mono font-bold px-2.5 py-0.5 rounded border ${
+                isDraftApto ? 'bg-emerald-50 text-emerald-800 border-emerald-300' : 'bg-rose-50 text-rose-800 border-rose-300'
+              }`}>
+                {isDraftApto ? '✓ APTO PARA NAVEGAR' : '⚠️ ALERTA DE ESTIAJE'}
+              </span>
+            </div>
+
+            <div className="overflow-x-auto rounded-lg border border-slate-300 bg-white shadow-xs">
+              <table className="w-full text-left text-[11px] font-mono text-slate-800">
+                <thead className="bg-slate-100 text-[10px] uppercase text-slate-700 border-b border-slate-300">
+                  <tr>
+                    <th className="py-2.5 px-3">Parámetro Hidrológico</th>
+                    <th className="py-2.5 px-3">Valor Operativo</th>
+                    <th className="py-2.5 px-3">Umbral Hidrométrico</th>
+                    <th className="py-2.5 px-3">Margen UKC</th>
+                    <th className="py-2.5 px-3 text-right">Dictamen de Navegabilidad</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  <tr className="hover:bg-slate-50">
+                    <td className="py-2.5 px-3 font-semibold text-slate-900 flex items-center gap-1.5">
+                      <span className="text-blue-600">💧</span> Calado Dinámico del Convoy
+                    </td>
+                    <td className="py-2.5 px-3 font-bold text-blue-700">{dynamicDraft.toFixed(2)} m</td>
+                    <td className="py-2.5 px-3 text-slate-600">&lt;= {minWaterLevel.toFixed(2)} m (DataBridge)</td>
+                    <td className="py-2.5 px-3 font-bold text-emerald-700">{(minWaterLevel - dynamicDraft).toFixed(2)} m</td>
+                    <td className="py-2.5 px-3 text-right">
+                      <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                        isDraftApto ? 'bg-emerald-50 text-emerald-800 border border-emerald-300' : 'bg-rose-50 text-rose-800 border border-rose-300'
+                      }`}>
+                        {isDraftApto ? '✓ APTO PARA NAVEGAR' : '⚠️ ALERTA DE ESTIAJE'}
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

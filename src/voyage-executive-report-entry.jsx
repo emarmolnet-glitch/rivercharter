@@ -1,7 +1,11 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import VisualStowagePlan from './components/VisualStowagePlan.jsx';
-import VoyageExecutiveReportModal, { buildVoyageStowagePlan } from './components/VoyageExecutiveReportModal.jsx';
+import VoyageExecutiveReportModal, {
+  buildVoyageStowagePlan,
+  isFluvialContext,
+  adaptExecutiveReportModalToFluvial,
+} from './components/VoyageExecutiveReportModal.jsx';
 
 let voyageReportRoot = null;
 let visualStowageRoot = null;
@@ -51,6 +55,12 @@ export function mountVoyageExecutiveReport(container, props = {}) {
     />
   );
 
+  if (isFluvialContext(props)) {
+    setTimeout(() => {
+      adaptExecutiveReportModalToFluvial(mountPoint);
+    }, 50);
+  }
+
   return voyageReportRoot;
 }
 
@@ -59,6 +69,14 @@ export function mountVisualStowageInExecutiveModal(containerId = 'voyage-visual-
   if (!target) return null;
 
   const state = options.state || (typeof window !== 'undefined' ? window.State : {});
+  
+  // En Modo Fluvial de RiverCharter, se oculta estrictamente el contenedor del croquis naval
+  if (isFluvialContext(state)) {
+    target.style.display = 'none';
+    target.classList.add('hidden');
+    return null;
+  }
+
   const stowagePlan = options.stowagePlan || buildVoyageStowagePlan(state);
   const vesselType = options.vesselType || (state?.vessel ? `${state.vessel} (${state.class || 'Handysize'})` : 'Handysize Bulk Carrier 32.000 DWT');
 
@@ -83,7 +101,20 @@ if (typeof window !== 'undefined') {
   window.buildVoyageStowagePlan = buildVoyageStowagePlan;
   window.VoyageExecutiveReportModal = VoyageExecutiveReportModal;
   window.VisualStowagePlan = VisualStowagePlan;
+  window.isFluvialContext = isFluvialContext;
+  window.adaptExecutiveReportModalToFluvial = adaptExecutiveReportModalToFluvial;
+  window.generarReporteEjecutivo = function () {
+    if (typeof window.generateExecutiveReport === 'function') {
+      return window.generateExecutiveReport();
+    }
+  };
 }
 
-export { VoyageExecutiveReportModal, VisualStowagePlan, buildVoyageStowagePlan };
+export {
+  VoyageExecutiveReportModal,
+  VisualStowagePlan,
+  buildVoyageStowagePlan,
+  isFluvialContext,
+  adaptExecutiveReportModalToFluvial,
+};
 export default VoyageExecutiveReportModal;
