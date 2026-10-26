@@ -10359,6 +10359,33 @@
                         </div>
                     </div>
 
+                    <!-- REPORTE DE EFICIENCIA AMBIENTAL Y SOSTENIBILIDAD (VISTA EJECUTIVA) -->
+                    <div class="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-300 p-5 rounded-xl text-slate-800 shadow-sm" id="exec-sustainability-panel">
+                        <div class="flex items-center justify-between border-b border-emerald-200/80 pb-3 mb-3">
+                            <h4 class="text-xs font-bold uppercase tracking-wider text-emerald-950 flex items-center gap-2">
+                                <i class="fa-solid fa-leaf text-emerald-600"></i> Reporte de Eficiencia Ambiental y Sostenibilidad Sincro-modal
+                            </h4>
+                            <span class="text-[10px] font-mono bg-emerald-600 text-white px-2 py-0.5 rounded font-bold uppercase tracking-wide">
+                                Descarbonización Fluvial
+                            </span>
+                        </div>
+                        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div class="space-y-1">
+                                <p id="exec-sustainability-metric" class="text-base md:text-lg font-black text-emerald-900 tracking-tight">
+                                    Este convoy de 4 barcazas equivale a 480 camiones, reduciendo las emisiones de CO2 en un 72%
+                                </p>
+                                <p class="text-xs text-emerald-800/90 leading-relaxed">
+                                    <strong>Argumento de Venta Clave:</strong> Además del Beneficio Neto proyectado, esta alternativa sincro-modal ofrece a los cargadores una reducción drástica de su huella de carbono Scope 3 y un ahorro sustancial en costes terrestres evitados.
+                                </p>
+                            </div>
+                            <div class="shrink-0 bg-white border border-emerald-200 rounded-lg p-3 text-center min-w-[140px] shadow-sm">
+                                <span class="text-[10px] uppercase font-bold text-slate-500 block">Camiones Evitados</span>
+                                <span id="exec-sustainability-trucks" class="text-2xl font-black font-mono text-emerald-600">480</span>
+                                <span class="text-[10px] text-slate-400 block">unidades terrestres</span>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="bg-white border border-slate-200 p-4 rounded-xl shadow-sm text-slate-800">
                         <h4 class="text-xs text-slate-500 font-bold uppercase mb-3 tracking-wider">⏱️ Convoy y Duración Operativa</h4>
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-slate-700">
@@ -10556,6 +10583,48 @@
                             <span id="ais-radar-status-text">Radar en espera: Introduzca puertos y laycan</span>
                         </div>
 
+                        <!-- PANEL VISUAL: SERVICIOS DE INFORMACIÓN FLUVIAL (RIS) Y CARTOGRAFÍA DINÁMICA -->
+                        <div id="fluvial-ris-panel" class="mt-4 bg-slate-50 border border-sky-200 rounded-xl p-4 text-slate-800 shadow-sm">
+                            <div class="flex items-center justify-between border-b border-slate-200 pb-2 mb-3">
+                                <h3 class="text-xs font-black uppercase tracking-wider text-sky-900 flex items-center gap-2">
+                                    <i class="fa-solid fa-satellite-dish text-sky-600"></i> Servicios de Información Fluvial (RIS) y Restricciones
+                                </h3>
+                                <span class="text-[9px] font-bold uppercase tracking-wider bg-sky-100 text-sky-800 px-2 py-0.5 rounded border border-sky-200">
+                                    Cartografía Dinámica
+                                </span>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                                <label class="flex items-start gap-2.5 p-2.5 bg-white border border-slate-200 rounded-lg cursor-pointer hover:border-sky-300 transition">
+                                    <input type="checkbox" id="ris-sandbars-toggle" class="mt-0.5 rounded border-slate-300 text-sky-600 focus:ring-sky-500" onchange="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations();">
+                                    <div>
+                                        <span class="text-xs font-bold text-slate-900 block">Bancos de arena activos</span>
+                                        <span class="text-[10px] text-slate-500 leading-tight block">Simula paso crítico con calado útil reducido (-0.40 m) y eleva el riesgo de varadura.</span>
+                                    </div>
+                                </label>
+                                <label class="flex items-start gap-2.5 p-2.5 bg-white border border-slate-200 rounded-lg cursor-pointer hover:border-sky-300 transition">
+                                    <input type="checkbox" id="ris-currents-toggle" class="mt-0.5 rounded border-slate-300 text-sky-600 focus:ring-sky-500" onchange="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations();">
+                                    <div>
+                                        <span class="text-xs font-bold text-slate-900 block">Corrientes fuertes</span>
+                                        <span class="text-[10px] text-slate-500 leading-tight block">Simula resistencia hidrodinámica aguas arriba (+25% consumo de combustible en navegación).</span>
+                                    </div>
+                                </label>
+                            </div>
+                            <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200 text-[11px]">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-slate-500 font-medium">Estado Calado / Varadura:</span>
+                                    <span id="ris-grounding-risk-badge" class="px-2 py-0.5 rounded font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                        ✓ Navegación Segura
+                                    </span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-slate-500 font-medium">Ajuste Combustible RIS:</span>
+                                    <span id="ris-fuel-adjustment-badge" class="px-2 py-0.5 rounded font-mono font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                        Régimen Normal (1.0x)
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
                         <div id="route-configurator-root"></div>
 
                         <!-- Open-Meteo Marine Weather Section -->
@@ -10598,6 +10667,50 @@
                         
                         <div id="vessel-compatibility-warning" class="hidden bg-red-950/80 border border-red-500 text-red-200 font-bold p-3 rounded-lg mb-4 text-center tracking-wide text-sm">
                             NOTICE: THIS VESSEL IS NOT COMPATIBLE DUE TO EXCESS WEIGHT.
+                        </div>
+
+                        <!-- SELECTOR DE TIPO DE OPERACIÓN FLUVIAL (BLOQUE 2) -->
+                        <div id="fluvial-operation-type-selector" class="mb-4 bg-slate-50 border border-slate-200 p-3.5 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-slate-800 shadow-sm">
+                            <div>
+                                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Tipo de Operación Fluvial</span>
+                                <span id="label-active-operation-type" class="text-xs font-black text-blue-950">📦 Carga a Granel (Toneladas Métricas)</span>
+                            </div>
+                            <div class="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-100">
+                                <button type="button" id="btn-fluvial-bulk" onclick="window.setFluvialOperationType('BULK')" class="px-3 py-1.5 rounded-md text-xs font-bold bg-white text-blue-700 shadow-sm border border-slate-200 transition">
+                                    Carga a Granel
+                                </button>
+                                <button type="button" id="btn-fluvial-roro" onclick="window.setFluvialOperationType('RORO')" class="px-3 py-1.5 rounded-md text-xs font-bold text-slate-600 hover:text-slate-900 transition">
+                                    Ro-Ro / Carretera Flotante
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- PANEL DINÁMICO RO-RO DE CAPACIDAD (OCULTA CALADO POR PESO MUERTO) -->
+                        <div id="fluvial-roro-capacity-panel" class="hidden mb-4 bg-blue-50/70 border border-blue-200 p-4 rounded-xl text-slate-800 shadow-sm">
+                            <div class="flex items-center justify-between border-b border-blue-200 pb-2 mb-3">
+                                <h4 class="text-xs font-black uppercase tracking-wider text-blue-900 flex items-center gap-1.5">
+                                    <i class="fa-solid fa-truck-moving text-blue-700"></i> Capacidad Ro-Ro / Carretera Flotante
+                                </h4>
+                                <span class="text-[9px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded border border-blue-200 uppercase">
+                                    Calado Peso Muerto Inactivo
+                                </span>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div class="space-y-1">
+                                    <label for="roro-linear-meters" class="text-[10px] font-bold text-slate-700 uppercase">
+                                        Metros Lineales Disponibles (m)
+                                    </label>
+                                    <input type="number" id="roro-linear-meters" class="input-gc bg-white border border-slate-300 font-mono font-bold text-slate-900 w-full" value="800" oninput="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations();">
+                                    <span class="text-[10px] text-slate-500">Longitud total útil de carriles en cubierta</span>
+                                </div>
+                                <div class="space-y-1">
+                                    <label for="roro-truck-count" class="text-[10px] font-bold text-slate-700 uppercase">
+                                        Cantidad de Semirremolques / Camiones
+                                    </label>
+                                    <input type="number" id="roro-truck-count" class="input-gc bg-white border border-slate-300 font-mono font-bold text-slate-900 w-full" value="48" oninput="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations();">
+                                    <span class="text-[10px] text-slate-500">Capacidad unitaria de transporte rodado embarcado</span>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- ENSAMBLADOR DE CONVOY FLUVIAL (REACT CONVOYBUILDER) -->
@@ -11174,6 +11287,39 @@
                                     </label>
                                     <input type="number" id="fluvial-pda-pilotage" class="input-gc bg-white border border-slate-300 font-bold text-slate-900 w-full" value="2800" step="any" oninput="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations()">
                                     <span class="text-[10px] text-slate-500">Practicaje obligatorio y despachos</span>
+                                </div>
+                            </div>
+
+                            <!-- SUBMÓDULO DE TRANSFERENCIA INTERMODAL Y SINCRO-MODALIDAD -->
+                            <div id="fluvial-intermodal-panel" class="mt-4 pt-3 border-t border-slate-200">
+                                <div class="flex items-center justify-between mb-2">
+                                    <h4 class="text-xs font-bold uppercase tracking-wider text-teal-900 flex items-center gap-1.5">
+                                        <i class="fa-solid fa-arrows-split-up-and-left text-teal-600"></i> Submódulo: Transferencia Intermodal (Sincro-modalidad)
+                                    </h4>
+                                    <span class="text-[9px] font-bold uppercase tracking-wider bg-teal-100 text-teal-800 px-2 py-0.5 rounded border border-teal-200">
+                                        Costes Intermodales
+                                    </span>
+                                </div>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div class="space-y-1">
+                                        <label for="fluvial-transshipment-tariff" class="text-[10px] font-bold text-slate-700 uppercase flex items-center min-h-[24px]">
+                                            Tarifas de Transbordo Directo ($)
+                                        </label>
+                                        <input type="number" id="fluvial-transshipment-tariff" class="input-gc bg-white border border-slate-300 font-bold text-slate-900 w-full" value="1800" step="any" oninput="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations()">
+                                        <span class="text-[10px] text-slate-500">Transbordo directo barcaza a camión / tren</span>
+                                    </div>
+                                    <div class="space-y-1 bg-emerald-50/70 border border-emerald-200 p-2.5 rounded-lg">
+                                        <div class="flex justify-between items-center">
+                                            <label for="fluvial-land-savings" class="text-[10px] font-bold text-emerald-900 uppercase">
+                                                Ahorros Terrestres Estimados ($)
+                                            </label>
+                                            <span class="text-[9px] bg-emerald-600 text-white px-1.5 py-0.2 rounded font-bold uppercase tracking-wider">
+                                                (-) Deducción
+                                            </span>
+                                        </div>
+                                        <input type="number" id="fluvial-land-savings" class="input-gc bg-white border border-emerald-300 font-black text-emerald-700 w-full" value="3600" step="any" oninput="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations()">
+                                        <span class="text-[10px] text-emerald-700">Peajes, desgaste de flota y seguros de carretera evitados (resta al costo operativo total del viaje)</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -12371,6 +12517,35 @@
                                         </details>
                                         <div id="owner-purchase-effectiveness" class="mt-3 rounded-md border border-slate-700 bg-slate-950/40 px-2 py-1.5 text-[10px] font-bold text-slate-400">Efectividad de Compra: -</div>
                                     </article>
+                                </div>
+                            </section>
+
+                            <!-- REPORTE DE EFICIENCIA AMBIENTAL (ARGUMENTO DE VENTA BLOQUE 8) -->
+                            <section id="commercial-sustainability-panel" class="w-full rounded-2xl border border-emerald-300 bg-emerald-50/70 p-4 text-emerald-950 shadow-sm sm:p-5">
+                                <div class="flex items-center justify-between border-b border-emerald-200 pb-2 mb-3">
+                                    <div class="flex items-center gap-2">
+                                        <i class="fa-solid fa-leaf text-emerald-600 text-base"></i>
+                                        <h4 class="text-xs font-black uppercase tracking-wider text-emerald-950">
+                                            Eficiencia Ambiental y Sostenibilidad (Argumento de Cierre)
+                                        </h4>
+                                    </div>
+                                    <span class="text-[10px] font-bold bg-emerald-600 text-white px-2 py-0.5 rounded uppercase tracking-wide">
+                                        Venta Sostenible
+                                    </span>
+                                </div>
+                                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                    <div class="space-y-1">
+                                        <p id="commercial-sustainability-metric" class="text-sm md:text-base font-black text-emerald-900">
+                                            Este convoy de 4 barcazas equivale a 480 camiones, reduciendo las emisiones de CO2 en un 72%
+                                        </p>
+                                        <p class="text-xs text-emerald-800">
+                                            Utiliza esta métrica de descarbonización como argumento de venta clave junto al Beneficio Neto para asegurar la adjudicación del contrato frente a la carretera.
+                                        </p>
+                                    </div>
+                                    <div class="shrink-0 bg-white border border-emerald-200 px-3.5 py-2 rounded-lg text-center shadow-sm">
+                                        <span class="text-[9px] uppercase font-bold text-slate-500 block">Reducción CO2</span>
+                                        <span class="text-xl font-black text-emerald-600 font-mono">-72%</span>
+                                    </div>
                                 </div>
                             </section>
 
@@ -75713,14 +75888,70 @@ window.actualizarGrabCapacityVisibility = function() {
             }
         };
 
+        window.activeFluvialOperationType = 'BULK';
+
+        window.setFluvialOperationType = function(type) {
+            window.activeFluvialOperationType = type === 'RORO' ? 'RORO' : 'BULK';
+            const isRoro = window.activeFluvialOperationType === 'RORO';
+
+            const btnBulk = document.getElementById('btn-fluvial-bulk');
+            const btnRoro = document.getElementById('btn-fluvial-roro');
+            const roroPanel = document.getElementById('fluvial-roro-capacity-panel');
+            const labelOp = document.getElementById('label-active-operation-type');
+
+            if (isRoro) {
+                if (btnRoro) {
+                    btnRoro.className = 'px-3 py-1.5 rounded-md text-xs font-bold bg-white text-emerald-700 shadow-sm border border-slate-200 transition';
+                }
+                if (btnBulk) {
+                    btnBulk.className = 'px-3 py-1.5 rounded-md text-xs font-bold text-slate-600 hover:text-slate-900 transition';
+                }
+                if (labelOp) {
+                    labelOp.textContent = '🚛 Ro-Ro / Carretera Flotante (Metros lineales y camiones)';
+                }
+                if (roroPanel) {
+                    roroPanel.classList.remove('hidden');
+                }
+            } else {
+                if (btnBulk) {
+                    btnBulk.className = 'px-3 py-1.5 rounded-md text-xs font-bold bg-white text-blue-700 shadow-sm border border-slate-200 transition';
+                }
+                if (btnRoro) {
+                    btnRoro.className = 'px-3 py-1.5 rounded-md text-xs font-bold text-slate-600 hover:text-slate-900 transition';
+                }
+                if (labelOp) {
+                    labelOp.textContent = '📦 Carga a Granel (Toneladas Métricas)';
+                }
+                if (roroPanel) {
+                    roroPanel.classList.add('hidden');
+                }
+            }
+
+            try {
+                window.dispatchEvent(new CustomEvent('fluvial-operation-type-changed', { detail: { type: window.activeFluvialOperationType } }));
+            } catch (_) {}
+
+            window.updateFluvialCalculations();
+        };
+
         window.updateFluvialCalculations = function() {
             const convoy = window.activeConvoyData;
+            const isRoro = (window.activeFluvialOperationType === 'RORO') || (convoy?.operationType === 'RORO');
+
+            // 1. Capacidad y Tipo de Operación
             let totalCapacity = convoy?.totalCapacityMt || 12000;
             const inputCargoQty = parseFloat(document.getElementById('cargo-qty')?.value);
             if (!convoy?.totalCapacityMt && !isNaN(inputCargoQty) && inputCargoQty > 0) {
                 totalCapacity = inputCargoQty;
             }
 
+            const roroLinearMeters = parseFloat(document.getElementById('roro-linear-meters')?.value) || convoy?.totalLinearMeters || 800;
+            const roroTruckCount = parseFloat(document.getElementById('roro-truck-count')?.value) || convoy?.totalTruckCount || 48;
+            if (isRoro) {
+                totalCapacity = convoy?.totalCapacityMt || (roroTruckCount * 25);
+            }
+
+            // 2. Rutas y Tiempos de Navegación
             const distLaden = parseFloat(document.getElementById('dist-laden')?.value) || 600;
             const distBallast = parseFloat(document.getElementById('dist-ballast')?.value) || 0;
             const totalDist = distLaden + distBallast;
@@ -75732,6 +75963,42 @@ window.actualizarGrabCapacityVisibility = function() {
             const delayDays = lockWaitDays + customsDelayDays;
             const totalDays = Math.max(0.5, sailingDays + delayDays);
 
+            // 3. Alertas RIS y Cartografía Dinámica
+            const sandbarsActive = (document.getElementById('ris-sandbars-toggle')?.checked) ?? (convoy?.risSandbarsActive ?? false);
+            const currentsActive = (document.getElementById('ris-currents-toggle')?.checked) ?? (convoy?.risStrongCurrentsActive ?? false);
+
+            const minWaterLevel = parseFloat(document.getElementById('min_water_level')?.value) || convoy?.min_water_level || 2.80;
+            const maxDraft = convoy?.maxDynamicDraftMeters || convoy?.maxDraftM || 2.60;
+            const effectiveWaterDepth = sandbarsActive ? Math.max(0, minWaterLevel - 0.40) : minWaterLevel;
+            const underKeelMargin = effectiveWaterDepth - maxDraft;
+
+            const badgeGrounding = document.getElementById('ris-grounding-risk-badge');
+            if (badgeGrounding) {
+                if (effectiveWaterDepth < maxDraft) {
+                    badgeGrounding.className = 'px-2 py-0.5 rounded font-bold bg-red-100 text-red-800 border border-red-300';
+                    badgeGrounding.textContent = '⚠️ RIESGO CRÍTICO (Calado ' + maxDraft.toFixed(2) + 'm > Fondo ' + effectiveWaterDepth.toFixed(2) + 'm)';
+                } else if (underKeelMargin < 0.30) {
+                    badgeGrounding.className = 'px-2 py-0.5 rounded font-bold bg-amber-100 text-amber-800 border border-amber-300';
+                    badgeGrounding.textContent = '⚡ ALERTA (Margen bajo: ' + underKeelMargin.toFixed(2) + 'm)';
+                } else {
+                    badgeGrounding.className = 'px-2 py-0.5 rounded font-bold bg-emerald-100 text-emerald-800 border border-emerald-300';
+                    badgeGrounding.textContent = '✓ Navegación Segura (Margen: ' + underKeelMargin.toFixed(2) + 'm)';
+                }
+            }
+
+            const fuelMultiplier = currentsActive ? 1.25 : 1.0;
+            const badgeFuel = document.getElementById('ris-fuel-adjustment-badge');
+            if (badgeFuel) {
+                if (currentsActive) {
+                    badgeFuel.className = 'px-2 py-0.5 rounded font-mono font-bold bg-amber-100 text-amber-800 border border-amber-300';
+                    badgeFuel.textContent = 'Corrientes Fuertes (+25% bunker navegación)';
+                } else {
+                    badgeFuel.className = 'px-2 py-0.5 rounded font-mono font-bold bg-slate-100 text-slate-700 border border-slate-200';
+                    badgeFuel.textContent = 'Régimen Normal (1.0x)';
+                }
+            }
+
+            // 4. Costes Operativos y Combustible
             const tugDailyOpex = parseFloat(document.getElementById('fluvial-opex-tugboat')?.value) || 3200;
             const bargesDailyCapex = parseFloat(document.getElementById('fluvial-capex-barges')?.value) || 2400;
 
@@ -75742,7 +76009,7 @@ window.actualizarGrabCapacityVisibility = function() {
             const fuelIdleRate = parseFloat(document.getElementById('fluvial-fuel-idle-rate')?.value) || 0.8;
             const fuelPrice = parseFloat(document.getElementById('fluvial-fuel-price')?.value) || 780;
 
-            const fuelTons = (fuelSailingRate * sailingDays) + (fuelIdleRate * delayDays);
+            const fuelTons = (fuelSailingRate * fuelMultiplier * sailingDays) + (fuelIdleRate * delayDays);
             const totalBunkerCost = fuelTons * fuelPrice;
 
             const pdaLocks = parseFloat(document.getElementById('fluvial-pda-locks')?.value) || 0;
@@ -75750,23 +76017,46 @@ window.actualizarGrabCapacityVisibility = function() {
             const pdaPilotage = parseFloat(document.getElementById('fluvial-pda-pilotage')?.value) || 0;
             const totalPda = pdaLocks + pdaTolls + pdaPilotage;
 
-            const totalConvoyCost = tugTotalOpex + bargesTotalCapex + totalBunkerCost + totalPda;
+            // 5. Costos de Sincro-modalidad y Ahorros Terrestres Estimados (Deducción)
+            const transshipmentTariff = parseFloat(document.getElementById('fluvial-transshipment-tariff')?.value) ?? (convoy?.directTransshipmentTariff || 0);
+            const estimatedLandSavings = parseFloat(document.getElementById('fluvial-land-savings')?.value) ?? (convoy?.estimatedLandSavings || 0);
 
+            const grossOperatingCost = tugTotalOpex + bargesTotalCapex + totalBunkerCost + totalPda + transshipmentTariff;
+            const totalConvoyCost = Math.max(0, grossOperatingCost - estimatedLandSavings);
+
+            // 6. Ingresos y TCE
             const sellingFreight = parseFloat(document.getElementById('freight-sell')?.value) || 35.0;
             const grossRevenue = sellingFreight * totalCapacity;
             const netProfit = grossRevenue - totalConvoyCost;
-            const dailyTce = totalDays > 0 ? (grossRevenue - totalBunkerCost - totalPda) / totalDays : 0;
+            const dailyTce = totalDays > 0 ? (grossRevenue - totalBunkerCost - totalPda - transshipmentTariff + estimatedLandSavings) / totalDays : 0;
 
             const costPerTon = totalCapacity > 0 ? (totalConvoyCost / totalCapacity) : 0;
             const costPerTonMotor = totalCapacity > 0 ? ((tugTotalOpex + totalBunkerCost) / totalCapacity) : 0;
             const costPerTonBarges = totalCapacity > 0 ? (bargesTotalCapex / totalCapacity) : 0;
 
-            // Bloque 8 outputs
+            // 7. Reporte de Eficiencia Ambiental y Sostenibilidad
+            const bargeCount = convoy?.bargeCount || (convoy?.barges ? convoy.barges.length : (convoy?.bargeIds ? convoy.bargeIds.length : 4));
+            const truckEquivalent = isRoro ? roroTruckCount : Math.max(1, Math.round(totalCapacity / 25));
+            const co2ReductionPercent = 72;
+            const sustainabilityText = 'Este convoy de ' + bargeCount + ' barcazas equivale a ' + truckEquivalent + ' camiones, reduciendo las emisiones de CO2 en un ' + co2ReductionPercent + '%';
+
+            // Actualización Panel de Sostenibilidad (Vista Ejecutiva)
+            const elExecSustMetric = document.getElementById('exec-sustainability-metric');
+            if (elExecSustMetric) elExecSustMetric.textContent = sustainabilityText;
+
+            const elExecSustTrucks = document.getElementById('exec-sustainability-trucks');
+            if (elExecSustTrucks) elExecSustTrucks.textContent = String(truckEquivalent);
+
+            // Actualización Banner Comercial (Bloque 8)
+            const elCommSustMetric = document.getElementById('commercial-sustainability-metric');
+            if (elCommSustMetric) elCommSustMetric.textContent = sustainabilityText;
+
+            // 8. Salidas Bloque 8 (Resultados)
             const elNetProfitCharterer = document.getElementById('res-net-profit-charterer');
             if (elNetProfitCharterer) elNetProfitCharterer.textContent = '$' + Math.round(netProfit).toLocaleString() + ' USD';
 
             const elTceLabel = document.getElementById('res-tce-label');
-            if (elTceLabel) elTceLabel.textContent = 'TCE Fluvial: $' + Math.round(dailyTce).toLocaleString() + ' / día (Total: $' + Math.round(grossRevenue - totalBunkerCost - totalPda).toLocaleString() + ')';
+            if (elTceLabel) elTceLabel.textContent = 'TCE Fluvial: $' + Math.round(dailyTce).toLocaleString() + ' / día (Total: $' + Math.round(grossRevenue - totalBunkerCost - totalPda - transshipmentTariff + estimatedLandSavings).toLocaleString() + ')';
 
             const elGrossRevenue = document.getElementById('res-owner-gross-revenue');
             if (elGrossRevenue) elGrossRevenue.textContent = '$' + Math.round(grossRevenue).toLocaleString();
@@ -75777,7 +76067,7 @@ window.actualizarGrabCapacityVisibility = function() {
             const elFinalNet = document.getElementById('res-owner-final-net');
             if (elFinalNet) elFinalNet.textContent = '$' + Math.round(netProfit).toLocaleString();
 
-            // Dashboard Ejecutivo
+            // 9. Dashboard Ejecutivo (Kpis superiores)
             const elExecNetProfit = document.getElementById('exec-fluvial-net-profit');
             if (elExecNetProfit) elExecNetProfit.textContent = '$' + Math.round(netProfit).toLocaleString() + ' USD';
 
@@ -75803,7 +76093,13 @@ window.actualizarGrabCapacityVisibility = function() {
             if (elExecChartererProfit) elExecChartererProfit.textContent = '$' + Math.round(netProfit).toLocaleString() + ' USD';
 
             const elExecCargoQty = document.getElementById('exec-cargo-qty');
-            if (elExecCargoQty) elExecCargoQty.textContent = Math.round(totalCapacity).toLocaleString() + ' MT';
+            if (elExecCargoQty) {
+                if (isRoro) {
+                    elExecCargoQty.textContent = roroTruckCount + ' camiones (' + roroLinearMeters + ' m)';
+                } else {
+                    elExecCargoQty.textContent = Math.round(totalCapacity).toLocaleString() + ' MT';
+                }
+            }
         };
 
         window.applyRiverCharterVisibility = function() {

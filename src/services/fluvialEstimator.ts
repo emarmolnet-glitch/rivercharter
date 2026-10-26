@@ -55,6 +55,9 @@ export interface CargoBargeInput {
   dailyRate?: number;
   dailyCharterRate?: number;
   dailyAmortizationCost?: number;
+  operationType?: string;
+  linearMeters?: number;
+  truckCount?: number;
 }
 
 export interface CargoCostParams {
@@ -120,6 +123,28 @@ export interface FluvialPdaBreakdown {
   formula: string;
 }
 
+export interface IntermodalTransferBreakdown {
+  directTransshipmentTariff: number; // Tarifa transbordo directo (barcaza a camión/tren)
+  estimatedLandSavings: number; // Ahorros Terrestres Estimados (peajes, desgaste de flota y seguros de carretera evitados)
+  netIntermodalImpact: number; // transbordo - ahorros (deducción que resta al costo si el ahorro supera la tarifa)
+  formula: string;
+}
+
+export interface RisAlertsParams {
+  sandbarsActive?: boolean; // Bancos de arena activos
+  strongCurrents?: boolean; // Corrientes fuertes
+  speedImpactPercent?: number; // Ajuste porcentaje en velocidad / tiempo
+  fuelImpactPercent?: number; // Ajuste porcentaje en consumo combustible
+}
+
+export interface FluvialSustainabilityMetrics {
+  bargeCount: number;
+  truckEquivalent: number;
+  co2ReductionPercent: number;
+  co2SavedTons: number;
+  formattedMetric: string; // "Este convoy de [X] barcazas equivale a [Y] camiones, reduciendo las emisiones de CO2 en un [Z]%"
+}
+
 export interface FluvialExecutiveMetrics {
   grossFreightRevenue: number;
   freightRatePerTon: number;
@@ -135,6 +160,9 @@ export interface FluvialExecutiveMetrics {
   totalDays: number;
   isProfitable: boolean;
   summary: string;
+  sustainability?: FluvialSustainabilityMetrics;
+  intermodal?: IntermodalTransferBreakdown;
+  risGroundingRisk?: 'SAFE' | 'WARNING' | 'CRITICAL';
 }
 
 export interface FluvialVoyageEstimateParams {
@@ -163,6 +191,15 @@ export interface FluvialVoyageEstimateParams {
   pda?: FluvialPdaExpenses;
   freightRatePerTon?: number;
   freightLumpsum?: number;
+  operationType?: string; // 'BULK' o 'RORO'
+  totalLinearMeters?: number;
+  totalTruckCount?: number;
+  directTransshipmentTariff?: number; // Tarifa transbordo directo
+  estimatedLandSavings?: number; // Ahorros Terrestres Estimados (deducción)
+  risAlerts?: RisAlertsParams;
+  risSandbarsActive?: boolean;
+  risStrongCurrentsActive?: boolean;
+  minWaterLevel?: number;
 }
 
 export interface FluvialEstimateResult {
@@ -170,6 +207,8 @@ export interface FluvialEstimateResult {
   cargoCost: CargoCostBreakdown;
   demurrageCost: DemurrageCostBreakdown;
   pdaCost: FluvialPdaBreakdown;
+  intermodalCost: IntermodalTransferBreakdown;
+  sustainability: FluvialSustainabilityMetrics;
   baseVoyageCost: number;
   totalVoyageCost: number;
   totalCargoTons: number;
@@ -181,9 +220,53 @@ export interface FluvialEstimateResult {
 }
 
 /**
- * Estima el consumo diario de combustible (MT/día) a partir de la potencia del motor (HP).
- * Un remolcador fluvial estándar de línea navega a un régimen crucero del ~75-80% MCR.
+ * Calcula métricas de sostenibilidad comparando el transporte fluvial vs terrestre.
+ * Genera la métrica comercial requerida: "Este convoy de [X] barcazas equivale a [Y] camiones, reduciendo las emisiones de CO2 en un [Z]%".
  */
+export function calculateSustainabilityMetrics(params: {
+  bargeCount: number;
+  totalCargoTons?: number;
+  operationType?: string;
+  truckCount?: number;
+  linearMeters?: number;
+  distanceKm?: number;
+}): FluvialSustainabilityMetrics {
+  const bargeCount = Math.max(1, Number(params.bargeCount) || 1);
+  const isRoro = params.operationType === 'RORO' || params.operationType === 'Ro-Ro / Carretera Flotante';
+
+  let truckEquivalent = 0;
+  if (isRoro) {
+    if (params.truckCount && params.truckCount > 0) {
+      truckEquivalent = Math.round(Number(params.truckCount));
+    } else if (params.linearMeters && params.linearMeters > 0) {
+      // Un semirremolque estándar con tractora ocupa ~16.5 metros lineales
+      truckEquivalent = Math.max(1, Math.round(Number(params.linearMeters) / 16.5));
+    } else {
+      truckEquivalent = bargeCount * 45; // Promedio estándar barcaza Ro-Ro
+    }
+  } else {
+    const cargoTons = Number(params.totalCargoTons) || (bargeCount * 1500);
+    // Un camión de carretera estándar carga 25 TM netas
+    truckEquivalent = Math.max(1, Math.round(cargoTons / 25));
+  }
+
+  // Las operaciones fluviales sincro-modales reducen ~72% de emisiones CO2 frente al camión diésel de larga distancia
+  const co2ReductionPercent = 72;
+  const distance = Math.max(100, Number(params.distanceKm) || 600);
+  const cargoWeight = isRoro ? truckEquivalent * 25 : (Number(params.totalCargoTons) || truckEquivalent * 25);
+  // Carretera emite ~95g CO2/t-km vs fluvial ~27g CO2/t-km -> Ahorro ~68g CO2/t-km
+  const co2SavedTons = Number(((cargoWeight * distance * 0.068) / 1000).toFixed(1));
+
+  const formattedMetric = `Este convoy de ${bargeCount} barcazas equivale a ${truckEquivalent} camiones, reduciendo las emisiones de CO2 en un ${co2ReductionPercent}%`;
+
+  return {
+    bargeCount,
+    truckEquivalent,
+    co2ReductionPercent,
+    co2SavedTons,
+    formattedMetric,
+  };
+}
 export function estimateFuelConsumptionDaily(enginePowerHp?: number | null): number {
   const hp = Number(enginePowerHp) || 0;
   if (hp <= 0) return 4.2; // Consumo promedio por defecto para empujador mediano
@@ -424,12 +507,37 @@ export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): Fluv
     pda,
     freightRatePerTon = 0,
     freightLumpsum = 0,
+    operationType = 'BULK',
+    totalLinearMeters,
+    totalTruckCount,
+    directTransshipmentTariff = 0,
+    estimatedLandSavings = 0,
+    risAlerts,
+    risSandbarsActive,
+    risStrongCurrentsActive,
+    minWaterLevel = 2.8,
   } = params;
 
-  // 1. Vector Motor (Consumo Navegando / Empujando la carga)
-  const effectiveSailingConsumption = sailingFuelTonsPerDay !== undefined
+  // Ajustes de Alertas RIS (Servicios de Información Fluvial)
+  const isSandbarsActive = Boolean(risAlerts?.sandbarsActive ?? risSandbarsActive);
+  const isStrongCurrentsActive = Boolean(risAlerts?.strongCurrents ?? risStrongCurrentsActive);
+
+  // Corrientes fuertes aumentan el consumo de combustible (+25%) y el esfuerzo de empuje
+  const currentMultiplier = isStrongCurrentsActive ? 1.25 : 1.0;
+
+  // Bancos de arena activos elevan el riesgo de varadura
+  const maxBargeDraft = barges.reduce((max, b) => Math.max(max, Number(b.dynamicDraft) || 0), 0);
+  const risGroundingRisk: 'SAFE' | 'WARNING' | 'CRITICAL' = isSandbarsActive
+    ? (maxBargeDraft >= (minWaterLevel - 0.4) ? 'CRITICAL' : 'WARNING')
+    : (maxBargeDraft > minWaterLevel ? 'CRITICAL' : 'SAFE');
+
+  // 1. Vector Motor (Consumo Navegando / Empujando la carga ajustado por corrientes RIS)
+  const baseSailingConsumption = sailingFuelTonsPerDay !== undefined
     ? sailingFuelTonsPerDay
-    : fuelConsumptionTonsPerDay;
+    : (fuelConsumptionTonsPerDay !== undefined
+        ? fuelConsumptionTonsPerDay
+        : estimateFuelConsumptionDaily(tugboat.enginePowerHp));
+  const effectiveSailingConsumption = Number((baseSailingConsumption * currentMultiplier).toFixed(2));
 
   const motorCost = calculateMotorCost({
     navigationDays,
@@ -462,9 +570,22 @@ export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): Fluv
   // 4. Gastos Portuarios y Fluviales (PDAs de Hidrovía)
   const pdaCost = calculateFluvialPda(pda || {});
 
-  // Totales
+  // 5. Transferencia Intermodal y Ahorros Sincro-modales Terrestres
+  const safeTransshipment = Math.max(0, Number(directTransshipmentTariff) || 0);
+  const safeLandSavings = Math.max(0, Number(estimatedLandSavings) || 0);
+  const netIntermodalImpact = Number((safeTransshipment - safeLandSavings).toFixed(2));
+  const intermodalCost: IntermodalTransferBreakdown = {
+    directTransshipmentTariff: safeTransshipment,
+    estimatedLandSavings: safeLandSavings,
+    netIntermodalImpact,
+    formula: `Transbordo ($${safeTransshipment.toLocaleString()}) - Ahorros Terrestres Evitados ($${safeLandSavings.toLocaleString()}) = ${netIntermodalImpact >= 0 ? '+' : ''}$${netIntermodalImpact.toLocaleString()} USD`,
+  };
+
+  // Totales (Los ahorros terrestres se restan al costo operativo del viaje)
   const baseVoyageCost = Number((motorCost.totalMotorCost + cargoCost.totalCargoCost).toFixed(2));
-  const totalVoyageCost = Number((baseVoyageCost + demurrageCost.totalDemurrageCost + pdaCost.totalPdaCost).toFixed(2));
+  const totalVoyageCost = Number(
+    Math.max(0, baseVoyageCost + demurrageCost.totalDemurrageCost + pdaCost.totalPdaCost + safeTransshipment - safeLandSavings).toFixed(2)
+  );
 
   const calculatedCargoTons = barges.reduce((acc, b) => acc + (Number(b.capacity) || 0), 0);
   const totalCargoTons = explicitCargoTons !== undefined && explicitCargoTons > 0
@@ -497,14 +618,22 @@ export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): Fluv
   const dailyNetProfit = totalEffectiveDays > 0 ? Number((netProfit / totalEffectiveDays).toFixed(2)) : 0;
 
   // Time Charter Equivalent (TCE) diario:
-  // TCE = (Gross Freight Revenue - Voyage Expenses [Fuel + Fluvial PDAs + Barge Rental]) / Total Days
   const totalFuelCost = Number((motorCost.estimatedFuelCost + demurrageCost.idleFuelCost).toFixed(2));
-  const voyageExpenses = Number((totalFuelCost + pdaCost.totalPdaCost + cargoCost.totalCargoCost).toFixed(2));
+  const voyageExpenses = Number((totalFuelCost + pdaCost.totalPdaCost + cargoCost.totalCargoCost + safeTransshipment - safeLandSavings).toFixed(2));
   const dailyTce = totalEffectiveDays > 0
     ? Number(((grossFreightRevenue - voyageExpenses) / totalEffectiveDays).toFixed(2))
     : 0;
 
   const isProfitable = netProfit >= 0;
+
+  // Calculador de Sostenibilidad Fluvial vs Terrestre
+  const sustainability = calculateSustainabilityMetrics({
+    bargeCount: barges.length,
+    totalCargoTons,
+    operationType,
+    truckCount: totalTruckCount,
+    linearMeters: totalLinearMeters,
+  });
 
   const executiveSummary: FluvialExecutiveMetrics = {
     grossFreightRevenue,
@@ -520,16 +649,21 @@ export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): Fluv
     totalCargoTons,
     totalDays: totalEffectiveDays,
     isProfitable,
-    summary: `Beneficio Neto: $${netProfit.toLocaleString()} USD | Costo/TM: $${costPerCargoTon} (Motor: $${costPerTonMotor}, Barcazas: $${costPerTonBarges}) | TCE: $${dailyTce.toLocaleString()}/d`,
+    sustainability,
+    intermodal: intermodalCost,
+    risGroundingRisk,
+    summary: `Beneficio Neto: $${netProfit.toLocaleString()} USD | Sostenibilidad: ${sustainability.formattedMetric} | Costo/TM: $${costPerCargoTon} | TCE: $${dailyTce.toLocaleString()}/d`,
   };
 
-  const summary = `Costo Total Viaje: $${totalVoyageCost.toLocaleString()} USD | Motor: $${(motorCost.totalMotorCost + demurrageCost.totalDemurrageCost).toLocaleString()} | Carga: $${cargoCost.totalCargoCost.toLocaleString()} | PDAs: $${pdaCost.totalPdaCost.toLocaleString()} (${costPerCargoTon} USD/MT) | Beneficio: $${netProfit.toLocaleString()} | TCE: $${dailyTce.toLocaleString()}/d`;
+  const summary = `Costo Total Viaje: $${totalVoyageCost.toLocaleString()} USD (Ahorros Terrestres: -$${safeLandSavings.toLocaleString()}) | Motor: $${(motorCost.totalMotorCost + demurrageCost.totalDemurrageCost).toLocaleString()} | Carga: $${cargoCost.totalCargoCost.toLocaleString()} | Transbordo: $${safeTransshipment.toLocaleString()} | Beneficio: $${netProfit.toLocaleString()} | ${sustainability.formattedMetric}`;
 
   return {
     motorCost,
     cargoCost,
     demurrageCost,
     pdaCost,
+    intermodalCost,
+    sustainability,
     baseVoyageCost,
     totalVoyageCost,
     totalCargoTons,

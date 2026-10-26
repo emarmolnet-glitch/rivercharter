@@ -95,6 +95,8 @@ const DEFAULT_BARGES: Barge[] = [
     bargeType: 'HOPPER',
     capacity: 1500,
     dynamicDraft: 2.7,
+    linearMeters: 660,
+    truckCount: 40,
     iotTrackingId: 'IOT-BARGE-101',
     status: 'AVAILABLE',
   },
@@ -105,6 +107,8 @@ const DEFAULT_BARGES: Barge[] = [
     bargeType: 'HOPPER',
     capacity: 1500,
     dynamicDraft: 2.8,
+    linearMeters: 660,
+    truckCount: 40,
     iotTrackingId: 'IOT-BARGE-102',
     status: 'AVAILABLE',
   },
@@ -115,6 +119,8 @@ const DEFAULT_BARGES: Barge[] = [
     bargeType: 'TANKER',
     capacity: 1800,
     dynamicDraft: 3.1,
+    linearMeters: 750,
+    truckCount: 45,
     iotTrackingId: 'IOT-BARGE-201',
     status: 'AVAILABLE',
   },
@@ -125,6 +131,8 @@ const DEFAULT_BARGES: Barge[] = [
     bargeType: 'DECK',
     capacity: 1200,
     dynamicDraft: 2.4,
+    linearMeters: 580,
+    truckCount: 35,
     iotTrackingId: 'IOT-BARGE-301',
     status: 'AVAILABLE',
   },
@@ -135,6 +143,8 @@ const DEFAULT_BARGES: Barge[] = [
     bargeType: 'CONTAINER_BARGE',
     capacity: 2000,
     dynamicDraft: 3.2,
+    linearMeters: 850,
+    truckCount: 52,
     iotTrackingId: 'IOT-BARGE-401',
     status: 'AVAILABLE',
   },
@@ -145,7 +155,21 @@ const DEFAULT_BARGES: Barge[] = [
     bargeType: 'HOPPER',
     capacity: 1600,
     dynamicDraft: 2.9,
+    linearMeters: 700,
+    truckCount: 42,
     iotTrackingId: 'IOT-BARGE-103',
+    status: 'AVAILABLE',
+  },
+  {
+    id: 107,
+    name: 'Barcaza Ro-Ro Carretera Flotante R-501',
+    bargeNumber: 'B-PAR-501',
+    bargeType: 'RORO_BARGE',
+    capacity: 1800,
+    dynamicDraft: 2.2,
+    linearMeters: 800,
+    truckCount: 48,
+    iotTrackingId: 'IOT-BARGE-501',
     status: 'AVAILABLE',
   },
 ];
@@ -210,12 +234,60 @@ export function ConvoyBuilder({
     return d.toISOString().slice(0, 10);
   });
 
+  // Tipo de operación: Granel vs Ro-Ro / Carretera Flotante
+  const [operationType, setOperationType] = useState<'BULK' | 'RORO'>('BULK');
+
+  // Alertas RIS (Servicios de Información Fluvial)
+  const [risSandbarsActive, setRisSandbarsActive] = useState<boolean>(false);
+  const [risStrongCurrentsActive, setRisStrongCurrentsActive] = useState<boolean>(false);
+
+  // Submódulo de Transferencia Intermodal y Ahorros Terrestres Sincro-modales
+  const [directTransshipmentTariff, setDirectTransshipmentTariff] = useState<number>(1800);
+  const [estimatedLandSavings, setEstimatedLandSavings] = useState<number>(3600);
+
   // Modal para registrar nueva barcaza en flota
   const [showNewBargeModal, setShowNewBargeModal] = useState(false);
   const [newBargeName, setNewBargeName] = useState('');
   const [newBargeType, setNewBargeType] = useState<BargeType>('HOPPER');
   const [newBargeCapacity, setNewBargeCapacity] = useState('1500');
   const [newBargeDraft, setNewBargeDraft] = useState('2.8');
+  const [newBargeLinearMeters, setNewBargeLinearMeters] = useState('800');
+  const [newBargeTruckCount, setNewBargeTruckCount] = useState('48');
+
+  // Sincronización del tipo de operación con eventos externos de la UI host
+  useEffect(() => {
+    const handleOpChange = (e: any) => {
+      if (e.detail?.type === 'RORO' || e.detail?.type === 'BULK') {
+        setOperationType(e.detail.type);
+      }
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('fluvial-operation-type-changed', handleOpChange);
+      return () => window.removeEventListener('fluvial-operation-type-changed', handleOpChange);
+    }
+  }, []);
+
+  const handleSwitchOperationType = (type: 'BULK' | 'RORO') => {
+    setOperationType(type);
+    if (typeof window !== 'undefined') {
+      (window as any).activeFluvialOperationType = type;
+      const btnBulk = document.getElementById('btn-fluvial-bulk');
+      const btnRoro = document.getElementById('btn-fluvial-roro');
+      const roroPanel = document.getElementById('fluvial-roro-capacity-panel');
+      const labelOp = document.getElementById('label-active-operation-type');
+      if (type === 'RORO') {
+        if (btnRoro) btnRoro.className = 'px-3 py-1.5 rounded-md text-xs font-bold bg-white text-emerald-700 shadow-sm border border-slate-200 transition';
+        if (btnBulk) btnBulk.className = 'px-3 py-1.5 rounded-md text-xs font-bold text-slate-600 hover:text-slate-900 transition';
+        if (labelOp) labelOp.textContent = '🚛 Ro-Ro / Carretera Flotante (Metros lineales y camiones)';
+        if (roroPanel) roroPanel.classList.remove('hidden');
+      } else {
+        if (btnBulk) btnBulk.className = 'px-3 py-1.5 rounded-md text-xs font-bold bg-white text-blue-700 shadow-sm border border-slate-200 transition';
+        if (btnRoro) btnRoro.className = 'px-3 py-1.5 rounded-md text-xs font-bold text-slate-600 hover:text-slate-900 transition';
+        if (labelOp) labelOp.textContent = '📦 Carga a Granel (Toneladas Métricas)';
+        if (roroPanel) roroPanel.classList.add('hidden');
+      }
+    }
+  };
 
   // Remolcador actualmente asignado
   const selectedTugboat = useMemo(() => {
@@ -249,7 +321,26 @@ export function ConvoyBuilder({
     return Math.max(...coupledBarges.map((b) => Number(b.dynamicDraft) || 0));
   }, [coupledBarges]);
 
-  const isDraftSafe = maxDynamicDraft <= Number(minWaterLevel);
+  const isRoro = operationType === 'RORO';
+
+  // Metros lineales y camiones totales
+  const totalLinearMeters = useMemo(() => {
+    return coupledBarges.reduce((sum, b) => sum + (Number(b.linearMeters) || Math.round(Number(b.capacity) * 0.44)), 0);
+  }, [coupledBarges]);
+
+  const totalTruckCount = useMemo(() => {
+    return coupledBarges.reduce((sum, b) => sum + (Number(b.truckCount) || Math.round(Number(b.capacity) / 25)), 0);
+  }, [coupledBarges]);
+
+  // Si Ro-Ro está activo, el calado no depende del peso muerto
+  // Si bancos de arena activos, se reduce el margen de calado admisible (-0.40m)
+  const effectiveWaterLevel = risSandbarsActive ? Math.max(0.5, Number(minWaterLevel) - 0.4) : Number(minWaterLevel);
+  const isDraftSafe = isRoro ? true : (maxDynamicDraft <= effectiveWaterLevel);
+  const groundingRiskState: 'SAFE' | 'WARNING' | 'CRITICAL' = isRoro
+    ? 'SAFE'
+    : (maxDynamicDraft > effectiveWaterLevel
+        ? 'CRITICAL'
+        : (risSandbarsActive || maxDynamicDraft >= (effectiveWaterLevel - 0.2) ? 'WARNING' : 'SAFE'));
 
   // --------------------------------------------------------------------------
   // 2. ESTRUCTURA DE COSTES: OPEX DEL REMOLCADOR & CAPEX DE BARCAZAS
@@ -394,7 +485,17 @@ export function ConvoyBuilder({
       customsDelayDays: Number(customsDelayDays) || 0,
       pda: fluvialPdaExpenses,
       freightRatePerTon: Number(freightRatePerTon) || 0,
-      totalCargoTons: totalCapacityMt,
+      totalCargoTons: isRoro ? (totalTruckCount * 25) : totalCapacityMt,
+      operationType,
+      totalLinearMeters,
+      totalTruckCount,
+      directTransshipmentTariff: Number(directTransshipmentTariff) || 0,
+      estimatedLandSavings: Number(estimatedLandSavings) || 0,
+      risAlerts: {
+        sandbarsActive: risSandbarsActive,
+        strongCurrents: risStrongCurrentsActive,
+      },
+      minWaterLevel: effectiveWaterLevel,
     });
   }, [
     selectedTugboat,
@@ -411,6 +512,15 @@ export function ConvoyBuilder({
     fluvialPdaExpenses,
     freightRatePerTon,
     totalCapacityMt,
+    operationType,
+    totalLinearMeters,
+    totalTruckCount,
+    directTransshipmentTariff,
+    estimatedLandSavings,
+    risSandbarsActive,
+    risStrongCurrentsActive,
+    effectiveWaterLevel,
+    isRoro,
   ]);
 
   // Sincronización continua hacia componentes o scripts externos
@@ -418,11 +528,34 @@ export function ConvoyBuilder({
     onConvoyChange?.({
       tugboatId,
       bargeIds,
-      totalCapacityMt,
+      totalCapacityMt: isRoro ? (totalTruckCount * 25) : totalCapacityMt,
       maxDynamicDraftMeters: maxDynamicDraft,
+      operationType,
+      totalLinearMeters,
+      totalTruckCount,
+      risSandbarsActive,
+      risStrongCurrentsActive,
+      directTransshipmentTariff,
+      estimatedLandSavings,
+      sustainabilityText: decoupledEstimate?.sustainability?.formattedMetric,
       estimate: decoupledEstimate,
-    });
-  }, [tugboatId, bargeIds, totalCapacityMt, maxDynamicDraft, decoupledEstimate, onConvoyChange]);
+    } as any);
+  }, [
+    tugboatId,
+    bargeIds,
+    totalCapacityMt,
+    maxDynamicDraft,
+    operationType,
+    totalLinearMeters,
+    totalTruckCount,
+    risSandbarsActive,
+    risStrongCurrentsActive,
+    directTransshipmentTariff,
+    estimatedLandSavings,
+    decoupledEstimate,
+    onConvoyChange,
+    isRoro,
+  ]);
 
   // --------------------------------------------------------------------------
   // MANEJADORES DE BARCAZAS
@@ -460,13 +593,19 @@ export function ConvoyBuilder({
       return;
     }
     const newId = Date.now();
+    const isCustomRoro = isRoro || newBargeType === 'RORO_BARGE';
+    const parsedTrucks = Number(newBargeTruckCount) || 40;
+    const parsedLinear = Number(newBargeLinearMeters) || 660;
     const created: Barge = {
       id: newId,
       name: newBargeName.trim(),
       bargeNumber: `B-NEW-${newId.toString().slice(-4)}`,
       bargeType: newBargeType,
-      capacity: Number(newBargeCapacity) || 1500,
-      dynamicDraft: Number(newBargeDraft) || 2.8,
+      capacity: isCustomRoro ? (parsedTrucks * 25) : (Number(newBargeCapacity) || 1500),
+      dynamicDraft: isCustomRoro ? 2.2 : (Number(newBargeDraft) || 2.8),
+      linearMeters: parsedLinear,
+      truckCount: parsedTrucks,
+      operationType: isCustomRoro ? 'RORO' : 'BULK',
       iotTrackingId: `IOT-BARGE-${newId.toString().slice(-4)}`,
       status: 'AVAILABLE',
     };
@@ -848,6 +987,67 @@ export function ConvoyBuilder({
                     Bloquea el despacho del convoy si alguna barcaza supera este calado disponible.
                   </p>
                 </div>
+
+                {/* PANEL VISUAL RIS (SERVICIOS DE INFORMACIÓN FLUVIAL) */}
+                <div className="mt-3 bg-white border border-sky-200 rounded-lg p-3 space-y-2.5 shadow-sm">
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-1.5">
+                    <span className="text-[11px] font-bold text-sky-900 uppercase flex items-center gap-1.5">
+                      <i className="fa-solid fa-satellite-dish text-sky-600"></i>
+                      Servicios de Información Fluvial (RIS)
+                    </span>
+                    <span className="text-[9px] font-mono bg-sky-50 text-sky-700 border border-sky-200 px-1.5 py-0.5 rounded font-bold uppercase">
+                      Telemetría en Vivo
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="flex items-start gap-2 cursor-pointer text-xs text-slate-800 hover:text-slate-900">
+                      <input
+                        type="checkbox"
+                        id="convoy-ris-sandbars"
+                        checked={risSandbarsActive}
+                        onChange={(e) => setRisSandbarsActive(e.target.checked)}
+                        className="mt-0.5 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+                      />
+                      <div>
+                        <span className="font-semibold block text-[11px] text-slate-900">Bancos de arena activos</span>
+                        <span className="text-[10px] text-slate-500 block leading-tight">
+                          Simula restricción de paso crítico (-0.40m estiaje). Ajusta riesgo de varadura.
+                        </span>
+                      </div>
+                    </label>
+
+                    <label className="flex items-start gap-2 cursor-pointer text-xs text-slate-800 hover:text-slate-900">
+                      <input
+                        type="checkbox"
+                        id="convoy-ris-currents"
+                        checked={risStrongCurrentsActive}
+                        onChange={(e) => setRisStrongCurrentsActive(e.target.checked)}
+                        className="mt-0.5 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+                      />
+                      <div>
+                        <span className="font-semibold block text-[11px] text-slate-900">Corrientes fuertes</span>
+                        <span className="text-[10px] text-slate-500 block leading-tight">
+                          Resistencia hidrodinámica: ajusta consumo de combustible (+25%) y empuje.
+                        </span>
+                      </div>
+                    </label>
+                  </div>
+
+                  {/* Indicador reactivo de riesgo de varadura y consumo */}
+                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] font-mono">
+                    <span className="text-slate-600">Riesgo de Varadura:</span>
+                    <span className={`font-bold px-1.5 py-0.5 rounded ${
+                      groundingRiskState === 'CRITICAL'
+                        ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                        : groundingRiskState === 'WARNING'
+                        ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                        : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                    }`}>
+                      {groundingRiskState === 'CRITICAL' ? '⚠️ CRÍTICO' : groundingRiskState === 'WARNING' ? '⚡ ELEVADO' : '✓ SEGURO'}
+                    </span>
+                  </div>
+                </div>
               </div>
             </section>
 
@@ -862,8 +1062,46 @@ export function ConvoyBuilder({
                     </h3>
                   </div>
                   <span className="text-[10px] font-mono text-blue-700 font-bold bg-blue-50 border border-blue-200 px-2 py-0.5 rounded">
-                    {coupledBarges.length} Barcazas Acopladas ({totalCapacityMt.toLocaleString()} MT)
+                    {coupledBarges.length} Barcazas Acopladas ({isRoro ? `${totalLinearMeters} m lin · ${totalTruckCount} camiones` : `${totalCapacityMt.toLocaleString()} MT`})
                   </span>
+                </div>
+
+                {/* SELECTOR DE TIPO DE OPERACIÓN: GRANEL VS RO-RO */}
+                <div className="bg-white border border-slate-200 rounded-lg p-3 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                      Tipo de Operación Fluvial
+                    </span>
+                    <span className="text-xs font-black text-slate-900">
+                      {isRoro ? '🚗 Ro-Ro / Carretera Flotante' : '📦 Carga a Granel (Toneladas Métricas)'}
+                    </span>
+                  </div>
+                  <div className="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-100">
+                    <button
+                      type="button"
+                      id="btn-op-bulk"
+                      onClick={() => handleSwitchOperationType('BULK')}
+                      className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                        !isRoro
+                          ? 'bg-white text-blue-700 shadow-sm border border-slate-200'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Carga a Granel (TM)
+                    </button>
+                    <button
+                      type="button"
+                      id="btn-op-roro"
+                      onClick={() => handleSwitchOperationType('RORO')}
+                      className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                        isRoro
+                          ? 'bg-white text-blue-700 shadow-sm border border-slate-200'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Ro-Ro / Carretera Flotante
+                    </button>
+                  </div>
                 </div>
 
                 {/* CONTROLES PARA ACOPLAR BARCAZAS */}
@@ -878,7 +1116,7 @@ export function ConvoyBuilder({
                       <option value="">— Seleccionar barcaza disponible en puerto —</option>
                       {uncoupledBarges.map((b) => (
                         <option key={b.id} value={b.id}>
-                          {b.name} [{b.bargeType}] · {b.capacity} MT · Calado {b.dynamicDraft}m
+                          {b.name} [{b.bargeType}] {isRoro ? `· ${b.linearMeters || Math.round(b.capacity * 0.44)} m lin · ${b.truckCount || Math.round(b.capacity / 25)} camiones` : `· ${b.capacity} MT · Calado ${b.dynamicDraft}m`}
                         </option>
                       ))}
                     </select>
@@ -908,7 +1146,7 @@ export function ConvoyBuilder({
                 {showNewBargeModal && (
                   <form onSubmit={handleCreateCustomBarge} className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-3">
                     <div className="text-xs font-bold text-blue-700 uppercase flex justify-between items-center">
-                      <span>Registrar Nueva Barcaza en Flota</span>
+                      <span>Registrar Nueva Barcaza en Flota ({isRoro ? 'Modalidad Ro-Ro' : 'Modalidad Granel'})</span>
                       <button type="button" onClick={() => setShowNewBargeModal(false)} className="text-slate-500 hover:text-slate-900">✕</button>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs">
@@ -918,7 +1156,7 @@ export function ConvoyBuilder({
                           type="text"
                           value={newBargeName}
                           onChange={(e) => setNewBargeName(e.target.value)}
-                          placeholder="Ej. Barcaza Tolva T-900"
+                          placeholder={isRoro ? "Ej. Barcaza Ro-Ro R-900" : "Ej. Barcaza Tolva T-900"}
                           className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-slate-900 text-xs"
                           required
                         />
@@ -930,22 +1168,73 @@ export function ConvoyBuilder({
                           onChange={(e) => setNewBargeType(e.target.value as BargeType)}
                           className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-slate-900 text-xs"
                         >
-                          <option value="HOPPER">Tolva (Hopper)</option>
-                          <option value="TANKER">Tanque Líquidos</option>
-                          <option value="DECK">Cubierta Plana</option>
-                          <option value="CONTAINER_BARGE">Portacontenedor</option>
-                          <option value="BOX">Caja Cerrada</option>
+                          {isRoro ? (
+                            <>
+                              <option value="RORO_BARGE">Ro-Ro Carretera Flotante</option>
+                              <option value="DECK">Cubierta Plana (Deck)</option>
+                            </>
+                          ) : (
+                            <>
+                              <option value="HOPPER">Tolva (Hopper)</option>
+                              <option value="TANKER">Tanque Líquidos</option>
+                              <option value="DECK">Cubierta Plana</option>
+                              <option value="CONTAINER_BARGE">Portacontenedor</option>
+                              <option value="BOX">Caja Cerrada</option>
+                            </>
+                          )}
                         </select>
                       </div>
-                      <div>
-                        <label className="block text-[10px] text-slate-600 mb-0.5">Capacidad (MT)</label>
-                        <input
-                          type="number"
-                          value={newBargeCapacity}
-                          onChange={(e) => setNewBargeCapacity(e.target.value)}
-                          className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-slate-900 text-xs font-mono"
-                        />
-                      </div>
+
+                      {/* En modo Ro-Ro: Metros Lineales y Cantidad de Semirremolques/Camiones */}
+                      {isRoro ? (
+                        <>
+                          <div>
+                            <label className="block text-[10px] text-slate-600 mb-0.5">Metros Lineales (m)</label>
+                            <input
+                              type="number"
+                              value={newBargeLinearMeters}
+                              onChange={(e) => setNewBargeLinearMeters(e.target.value)}
+                              placeholder="Ej. 800"
+                              className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-slate-900 text-xs font-mono"
+                              required
+                            />
+                          </div>
+                          <div className="sm:col-span-2">
+                            <label className="block text-[10px] text-slate-600 mb-0.5">Semirremolques / Camiones</label>
+                            <input
+                              type="number"
+                              value={newBargeTruckCount}
+                              onChange={(e) => setNewBargeTruckCount(e.target.value)}
+                              placeholder="Ej. 48"
+                              className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-slate-900 text-xs font-mono"
+                              required
+                            />
+                          </div>
+                        </>
+                      ) : (
+                        /* En modo Granel: Capacidad MT y Calado por peso muerto */
+                        <>
+                          <div>
+                            <label className="block text-[10px] text-slate-600 mb-0.5">Capacidad (MT)</label>
+                            <input
+                              type="number"
+                              value={newBargeCapacity}
+                              onChange={(e) => setNewBargeCapacity(e.target.value)}
+                              className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-slate-900 text-xs font-mono"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] text-slate-600 mb-0.5">Calado por peso muerto (m)</label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={newBargeDraft}
+                              onChange={(e) => setNewBargeDraft(e.target.value)}
+                              className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-slate-900 text-xs font-mono"
+                            />
+                          </div>
+                        </>
+                      )}
                     </div>
                     <div className="flex justify-end gap-2 pt-1">
                       <button
@@ -957,7 +1246,7 @@ export function ConvoyBuilder({
                       </button>
                       <button
                         type="submit"
-                        className="px-3 py-1 bg-blue-600 hover:bg-cyan-500 text-slate-900 rounded text-xs font-bold"
+                        className="px-3 py-1 bg-blue-600 hover:bg-cyan-500 text-white rounded text-xs font-bold"
                       >
                         Crear y Acoplar
                       </button>
@@ -972,39 +1261,52 @@ export function ConvoyBuilder({
                       No hay barcazas acopladas al remolcador. Selecciona unidades de carga arriba.
                     </div>
                   ) : (
-                    coupledBarges.map((barge, index) => (
-                      <div
-                        key={barge.id}
-                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2.5 bg-white border border-slate-300 hover:border-slate-200 rounded-lg transition"
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="w-5 h-5 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-[10px] font-mono font-bold flex items-center justify-center shrink-0">
-                            {index + 1}
-                          </span>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-bold text-slate-900">{barge.name}</span>
-                              <span className="text-[9px] bg-slate-100 text-slate-700 border border-slate-200 px-1.5 py-0.5 rounded font-mono">
-                                {barge.bargeType}
-                              </span>
-                            </div>
-                            <div className="text-[11px] text-slate-600 flex items-center gap-3 mt-0.5">
-                              <span>Capacidad: <b>{Number(barge.capacity).toLocaleString()} MT</b></span>
-                              <span>Calado Dinámico: <b className={Number(barge.dynamicDraft) > minWaterLevel ? 'text-rose-400' : 'text-blue-700'}>{Number(barge.dynamicDraft).toFixed(2)} m</b></span>
+                    coupledBarges.map((barge, index) => {
+                      const bargeLinear = barge.linearMeters || Math.round((Number(barge.capacity) || 1500) * 0.44);
+                      const bargeTrucks = barge.truckCount || Math.round((Number(barge.capacity) || 1500) / 25);
+                      return (
+                        <div
+                          key={barge.id}
+                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2.5 bg-white border border-slate-300 hover:border-slate-200 rounded-lg transition"
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="w-5 h-5 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-[10px] font-mono font-bold flex items-center justify-center shrink-0">
+                              {index + 1}
+                            </span>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-slate-900">{barge.name}</span>
+                                <span className="text-[9px] bg-slate-100 text-slate-700 border border-slate-200 px-1.5 py-0.5 rounded font-mono">
+                                  {isRoro ? 'Ro-Ro Fluvial' : barge.bargeType}
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-slate-600 flex items-center gap-3 mt-0.5">
+                                {isRoro ? (
+                                  <>
+                                    <span>Metros Lineales: <b className="text-blue-700">{bargeLinear} m</b></span>
+                                    <span>Capacidad: <b className="text-emerald-700">{bargeTrucks} Camiones / Semirremolques</b></span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span>Capacidad: <b>{Number(barge.capacity).toLocaleString()} MT</b></span>
+                                    <span>Calado Dinámico: <b className={Number(barge.dynamicDraft) > effectiveWaterLevel ? 'text-rose-500 font-bold' : 'text-blue-700'}>{Number(barge.dynamicDraft).toFixed(2)} m</b></span>
+                                  </>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
 
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveBarge(barge.id)}
-                          className="self-end sm:self-center text-slate-600 hover:text-rose-400 bg-slate-100 hover:bg-red-50 border border-slate-200 hover:border-red-300 text-slate-600 hover:text-red-700 px-2.5 py-1 rounded text-xs transition flex items-center gap-1.5"
-                          title="Desacoplar barcaza del viaje"
-                        >
-                          <span>✕ Desacoplar</span>
-                        </button>
-                      </div>
-                    ))
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveBarge(barge.id)}
+                            className="self-end sm:self-center text-slate-600 hover:text-rose-600 bg-slate-100 hover:bg-red-50 border border-slate-200 hover:border-red-300 px-2.5 py-1 rounded text-xs transition flex items-center gap-1.5"
+                            title="Desacoplar barcaza del viaje"
+                          >
+                            <span>✕ Desacoplar</span>
+                          </button>
+                        </div>
+                      );
+                    })
                   )}
                 </div>
               </div>
@@ -1013,18 +1315,26 @@ export function ConvoyBuilder({
               <div className="pt-3 border-t border-slate-200 space-y-2">
                 <div className="bg-white border border-slate-200 rounded-lg p-2.5 grid grid-cols-3 gap-2 text-xs">
                   <div>
-                    <span className="text-[10px] text-slate-500 uppercase block">Capacidad Convoy</span>
-                    <span className="font-mono font-bold text-emerald-700">{totalCapacityMt.toLocaleString()} MT</span>
+                    <span className="text-[10px] text-slate-500 uppercase block">
+                      {isRoro ? 'Capacidad Ro-Ro' : 'Capacidad Convoy'}
+                    </span>
+                    <span className="font-mono font-bold text-emerald-700">
+                      {isRoro ? `${totalLinearMeters} m (${totalTruckCount} camiones)` : `${totalCapacityMt.toLocaleString()} MT`}
+                    </span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-500 uppercase block">Calado Máx</span>
-                    <span className={`font-mono font-bold ${isDraftSafe ? 'text-blue-700' : 'text-rose-400'}`}>
-                      {maxDynamicDraft.toFixed(2)} m
+                    <span className="text-[10px] text-slate-500 uppercase block">
+                      {isRoro ? 'Calado Operativo' : 'Calado Máx'}
+                    </span>
+                    <span className="font-mono font-bold text-blue-700">
+                      {isRoro ? '2.20 m (Deck Ligero)' : `${maxDynamicDraft.toFixed(2)} m`}
                     </span>
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-500 uppercase block">Estiaje Mínimo</span>
-                    <span className="font-mono font-bold text-slate-900">{Number(minWaterLevel).toFixed(2)} m</span>
+                    <span className="font-mono font-bold text-slate-900">
+                      {effectiveWaterLevel.toFixed(2)} m {risSandbarsActive && <span className="text-[9px] text-amber-600 font-normal">(-0.4m RIS)</span>}
+                    </span>
                   </div>
                 </div>
 
@@ -1329,6 +1639,73 @@ export function ConvoyBuilder({
           </section>
 
           {/* ------------------------------------------------------------------ */}
+          {/* 5. SUBMÓDULO DE TRANSFERENCIA INTERMODAL (SINCRO-MODALIDAD)        */}
+          {/* ------------------------------------------------------------------ */}
+          <section className="bg-slate-50 border border-slate-200 rounded-xl p-5 space-y-4">
+            <div className="border-b border-slate-200 pb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🔄</span>
+                <h3 className="text-xs md:text-sm font-bold text-teal-800 uppercase tracking-wider">
+                  Transferencia Intermodal y Sincro-modalidad
+                </h3>
+              </div>
+              <span className="text-[10px] font-mono bg-teal-50 text-teal-800 border border-teal-200 px-2 py-0.5 rounded font-bold uppercase">
+                Submódulo Costes Sincro-modales
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+              <div className="bg-white border border-slate-200 rounded-lg p-3 space-y-1 shadow-sm">
+                <label className="block text-[10px] font-bold text-slate-700 uppercase">
+                  Tarifas de Transbordo Directo (Barcaza a Camión/Tren) ($)
+                </label>
+                <input
+                  type="number"
+                  value={directTransshipmentTariff}
+                  onChange={(e) => setDirectTransshipmentTariff(Number(e.target.value))}
+                  className="w-full bg-white border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-900 font-mono font-bold"
+                />
+                <span className="text-[10px] text-slate-500">Operaciones de transbordo en terminal intermodal</span>
+              </div>
+
+              <div className="bg-emerald-50 border border-emerald-300 rounded-lg p-3 space-y-1 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[10px] font-bold text-emerald-900 uppercase">
+                    Ahorros Terrestres Estimados ($)
+                  </label>
+                  <span className="text-[9px] bg-emerald-600 text-white px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                    (-) Deducción Directa
+                  </span>
+                </div>
+                <input
+                  type="number"
+                  value={estimatedLandSavings}
+                  onChange={(e) => setEstimatedLandSavings(Number(e.target.value))}
+                  className="w-full bg-white border border-emerald-300 rounded px-2.5 py-1.5 text-xs text-emerald-900 font-mono font-black"
+                />
+                <span className="text-[10px] text-emerald-700">
+                  Peajes, desgaste de flota y seguros de carretera evitados (Resta al costo operativo)
+                </span>
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-lg p-3 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs">
+              <div>
+                <span className="font-semibold text-slate-800">Deducción de Ahorros Terrestres en Costo Total:</span>
+                <p className="text-[11px] text-slate-500">
+                  Los ${estimatedLandSavings.toLocaleString()} USD de ahorro terrestre reducen el costo neto del viaje fluvial.
+                </p>
+              </div>
+              <div className="text-right">
+                <span className="font-mono font-bold text-sm text-emerald-600">
+                  -${estimatedLandSavings.toLocaleString()} USD
+                </span>
+                <span className="text-[10px] block text-slate-400">Deducción aplicada</span>
+              </div>
+            </div>
+          </section>
+
+          {/* ------------------------------------------------------------------ */}
           {/* 5. GESTIÓN DE TIEMPOS Y DEMORAS (ESCLUSAS Y ADUANAS)                */}
           {/* ------------------------------------------------------------------ */}
           <section className="bg-slate-50 border border-slate-200 rounded-xl p-5 space-y-4">
@@ -1460,6 +1837,39 @@ export function ConvoyBuilder({
               <div className="bg-white border border-slate-300 rounded-lg px-3 py-1.5">
                 <span className="text-[10px] text-slate-500 uppercase block">Duración Total</span>
                 <span className="font-bold text-purple-700 font-mono">{totalOperationalDays} días</span>
+              </div>
+            </div>
+          </div>
+
+          {/* REPORTE DE EFICIENCIA AMBIENTAL Y SOSTENIBILIDAD */}
+          <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-300 rounded-xl p-5 shadow-sm space-y-2.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-emerald-200/80 pb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🌱</span>
+                <h4 className="text-xs md:text-sm font-bold text-emerald-950 uppercase tracking-wider">
+                  Reporte de Eficiencia Ambiental y Sostenibilidad
+                </h4>
+              </div>
+              <span className="text-[10px] font-mono bg-emerald-600 text-white px-2 py-0.5 rounded font-bold uppercase tracking-wide w-fit">
+                {decoupledEstimate?.sustainability?.co2ReductionPercent || 72}% Menos CO2
+              </span>
+            </div>
+
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <p className="text-base md:text-lg font-black text-emerald-900 tracking-tight">
+                  {decoupledEstimate?.sustainability?.formattedMetric || `Este convoy de ${coupledBarges.length} barcazas equivale a ${Math.round(totalCapacityMt / 25)} camiones, reduciendo las emisiones de CO2 en un 72%`}
+                </p>
+                <p className="text-xs text-emerald-800 mt-1">
+                  <b>Argumento Comercial Clave:</b> Impulsa el cierre comercial combinando un Beneficio Neto de <b>${decoupledEstimate?.executiveSummary?.netProfit.toLocaleString()} USD</b> con la reducción garantizada de la huella de carbono y el descongestionamiento de autopistas.
+                </p>
+              </div>
+              <div className="shrink-0 bg-white/90 border border-emerald-300 rounded-lg p-3 text-center min-w-[140px] shadow-sm">
+                <span className="text-[10px] text-emerald-800 uppercase font-bold block">Camiones Evitados</span>
+                <span className="text-2xl font-black font-mono text-emerald-700">
+                  {decoupledEstimate?.sustainability?.truckEquivalent || Math.round(totalCapacityMt / 25)}
+                </span>
+                <span className="text-[10px] text-slate-500 block">unidades de ruta</span>
               </div>
             </div>
           </div>
@@ -1618,11 +2028,25 @@ export function ConvoyBuilder({
                     <td className="py-2.5 px-3 text-right text-slate-800">${decoupledEstimate?.executiveSummary?.costPerTonBarges.toFixed(2)}</td>
                   </tr>
                   <tr>
-                    <td className="py-2.5 px-3 font-sans font-semibold text-sky-300">Gastos Fluviales (PDAs)</td>
+                    <td className="py-2.5 px-3 font-sans font-semibold text-sky-700">Gastos Fluviales (PDAs)</td>
                     <td className="py-2.5 px-3 text-slate-600 font-sans">Peajes de hidrovía, esclusas, practicaje y puertos</td>
                     <td className="py-2.5 px-3 text-right text-slate-800">POL / POD</td>
                     <td className="py-2.5 px-3 text-right text-slate-900 font-bold">${pdaBreakdown.totalPdaCost.toLocaleString()}</td>
                     <td className="py-2.5 px-3 text-right text-slate-800">${decoupledEstimate?.executiveSummary?.costPerTonPda.toFixed(2)}</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2.5 px-3 font-sans font-semibold text-teal-700">Sincro-modal: Transbordo Directo</td>
+                    <td className="py-2.5 px-3 text-slate-600 font-sans">Transferencia barcaza a camión / tren</td>
+                    <td className="py-2.5 px-3 text-right text-slate-800">Operación</td>
+                    <td className="py-2.5 px-3 text-right text-slate-900 font-bold">+${directTransshipmentTariff.toLocaleString()}</td>
+                    <td className="py-2.5 px-3 text-right text-slate-800">${totalCapacityMt > 0 ? (directTransshipmentTariff / totalCapacityMt).toFixed(2) : '0.00'}</td>
+                  </tr>
+                  <tr className="bg-emerald-50/70">
+                    <td className="py-2.5 px-3 font-sans font-semibold text-emerald-800">Sincro-modal: Ahorros Terrestres Evitados</td>
+                    <td className="py-2.5 px-3 text-emerald-700 font-sans">Peajes, seguros y desgaste de flota deducidos (-)</td>
+                    <td className="py-2.5 px-3 text-right text-emerald-800">Deducción</td>
+                    <td className="py-2.5 px-3 text-right text-emerald-700 font-bold">-${estimatedLandSavings.toLocaleString()}</td>
+                    <td className="py-2.5 px-3 text-right text-emerald-700">-${totalCapacityMt > 0 ? (estimatedLandSavings / totalCapacityMt).toFixed(2) : '0.00'}</td>
                   </tr>
                   <tr className="bg-slate-50 font-bold border-t-2 border-slate-200 text-slate-900">
                     <td className="py-3 px-3 font-sans text-slate-900 uppercase">Total Costos Operativos</td>

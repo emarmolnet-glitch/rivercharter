@@ -10,7 +10,9 @@
 
 export type TugboatStatus = 'OPERATIONAL' | 'MAINTENANCE' | 'OFFLINE' | 'STANDBY';
 
-export type BargeType = 'HOPPER' | 'TANKER' | 'DECK' | 'BOX' | 'CONTAINER_BARGE';
+export type BargeType = 'HOPPER' | 'TANKER' | 'DECK' | 'BOX' | 'CONTAINER_BARGE' | 'RORO_BARGE';
+
+export type OperationType = 'BULK' | 'RORO' | 'Carga a Granel' | 'Ro-Ro / Carretera Flotante';
 
 export type BargeStatus = 'AVAILABLE' | 'COUPLED' | 'MAINTENANCE' | 'OUT_OF_SERVICE';
 
@@ -57,6 +59,9 @@ export interface Barge {
   iotTrackingId?: string | null; // Identificador del sensor de rastreo telemétrico IoT
   status: BargeStatus;
   currentLocation?: string | null;
+  operationType?: OperationType;
+  linearMeters?: number | null; // Metros lineales para Ro-Ro
+  truckCount?: number | null; // Cantidad de semirremolques / camiones
   createdAt?: string | Date;
   updatedAt?: string | Date;
 }
@@ -225,6 +230,14 @@ export interface FluvialExecutiveMetrics {
   dailyTce: number; // TCE (Time Charter Equivalent) diario ($/día)
   totalCargoTons: number; // Toneladas de carga agregadas
   isProfitable: boolean; // Estado de rentabilidad
+  sustainabilityText?: string; // Métrica de sostenibilidad comercial
+  truckEquivalent?: number; // Equivalencia en camiones terrestres evitados
+  co2ReductionPercent?: number; // Porcentaje de reducción de emisiones CO2 (%)
+  co2SavedTons?: number; // Toneladas de CO2 evitadas
+  intermodalSavings?: number; // Ahorros terrestres estimados descontados ($)
+  operationType?: OperationType;
+  linearMeters?: number;
+  truckCount?: number;
 }
 
 /**
