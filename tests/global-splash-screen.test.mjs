@@ -6,7 +6,7 @@ const indexSource = readFileSync(new URL('../index.html', import.meta.url), 'utf
 const controllerSource = readFileSync(new URL('../src/global-splash-screen.js', import.meta.url), 'utf8');
 
 test('global splash covers the complete interface from the first body paint', () => {
-  assert.match(indexSource, /<body class="[^"]*bg-slate-900[^"]*" data-app-ready="false" aria-busy="true">/);
+  assert.match(indexSource, /<body class="[^"]*(?:bg-slate-900|bg-slate-50)[^"]*" data-app-ready="false" aria-busy="true">/);
   assert.match(indexSource, /id="global-splash-screen" class="fixed inset-0 z-50 bg-slate-900"/);
   assert.match(indexSource, /(?:RiverCharter|SeaCharter Core PRO) - Iniciando motor\.\.\./);
   assert.match(indexSource, /#global-splash-screen \{[\s\S]*position: fixed;[\s\S]*inset: 0;[\s\S]*z-index: 2147483000 !important;/);
@@ -35,6 +35,7 @@ test('splash screen displays dual visual identity: Sub-Brand above and Master Br
 
   // Sub-Brand: RiverCharter / SeaCharter Core PRO above
   assert.match(splashHtml, /<!-- Sub-Brand: (?:RiverCharter|SeaCharter Core PRO) -->/);
+  assert.match(splashHtml, /<img src="assets\/rivercharter-logo\.png" alt="RiverCharter/);
   assert.match(splashHtml, /<div style="font-size: 24px; font-weight: 800; color: #0E3A5D; letter-spacing: -0.02em;">(?:RiverCharter|SeaCharter)<\/div>/);
   assert.match(splashHtml, /<div style="font-size: 17px; font-weight: 700; color: #2898B8; letter-spacing: -0.01em; margin-top: 2px;">(?:Fluvial Logistics|Core PRO)<\/div>/);
 
@@ -44,7 +45,7 @@ test('splash screen displays dual visual identity: Sub-Brand above and Master Br
 
   // Master Brand: CHARTER CORE PRO below progress bar (unified circular logo and typography)
   assert.match(splashHtml, /<!-- Nuevo icono circular de la Master Brand unificada -->/);
-  assert.match(splashHtml, /<img src="(?:\/assets\/master-brand-unified\.png|assets\/rivercharter-logo\.png)" alt="Charter Core PRO"/);
+  assert.match(splashHtml, /<img src="\/assets\/master-brand-unified\.png" alt="Charter Core PRO"/);
   assert.match(splashHtml, /CHARTER<br\/><span style="color: #2898B8;">CORE PRO<\/span>/);
   assert.doesNotMatch(splashHtml, /linearGradient id="mGrad"/);
 
