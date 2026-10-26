@@ -30,6 +30,14 @@ export const STANDARD_LOCK_WIDTH_FEET = 110; // Esclusa estándar del Misisipi (
 export const DOUBLE_LOCKAGE_ADDITIONAL_HOURS_PER_LOCK = 3.5; // Inyección de +3.5 horas por esclusa si requiere esclusado doble
 export const DEFAULT_MANEUVER_FUEL_TONS_PER_HOUR = 0.15; // Consumo específico de maniobra/puerto (MT/hora)
 
+// Fase 4: Desembolsos de Puerto (PDA) y Tarifas de Terminal en RiverCharter
+export const DEFAULT_DOCKAGE_DAILY_RATE_PER_BARGE = 150; // Muellaje: Tarifa diaria por barcaza ($150/día/barcaza por defecto)
+export const DEFAULT_PILOTAGE_FEE = 800; // Practicaje / Amarre: Coste fijo por maniobra de entrada/salida ($800 por escala)
+export const DEFAULT_BULK_HANDLING_RATE_PER_TON = 3.50; // Modo Granel: Tarifa de estiba/desestiba ($3.50/MT)
+export const DEFAULT_BULK_PRODUCTIVITY_TONS_PER_HOUR = 250; // Modo Granel: Ritmo estándar de cinta/cuchara (250 MT/hora)
+export const DEFAULT_RORO_HANDLING_RATE_PER_UNIT = 45; // Modo Ro-Ro: Tarifa por unidad ($45/camión)
+export const DEFAULT_RORO_MINUTES_PER_TRUCK = 15; // Modo Ro-Ro: 15 minutos por camión embarque/desembarque rodado expedito
+
 export interface ConvoyGeometryParams {
   bargeCount: number;
   lockCount?: number;
@@ -453,6 +461,58 @@ export interface FluvialPdaExpenses {
   lockDues?: number; // Derechos de esclusas ($)
   riverPilotage?: number; // Practicaje fluvial ($)
   crossBorderTariffs?: number; // Aranceles transfronterizos ($)
+  // Fase 4: Matriz de Tarifas Portuarias Fluviales (PDA Matrix)
+  dockageDailyRatePerBarge?: number; // Muellaje: $150/día/barcaza por defecto
+  pilotageFee?: number; // Practicaje / Amarre: $800 por escala por defecto
+  handlingRatePerTon?: number; // Estiba granel: $3.50/MT por defecto
+  handlingRatePerUnit?: number; // Estiba Ro-Ro: $45/camión por defecto
+  bulkProductivityTonsPerHour?: number; // Ritmo granel: 250 MT/h
+  roroMinutesPerTruck?: number; // Ritmo Ro-Ro: 15 min/unidad
+  dockageCostOverride?: number;
+  handlingCostOverride?: number;
+  pilotageCostOverride?: number;
+  portOperatingHoursOverride?: number;
+}
+
+export interface TerminalPdaBreakdown {
+  operationType: 'BULK' | 'RORO';
+  dockageDailyRatePerBarge: number;
+  dockageCost: number;
+  pilotageFee: number;
+  handlingRate: number;
+  handlingRateUnit: string;
+  handlingCost: number;
+  portOperatingHours: number;
+  portOperatingDays: number;
+  portProductivityMetric: string;
+  productivityMetric?: string;
+  productivityRate: number;
+  portFuelTons: number;
+  portFuelCost: number;
+  totalTerminalCost: number;
+  formula: string;
+}
+
+export interface TerminalPdaParams {
+  bargeCount?: number;
+  operationType?: string;
+  cargoType?: string;
+  tonnage?: number;
+  adjustedTonnage?: number;
+  nominalTonnage?: number;
+  truckCount?: number;
+  dockageDailyRatePerBarge?: number;
+  pilotageFee?: number;
+  handlingRatePerTon?: number;
+  handlingRatePerUnit?: number;
+  bulkProductivityTonsPerHour?: number;
+  roroMinutesPerTruck?: number;
+  idleFuelTonsPerHour?: number;
+  fuelPricePerTon?: number;
+  dockageCostOverride?: number;
+  handlingCostOverride?: number;
+  pilotageCostOverride?: number;
+  portOperatingHoursOverride?: number;
 }
 
 export interface FluvialPdaBreakdown {
@@ -464,6 +524,16 @@ export interface FluvialPdaBreakdown {
   crossBorderTariffs: number;
   totalPdaCost: number;
   formula: string;
+  // Fase 4: Desglose Portuario y Terminal (PDA)
+  terminal?: TerminalPdaBreakdown;
+  dockageCost?: number;
+  pilotageFee?: number;
+  handlingCost?: number;
+  portOperatingHours?: number;
+  portOperatingDays?: number;
+  portFuelTons?: number;
+  portFuelCost?: number;
+  productivityMetric?: string;
 }
 
 export interface IntermodalTransferBreakdown {
@@ -516,6 +586,17 @@ export interface FluvialExecutiveMetrics {
   geometry?: ConvoyGeometryResult;
   convoyGeometry?: ConvoyGeometryResult;
   requiresDoubleLockage?: boolean;
+  sailingDays?: number;
+  // Fase 4: Desglose Portuario y Terminal (PDA)
+  terminalPda?: TerminalPdaBreakdown;
+  dockageCost?: number;
+  pilotageFee?: number;
+  handlingCost?: number;
+  portOperatingHours?: number;
+  portOperatingDays?: number;
+  portFuelTons?: number;
+  portFuelCost?: number;
+  portProductivityMetric?: string;
 }
 
 export interface FluvialVoyageEstimateParams {
@@ -576,6 +657,14 @@ export interface FluvialVoyageEstimateParams {
   lockWidthFeet?: number;
   maneuverFuelTonsPerHour?: number;
   customConvoyGeometry?: Partial<ConvoyGeometryParams>;
+  // Fase 4: Parámetros Portuarios y Terminales (PDA Matrix)
+  dockageDailyRatePerBarge?: number;
+  pilotageFee?: number;
+  handlingRatePerTon?: number;
+  handlingRatePerUnit?: number;
+  bulkProductivityTonsPerHour?: number;
+  roroMinutesPerTruck?: number;
+  includeTerminalHandling?: boolean;
 }
 
 export interface FluvialEstimateResult {
@@ -601,6 +690,14 @@ export interface FluvialEstimateResult {
   geometry?: ConvoyGeometryResult;
   convoyGeometry?: ConvoyGeometryResult;
   requiresDoubleLockage?: boolean;
+  sailingDays?: number;
+  // Fase 4: Desglose Portuario y Terminal (PDA)
+  terminalPda?: TerminalPdaBreakdown;
+  portOperatingHours?: number;
+  portOperatingDays?: number;
+  portFuelTons?: number;
+  portFuelCost?: number;
+  portProductivityMetric?: string;
   summary: string;
 }
 
@@ -781,11 +878,112 @@ export function calculateCargoCost(params: CargoCostParams): CargoCostBreakdown 
 }
 
 /**
+ * Fase 4: Módulo de Desembolsos de Puerto (PDA) y Tarifas de Terminal Fluviales
+ * 
+ * Automatiza los costes y tiempos de escala portuaria en USD:
+ * 1. Muellaje (Dockage): Tarifa diaria por barcaza atracada en terminal (dockageDailyRatePerBarge = $150/día/barcaza por defecto).
+ * 2. Practicaje / Amarre (Pilotage & Towage): Coste fijo por maniobra de entrada/salida ($800 por escala por defecto).
+ * 3. Rendimiento y Estiba/Desestiba (Terminal Handling):
+ *    - Modo Granel: handlingRatePerTon = $3.50/MT | portOperatingHours = adjustedTonnage / 250 MT/h
+ *    - Modo Ro-Ro: handlingRatePerUnit = $45/camión | portOperatingHours = (truckCount * 15 min) / 60
+ * 4. Consumo de búnker en puerto: Durante estas horas de estancia en puerto, el empujador consume búnker a régimen
+ *    de espera/auxiliares (idleFuelTonsPerHour).
+ */
+export function calculateTerminalPda(params: TerminalPdaParams): TerminalPdaBreakdown {
+  const opStr = String(params.operationType || params.cargoType || '').toUpperCase();
+  const isRoro = opStr.includes('RORO') || opStr.includes('RO-RO') || opStr.includes('RO_RO');
+  const bargeCount = Math.max(1, Number(params.bargeCount) || 1);
+  const dockageDailyRate = params.dockageDailyRatePerBarge !== undefined && params.dockageDailyRatePerBarge !== null
+    ? Math.max(0, Number(params.dockageDailyRatePerBarge))
+    : DEFAULT_DOCKAGE_DAILY_RATE_PER_BARGE;
+
+  const pilotage = params.pilotageCostOverride !== undefined && params.pilotageCostOverride !== null
+    ? Math.max(0, Number(params.pilotageCostOverride))
+    : (params.pilotageFee !== undefined && params.pilotageFee !== null ? Math.max(0, Number(params.pilotageFee)) : DEFAULT_PILOTAGE_FEE);
+
+  const idleFuelTonsPerHour = Math.max(0, Number(params.idleFuelTonsPerHour ?? DEFAULT_IDLE_FUEL_TONS_PER_HOUR));
+  const fuelPrice = Math.max(0, Number(params.fuelPricePerTon ?? DEFAULT_BUNKER_PRICE_USD_TON));
+
+  let portOperatingHours = 0;
+  let handlingRate = 0;
+  let handlingRateUnit = '';
+  let handlingCost = 0;
+  let portProductivityMetric = '';
+  let productivityRate = 0;
+
+  if (isRoro) {
+    const truckCount = Math.max(0, Number(params.truckCount) || 0);
+    const roroMinutes = Number(params.roroMinutesPerTruck) || DEFAULT_RORO_MINUTES_PER_TRUCK;
+    portOperatingHours = params.portOperatingHoursOverride !== undefined && params.portOperatingHoursOverride !== null
+      ? Math.max(0, Number(params.portOperatingHoursOverride))
+      : Number(((truckCount * roroMinutes) / 60).toFixed(2));
+    handlingRate = params.handlingRatePerUnit !== undefined && params.handlingRatePerUnit !== null
+      ? Math.max(0, Number(params.handlingRatePerUnit))
+      : DEFAULT_RORO_HANDLING_RATE_PER_UNIT;
+    handlingRateUnit = 'USD/camión';
+    handlingCost = params.handlingCostOverride !== undefined && params.handlingCostOverride !== null
+      ? Math.max(0, Number(params.handlingCostOverride))
+      : Number((truckCount * handlingRate).toFixed(2));
+    productivityRate = 4;
+    portProductivityMetric = '4 unidades/hora (15 min/camión)';
+  } else {
+    const tonnage = Math.max(0, Number(params.tonnage ?? params.adjustedTonnage ?? params.nominalTonnage) || (bargeCount * 1500));
+    const bulkProd = Number(params.bulkProductivityTonsPerHour) || DEFAULT_BULK_PRODUCTIVITY_TONS_PER_HOUR;
+    portOperatingHours = params.portOperatingHoursOverride !== undefined && params.portOperatingHoursOverride !== null
+      ? Math.max(0, Number(params.portOperatingHoursOverride))
+      : (bulkProd > 0 ? Number((tonnage / bulkProd).toFixed(2)) : 0);
+    handlingRate = params.handlingRatePerTon !== undefined && params.handlingRatePerTon !== null
+      ? Math.max(0, Number(params.handlingRatePerTon))
+      : DEFAULT_BULK_HANDLING_RATE_PER_TON;
+    handlingRateUnit = 'USD/MT';
+    handlingCost = params.handlingCostOverride !== undefined && params.handlingCostOverride !== null
+      ? Math.max(0, Number(params.handlingCostOverride))
+      : Number((tonnage * handlingRate).toFixed(2));
+    productivityRate = bulkProd;
+    portProductivityMetric = `${bulkProd} MT/hora (cinta/cuchara)`;
+  }
+
+  const portOperatingDays = Number((portOperatingHours / 24).toFixed(2));
+  const dockageCost = params.dockageCostOverride !== undefined && params.dockageCostOverride !== null
+    ? Math.max(0, Number(params.dockageCostOverride))
+    : Number((bargeCount * dockageDailyRate * portOperatingDays).toFixed(2));
+
+  const portFuelTons = Number((portOperatingHours * idleFuelTonsPerHour).toFixed(3));
+  const portFuelCost = Number((portFuelTons * fuelPrice).toFixed(2));
+
+  const totalTerminalCost = Number((dockageCost + pilotage + handlingCost).toFixed(2));
+  const formula = `Muellaje: $${dockageCost.toLocaleString()} (${bargeCount} b × $${dockageDailyRate}/d × ${portOperatingDays}d) + Practicaje: $${pilotage.toLocaleString()} + Estiba: $${handlingCost.toLocaleString()} (@$${handlingRate} ${handlingRateUnit}) = $${totalTerminalCost.toLocaleString()} USD`;
+
+  return {
+    operationType: isRoro ? 'RORO' : 'BULK',
+    dockageDailyRatePerBarge: dockageDailyRate,
+    dockageCost,
+    pilotageFee: pilotage,
+    handlingRate,
+    handlingRateUnit,
+    handlingCost,
+    portOperatingHours,
+    portOperatingDays,
+    portProductivityMetric,
+    productivityMetric: portProductivityMetric,
+    productivityRate,
+    portFuelTons,
+    portFuelCost,
+    totalTerminalCost,
+    formula,
+  };
+}
+
+/**
  * Calcula el desglose de gastos portuarios y fluviales de hidrovía (PDAs Fluviales)
  * Reemplaza las PDA oceánicas estándar con conceptos específicos fluviales:
- * tarifas de puertos POL/POD, peajes de hidrovía, derechos de esclusas, practicaje y aranceles.
+ * tarifas de puertos POL/POD, peajes de hidrovía, derechos de esclusas, practicaje y aranceles,
+ * integrando el módulo de Desembolsos de Puerto (PDA) y Tarifas de Terminal (Muellaje, Practicaje y Estiba).
  */
-export function calculateFluvialPda(params: FluvialPdaExpenses = {}): FluvialPdaBreakdown {
+export function calculateFluvialPda(
+  params: FluvialPdaExpenses = {},
+  terminalParams?: TerminalPdaParams | TerminalPdaBreakdown
+): FluvialPdaBreakdown {
   const loadPortTariff = Math.max(0, Number(params.loadPortTariff) || 0);
   const dischargePortTariff = Math.max(0, Number(params.dischargePortTariff) || 0);
   const waterwayTolls = Math.max(0, Number(params.waterwayTolls) || 0);
@@ -793,7 +991,7 @@ export function calculateFluvialPda(params: FluvialPdaExpenses = {}): FluvialPda
   const riverPilotage = Math.max(0, Number(params.riverPilotage) || 0);
   const crossBorderTariffs = Math.max(0, Number(params.crossBorderTariffs) || 0);
 
-  const totalPdaCost = Number((
+  const basePdaCost = Number((
     loadPortTariff +
     dischargePortTariff +
     waterwayTolls +
@@ -802,7 +1000,37 @@ export function calculateFluvialPda(params: FluvialPdaExpenses = {}): FluvialPda
     crossBorderTariffs
   ).toFixed(2));
 
-  const formula = `Puertos ($${(loadPortTariff + dischargePortTariff).toLocaleString()}) + Peajes Hidrovía ($${waterwayTolls.toLocaleString()}) + Esclusas ($${lockDues.toLocaleString()}) + Practicaje ($${riverPilotage.toLocaleString()}) + Aranceles ($${crossBorderTariffs.toLocaleString()}) = $${totalPdaCost.toLocaleString()} USD`;
+  let terminal: TerminalPdaBreakdown | undefined;
+  if (terminalParams && 'totalTerminalCost' in terminalParams) {
+    terminal = terminalParams as TerminalPdaBreakdown;
+  } else if (
+    terminalParams ||
+    params.dockageDailyRatePerBarge !== undefined ||
+    params.pilotageFee !== undefined ||
+    params.handlingRatePerTon !== undefined ||
+    params.handlingRatePerUnit !== undefined
+  ) {
+    terminal = calculateTerminalPda({
+      dockageDailyRatePerBarge: params.dockageDailyRatePerBarge,
+      pilotageFee: params.pilotageFee,
+      handlingRatePerTon: params.handlingRatePerTon,
+      handlingRatePerUnit: params.handlingRatePerUnit,
+      bulkProductivityTonsPerHour: params.bulkProductivityTonsPerHour,
+      roroMinutesPerTruck: params.roroMinutesPerTruck,
+      dockageCostOverride: params.dockageCostOverride,
+      handlingCostOverride: params.handlingCostOverride,
+      pilotageCostOverride: params.pilotageCostOverride,
+      portOperatingHoursOverride: params.portOperatingHoursOverride,
+      ...(terminalParams as TerminalPdaParams),
+    });
+  }
+
+  const terminalCost = terminal ? terminal.totalTerminalCost : 0;
+  const totalPdaCost = Number((basePdaCost + terminalCost).toFixed(2));
+
+  const formula = terminal
+    ? `Gastos Fluviales ($${basePdaCost.toLocaleString()}) + Terminal ($${terminalCost.toLocaleString()}: Muellaje $${terminal.dockageCost.toLocaleString()}, Practicaje $${terminal.pilotageFee.toLocaleString()}, Estiba $${terminal.handlingCost.toLocaleString()}) = $${totalPdaCost.toLocaleString()} USD`
+    : `Puertos ($${(loadPortTariff + dischargePortTariff).toLocaleString()}) + Peajes Hidrovía ($${waterwayTolls.toLocaleString()}) + Esclusas ($${lockDues.toLocaleString()}) + Practicaje ($${riverPilotage.toLocaleString()}) + Aranceles ($${crossBorderTariffs.toLocaleString()}) = $${totalPdaCost.toLocaleString()} USD`;
 
   return {
     loadPortTariff,
@@ -813,6 +1041,15 @@ export function calculateFluvialPda(params: FluvialPdaExpenses = {}): FluvialPda
     crossBorderTariffs,
     totalPdaCost,
     formula,
+    terminal,
+    dockageCost: terminal?.dockageCost ?? 0,
+    pilotageFee: terminal?.pilotageFee ?? 0,
+    handlingCost: terminal?.handlingCost ?? 0,
+    portOperatingHours: terminal?.portOperatingHours ?? 0,
+    portOperatingDays: terminal?.portOperatingDays ?? 0,
+    portFuelTons: terminal?.portFuelTons ?? 0,
+    portFuelCost: terminal?.portFuelCost ?? 0,
+    productivityMetric: terminal?.portProductivityMetric,
   };
 }
 
@@ -903,7 +1140,14 @@ export function calculateDemurrageCost(params: DemurrageCostParams): DemurrageCo
  * Estimador Global de Rentabilidad Fluvial
  * Consolida el vector motor, vector carga, sobrecostos por demoras y gastos fluviales/PDA.
  */
-export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): FluvialEstimateResult {
+export function estimateFluvialVoyage(
+  inputParams: FluvialVoyageEstimateParams | any,
+  secondaryParams?: any
+): FluvialEstimateResult {
+  const params: FluvialVoyageEstimateParams = secondaryParams
+    ? { ...inputParams, ...secondaryParams }
+    : inputParams;
+
   const {
     tugboat,
     navigationDays: explicitNavigationDays,
@@ -983,7 +1227,13 @@ export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): Fluv
   }
 
   const tugDailyOpex = Number(tugboat.dailyOpex ?? (tugboat as any).dailyOpexUsd) || 0;
-  const resolvedFuelPrice = Number(fuelPricePerTon ?? bunkerPriceUsdPerTon ?? DEFAULT_BUNKER_PRICE_USD_TON);
+  const resolvedFuelPrice = Number(
+    fuelPricePerTon ??
+    bunkerPriceUsdPerTon ??
+    (params as any).bunkerPricePerTon ??
+    (params as any).bunkerPrice ??
+    DEFAULT_BUNKER_PRICE_USD_TON
+  );
 
   // Ajustes de Alertas RIS (Servicios de Información Fluvial)
   const isSandbarsActive = Boolean(risAlerts?.sandbarsActive ?? risSandbarsActive);
@@ -1062,10 +1312,7 @@ export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): Fluv
     maneuverFuelTonsPerHour: convoyGeometry.maneuverFuelTonsPerHour,
   });
 
-  // 4. Gastos Portuarios y Fluviales (PDAs de Hidrovía)
-  const pdaCost = calculateFluvialPda(pda || {});
-
-  // 5. Transferencia Intermodal y Ahorros Sincro-modales Terrestres (Aislamiento Contable Puro)
+  // 4. Transferencia Intermodal y Ahorros Sincro-modales Terrestres (Aislamiento Contable Puro)
   const safeTransshipment = Math.max(0, Number(directTransshipmentTariff) || 0);
   const safeLandSavings = Math.max(0, Number(estimatedLandSavings) || 0);
   const netIntermodalImpact = Number((safeTransshipment - safeLandSavings).toFixed(2));
@@ -1075,12 +1322,6 @@ export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): Fluv
     netIntermodalImpact,
     formula: `Transbordo ($${safeTransshipment.toLocaleString()}) vs. Ahorro Terrestre Cliente ($${safeLandSavings.toLocaleString()}) = Impacto Neto Cliente: ${netIntermodalImpact >= 0 ? '+' : ''}$${netIntermodalImpact.toLocaleString()} USD (Valor Comercial)`,
   };
-
-  // Totales (OPEX Puro del Armador: NUNCA restar estimatedLandSavings de la operación)
-  const baseVoyageCost = Number((motorCost.totalMotorCost + cargoCost.totalCargoCost).toFixed(2));
-  const totalVoyageCost = Number(
-    Math.max(0, baseVoyageCost + demurrageCost.totalDemurrageCost + pdaCost.totalPdaCost + safeTransshipment).toFixed(2)
-  );
 
   const calculatedCargoTons = barges.reduce((acc, b) => acc + (Number(b.capacity) || 0), 0);
   const nominalTonnage = explicitCargoTons !== undefined && explicitCargoTons > 0
@@ -1117,7 +1358,55 @@ export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): Fluv
   // En situaciones de estiaje, utiliza adjustedTonnage para los cálculos financieros en lugar de la capacidad nominal máxima
   const totalCargoTons = shedding.isDraftRestricted ? adjustedTonnage : nominalTonnage;
 
-  const totalEffectiveDays = Number((effectiveNavigationDays + (demurrageCost.waitingHours / 24)).toFixed(2));
+  // 5. Gastos Portuarios, Desembolsos (PDA) y Tarifas de Terminal (Fase 4)
+  const resolvedTruckCount = Number(totalTruckCount) || barges.reduce((acc, b) => acc + (Number(b.truckCount) || 0), 0);
+  const shouldComputeTerminal = pda !== undefined ||
+    params.dockageDailyRatePerBarge !== undefined ||
+    params.pilotageFee !== undefined ||
+    params.handlingRatePerTon !== undefined ||
+    params.handlingRatePerUnit !== undefined ||
+    params.bulkProductivityTonsPerHour !== undefined ||
+    params.roroMinutesPerTruck !== undefined ||
+    (params as any).cargoType !== undefined ||
+    params.includeTerminalHandling === true;
+
+  let terminalPda: TerminalPdaBreakdown | undefined;
+  if (shouldComputeTerminal) {
+    terminalPda = calculateTerminalPda({
+      bargeCount: resolvedBargeCount,
+      operationType: operationType || (params as any).cargoType,
+      cargoType: (params as any).cargoType,
+      adjustedTonnage: totalCargoTons,
+      nominalTonnage,
+      truckCount: resolvedTruckCount,
+      dockageDailyRatePerBarge: pda?.dockageDailyRatePerBarge ?? params.dockageDailyRatePerBarge,
+      pilotageFee: pda?.pilotageFee ?? params.pilotageFee,
+      handlingRatePerTon: pda?.handlingRatePerTon ?? params.handlingRatePerTon,
+      handlingRatePerUnit: pda?.handlingRatePerUnit ?? params.handlingRatePerUnit,
+      bulkProductivityTonsPerHour: pda?.bulkProductivityTonsPerHour ?? params.bulkProductivityTonsPerHour,
+      roroMinutesPerTruck: pda?.roroMinutesPerTruck ?? params.roroMinutesPerTruck,
+      idleFuelTonsPerHour,
+      fuelPricePerTon: resolvedFuelPrice,
+      dockageCostOverride: pda?.dockageCostOverride,
+      handlingCostOverride: pda?.handlingCostOverride,
+      pilotageCostOverride: pda?.pilotageCostOverride,
+      portOperatingHoursOverride: pda?.portOperatingHoursOverride,
+    });
+  }
+
+  const pdaCost = calculateFluvialPda(pda || {}, terminalPda);
+  const portOperatingHours = terminalPda?.portOperatingHours ?? 0;
+  const portOperatingDays = terminalPda?.portOperatingDays ?? 0;
+  const portFuelTons = terminalPda?.portFuelTons ?? 0;
+  const portFuelCost = terminalPda?.portFuelCost ?? 0;
+
+  // Totales (OPEX Puro del Armador: NUNCA restar estimatedLandSavings de la operación)
+  const baseVoyageCost = Number((motorCost.totalMotorCost + cargoCost.totalCargoCost).toFixed(2));
+  const totalVoyageCost = Number(
+    Math.max(0, baseVoyageCost + demurrageCost.totalDemurrageCost + pdaCost.totalPdaCost + safeTransshipment + portFuelCost).toFixed(2)
+  );
+
+  const totalEffectiveDays = Number((effectiveNavigationDays + (demurrageCost.waitingHours / 24) + portOperatingDays).toFixed(2));
   const costPerDay = totalEffectiveDays > 0 ? Number((totalVoyageCost / totalEffectiveDays).toFixed(2)) : 0;
 
   // Desglose del costo por tonelada: Motor vs Barcazas (Break-Even Puro)
@@ -1129,7 +1418,7 @@ export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): Fluv
     ? Number((cargoCost.totalCargoCost / totalCargoTons).toFixed(2))
     : 0;
   const costPerTonPda = totalCargoTons > 0
-    ? Number((pdaCost.totalPdaCost / totalCargoTons).toFixed(2))
+    ? Number(((pdaCost.totalPdaCost + portFuelCost) / totalCargoTons).toFixed(2))
     : 0;
   const costPerCargoTon = totalCargoTons > 0
     ? Number((totalVoyageCost / totalCargoTons).toFixed(2))
@@ -1149,7 +1438,7 @@ export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): Fluv
   const dailyNetProfit = totalEffectiveDays > 0 ? Number((netProfit / totalEffectiveDays).toFixed(2)) : 0;
 
   // Time Charter Equivalent (TCE) diario (Sin estimatedLandSavings en la cuenta del buque):
-  const totalFuelCost = Number((motorCost.estimatedFuelCost + demurrageCost.idleFuelCost + (demurrageCost.maneuverFuelCost || 0)).toFixed(2));
+  const totalFuelCost = Number((motorCost.estimatedFuelCost + demurrageCost.idleFuelCost + (demurrageCost.maneuverFuelCost || 0) + portFuelCost).toFixed(2));
   const voyageExpenses = Number((totalFuelCost + pdaCost.totalPdaCost + cargoCost.totalCargoCost + safeTransshipment).toFixed(2));
   const dailyTce = totalEffectiveDays > 0
     ? Number(((grossFreightRevenue - voyageExpenses) / totalEffectiveDays).toFixed(2))
@@ -1193,12 +1482,21 @@ export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): Fluv
     geometry: convoyGeometry,
     convoyGeometry,
     requiresDoubleLockage: convoyGeometry.requiresDoubleLockage,
+    terminalPda,
+    dockageCost: terminalPda?.dockageCost,
+    pilotageFee: terminalPda?.pilotageFee,
+    handlingCost: terminalPda?.handlingCost,
+    portOperatingHours,
+    portOperatingDays,
+    portFuelTons,
+    portFuelCost,
+    portProductivityMetric: terminalPda?.portProductivityMetric,
     summary: shedding.isDraftRestricted
       ? `Beneficio Neto: $${netProfit.toLocaleString()} USD | Sostenibilidad: ${sustainability.formattedMetric} | Costo/TM: $${costPerCargoTon} (Merma Falso Flete: ${lostTonnage} MT) | TCE: $${dailyTce.toLocaleString()}/d`
       : `Beneficio Neto: $${netProfit.toLocaleString()} USD | Sostenibilidad: ${sustainability.formattedMetric} | Costo/TM: $${costPerCargoTon} | TCE: $${dailyTce.toLocaleString()}/d`,
   };
 
-  const summary = `Costo Total Viaje (OPEX Puro): $${totalVoyageCost.toLocaleString()} USD | Motor: $${(motorCost.totalMotorCost + demurrageCost.totalDemurrageCost).toLocaleString()} | Carga: $${cargoCost.totalCargoCost.toLocaleString()} | Transbordo: $${safeTransshipment.toLocaleString()} | Beneficio Neto: $${netProfit.toLocaleString()} | Valor Comercial Cliente (Ahorro Terrestre): $${safeLandSavings.toLocaleString()} | ${sustainability.formattedMetric}`;
+  const summary = `Costo Total Viaje (OPEX Puro): $${totalVoyageCost.toLocaleString()} USD | Motor: $${(motorCost.totalMotorCost + demurrageCost.totalDemurrageCost).toLocaleString()} | Carga: $${cargoCost.totalCargoCost.toLocaleString()} | Transbordo: $${safeTransshipment.toLocaleString()} | PDA/Puerto: $${(pdaCost.totalPdaCost + portFuelCost).toLocaleString()} | Beneficio Neto: $${netProfit.toLocaleString()} | Valor Comercial Cliente (Ahorro Terrestre): $${safeLandSavings.toLocaleString()} | ${sustainability.formattedMetric}`;
 
   return {
     motorCost,
@@ -1218,6 +1516,13 @@ export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): Fluv
     geometry: convoyGeometry,
     convoyGeometry,
     requiresDoubleLockage: convoyGeometry.requiresDoubleLockage,
+    terminalPda,
+    sailingDays: effectiveNavigationDays,
+    portOperatingHours,
+    portOperatingDays,
+    portFuelTons,
+    portFuelCost,
+    portProductivityMetric: terminalPda?.portProductivityMetric,
     costPerCargoTon,
     nominalCostPerTon,
     costPerDay,
