@@ -7,10 +7,18 @@ import VoyageExecutiveReportModal, {
   adaptExecutiveReportModalToFluvial,
 } from './components/VoyageExecutiveReportModal.jsx';
 
+import FluvialStowagePlan, { renderFluvialStowagePlanSvg, calculateConvoyMatrix, resolveActiveBargeCount } from './components/FluvialStowagePlan.jsx';
+
 let voyageReportRoot = null;
 let visualStowageRoot = null;
 
 export function mountVoyageExecutiveReport(container, props = {}) {
+  if (typeof window !== 'undefined') {
+    if (typeof window.setDataBridgeVerifiedConnection !== 'function') {
+      window.setDataBridgeVerifiedConnection = () => {};
+    }
+  }
+
   let mountPoint = container?.querySelector?.('#voyage-executive-report-root')
     || document.getElementById('voyage-executive-report-root')
     || container;
@@ -68,15 +76,10 @@ export function mountVisualStowageInExecutiveModal(containerId = 'voyage-visual-
   const target = typeof containerId === 'string' ? document.getElementById(containerId) : containerId;
   if (!target) return null;
 
-  const state = options.state || (typeof window !== 'undefined' ? window.State : {});
-  
-  // En Modo Fluvial de RiverCharter, se oculta estrictamente el contenedor del croquis naval
-  if (isFluvialContext(state)) {
-    target.style.display = 'none';
-    target.classList.add('hidden');
-    return null;
-  }
+  target.style.display = '';
+  target.classList.remove('hidden');
 
+  const state = options.state || (typeof window !== 'undefined' ? window.State : {});
   const stowagePlan = options.stowagePlan || buildVoyageStowagePlan(state);
   const vesselType = options.vesselType || (state?.vessel ? `${state.vessel} (${state.class || 'Handysize'})` : 'Handysize Bulk Carrier 32.000 DWT');
 
@@ -101,6 +104,10 @@ if (typeof window !== 'undefined') {
   window.buildVoyageStowagePlan = buildVoyageStowagePlan;
   window.VoyageExecutiveReportModal = VoyageExecutiveReportModal;
   window.VisualStowagePlan = VisualStowagePlan;
+  window.FluvialStowagePlan = FluvialStowagePlan;
+  window.renderFluvialStowagePlanSvg = renderFluvialStowagePlanSvg;
+  window.calculateConvoyMatrix = calculateConvoyMatrix;
+  window.resolveActiveBargeCount = resolveActiveBargeCount;
   window.isFluvialContext = isFluvialContext;
   window.adaptExecutiveReportModalToFluvial = adaptExecutiveReportModalToFluvial;
   window.generarReporteEjecutivo = function () {
@@ -113,6 +120,10 @@ if (typeof window !== 'undefined') {
 export {
   VoyageExecutiveReportModal,
   VisualStowagePlan,
+  FluvialStowagePlan,
+  renderFluvialStowagePlanSvg,
+  calculateConvoyMatrix,
+  resolveActiveBargeCount,
   buildVoyageStowagePlan,
   isFluvialContext,
   adaptExecutiveReportModalToFluvial,

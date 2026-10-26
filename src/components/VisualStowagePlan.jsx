@@ -1,4 +1,5 @@
 import React from 'react';
+import FluvialStowagePlan from './FluvialStowagePlan.jsx';
 
 /**
  * Normaliza y resuelve el perfil naval a partir del tipo de buque indicado.
@@ -82,6 +83,15 @@ export function VisualStowagePlan({
   const profile = resolveVesselProfile(vesselType, stowagePlan?.vesselModel?.type || '');
 
   const isFluvial = isFluvialContext();
+  if (isFluvial) {
+    return (
+      <FluvialStowagePlan
+        stowagePlan={stowagePlan}
+        convoyData={typeof window !== 'undefined' ? window.activeConvoyData : null}
+        projectRef={projectRef}
+      />
+    );
+  }
 
   const rawHolds = Array.isArray(stowagePlan?.holds) ? stowagePlan.holds : [];
   const deck = stowagePlan?.weatherDeck || {};
@@ -883,5 +893,6 @@ export function VisualStowagePlan({
 }
 
 export const MemoizedVisualStowagePlan = React.memo(VisualStowagePlan);
+export { FluvialStowagePlan };
 export default VisualStowagePlan;
 

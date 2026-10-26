@@ -72,6 +72,7 @@ function ConvoyBuilderApp() {
         onConvoyChange={(convoy) => {
           if (typeof window !== 'undefined') {
             (window as any).activeConvoyData = convoy;
+            (window as any).activeBargeCount = convoy?.bargeCount || convoy?.bargeIds?.length || 10;
             window.dispatchEvent(new CustomEvent('rivercharter:convoy-updated', { detail: convoy }));
           }
         }}

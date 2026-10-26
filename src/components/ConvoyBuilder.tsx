@@ -614,6 +614,10 @@ export function ConvoyBuilder({
       ? `Convoy Ro-Ro (${totalTruckCount} Camiones)`
       : `${stdName} - ${bargeIds.length} Barcazas`;
 
+    if (typeof window !== 'undefined') {
+      (window as any).activeBargeCount = bargeIds.length;
+    }
+
     onConvoyChange?.({
       tugboatId,
       tugboatName: selectedTugboat?.name || 'Remolcador Guaraní F / Convoy',

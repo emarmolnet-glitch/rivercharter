@@ -144,6 +144,20 @@
     <!-- Color de la cabecera (Ajustar al azul marítimo principal de la UI) -->
     <meta name="theme-color" content="#003366">
     <script>
+        // Declaraciones seguras de ámbito global para estabilidad UI
+        if (typeof window !== 'undefined') {
+            if (typeof window.setDataBridgeVerifiedConnection !== 'function') {
+                window.setDataBridgeVerifiedConnection = function () {};
+            }
+            window.convoyDesc = window.convoyDesc || '';
+        }
+        if (typeof globalThis !== 'undefined') {
+            if (typeof globalThis.setDataBridgeVerifiedConnection !== 'function') {
+                globalThis.setDataBridgeVerifiedConnection = function () {};
+            }
+            globalThis.convoyDesc = globalThis.convoyDesc || '';
+        }
+
         // 0. Worker & Vendor Monitoring Shield
         // Silences errors from third-party / hosting monitoring workers (e.g. monitoring.vendor.js)
         // ensuring they never crash or block the main thread or React rendering.
@@ -51777,16 +51791,22 @@ Example:
 
         function getFluvialConvoyInfo() {
             const convoy = (typeof window !== 'undefined' && window.activeConvoyData) || {};
-            const bargeCount = Array.isArray(convoy.barges) ? convoy.barges.length : (Number(convoy.bargeCount) || 10);
+            const bargeCount = (typeof window !== 'undefined' && window.activeBargeCount)
+                || (Array.isArray(convoy.barges) ? convoy.barges.length : (Number(convoy.bargeCount) || 10));
             const tugboatName = convoy.tugboat?.name || convoy.tugboatName || 'Remolcador Río Paraná';
             const convoyType = convoy.convoyType || (bargeCount >= 16 ? 'Súper Jumbo' : bargeCount >= 8 ? 'Jumbo' : 'Estándar');
-            const description = convoy.description || convoy.convoyDescription || `${convoyType} - ${bargeCount} Barcazas`;
+            const convoyDesc = (typeof window !== 'undefined' && window.activeBargeStandard)
+                ? `Convoy ${window.activeBargeStandard} - ${window.activeBargeCount || bargeCount || 10} Barcazas`
+                : (convoy.description || convoy.convoyDescription || `${convoyType} - ${bargeCount} Barcazas` || 'Convoy Fluvial (TBN)');
+            const description = convoyDesc;
+            if (typeof window !== 'undefined') window.convoyDesc = convoyDesc;
             const dynamicDraft = Number(convoy.totalDraft || convoy.dynamicDraft || convoy.draft || 2.85);
             const minWaterLevel = Number(convoy.minWaterLevel || convoy.effectiveWaterLevel || (typeof window !== 'undefined' && window.DataBridge?.effectiveWaterLevel) || 3.20);
             const isApto = dynamicDraft <= minWaterLevel;
             return {
                 tugboatName,
                 bargeCount,
+                convoyDesc,
                 description,
                 dynamicDraft,
                 minWaterLevel,
@@ -51841,14 +51861,25 @@ Example:
 
             const info = getFluvialConvoyInfo();
 
-            // 1. Ocultar estrictamente el croquis naval / stowage plan
-            const stowageContainers = container.querySelectorAll(
-                '#voyage-visual-stowage-container, #coa-voyage-visual-stowage-container, #executive-visual-stowage-section, .visual-stowage-plan-wrapper, .stowage-plan-section'
+            // 1. Asegurar visualización del plano fluvial #stowage-plan-fluvial y contenedores de estiba
+            const fluvialStowage = container.querySelectorAll(
+                '#stowage-plan-fluvial, #executive-visual-stowage-section, #voyage-visual-stowage-container, #coa-voyage-visual-stowage-container'
             );
-            stowageContainers.forEach(el => {
-                el.style.display = 'none';
-                el.classList.add('hidden');
+            fluvialStowage.forEach(el => {
+                el.style.display = '';
+                el.classList.remove('hidden');
             });
+
+            // Si el contenedor existe pero no tiene aún el SVG fluvial, renderizarlo
+            const targetContainer = container.querySelector('#voyage-visual-stowage-container, #coa-voyage-visual-stowage-container');
+            if (targetContainer && !targetContainer.querySelector('#stowage-plan-fluvial')) {
+                if (typeof window.renderFluvialStowagePlanSvg === 'function') {
+                    targetContainer.innerHTML = window.renderFluvialStowagePlanSvg({
+                        convoyData: info,
+                        totalCargo: window.State?.cargo
+                    });
+                }
+            }
 
             // 2. Ocultar tabla de validación técnica OMI
             const omiContainers = container.querySelectorAll(
@@ -51906,7 +51937,13 @@ Example:
 
         function renderVoyageStowagePlanFallback(st) {
             if (isFluvialContext()) {
-                return '<div class="hidden" style="display: none;"></div>';
+                if (typeof window.renderFluvialStowagePlanSvg === 'function') {
+                    return window.renderFluvialStowagePlanSvg({
+                        convoyData: getFluvialConvoyInfo(),
+                        totalCargo: st.cargo
+                    });
+                }
+                return '<div id="stowage-plan-fluvial" class="visual-stowage-plan-wrapper bg-white p-4 rounded-xl border border-slate-300 text-center"><div class="animate-pulse text-slate-500 font-mono text-xs">Cargando Renderizador Naval de Convoy Fluvial RiverCharter...</div></div>';
             }
             const cargo = Number(st.cargo || 25000);
             const dwt = Number(st.dwt || 32000);
@@ -52051,6 +52088,10 @@ Example:
             const currentLang = document.getElementById('language-selector')?.value || 'es';
             const isFluvial = isFluvialContext();
             const convoyInfo = getFluvialConvoyInfo();
+            const convoyDesc = (typeof window !== 'undefined' && window.activeBargeStandard)
+                ? `Convoy ${window.activeBargeStandard} - ${window.activeBargeCount || convoyInfo.bargeCount || 10} Barcazas`
+                : (convoyInfo.convoyDesc || convoyInfo.description || 'Convoy Fluvial (TBN)');
+            if (typeof window !== 'undefined') window.convoyDesc = convoyDesc;
 
             const rTexts = {
                 es: {
@@ -52418,10 +52459,9 @@ Example:
                     ${!isClientMode ? renderExecutiveTceTable(reportMode) : ''}
                     ${!isClientMode ? renderExecutiveRiskSections() : ''}
 
-                    <!-- CROQUIS NAVAL DEL BUQUE (VisualStowagePlan)
-                         Renderizado entre el Resumen Operativo y Financiero y los Acordeones de Datos -->
-                    <div id="voyage-visual-stowage-container" class="my-4 break-inside-avoid" ${isFluvial ? 'style="display: none;"' : ''}>
-                        ${isFluvial ? '' : renderVoyageStowagePlanFallback(State)}
+                    <!-- CROQUIS NAVAL / PLANO DE ESTIBA MATRICIAL FLUVIAL -->
+                    <div id="voyage-visual-stowage-container" class="my-4 break-inside-avoid">
+                        ${renderVoyageStowagePlanFallback(State)}
                     </div>
                     ${isFluvial ? renderFluvialHydrologyValidationHtml(convoyInfo) : ''}
 
@@ -52736,7 +52776,8 @@ Example:
             document.getElementById('ai-modal-content').classList.remove('hidden');
             if (isFluvial) {
                 adaptExecutiveReportModalToFluvial(document.getElementById('ai-modal-content'));
-            } else if (typeof window.mountVisualStowageInExecutiveModal === 'function') {
+            }
+            if (typeof window.mountVisualStowageInExecutiveModal === 'function') {
                 try {
                     window.mountVisualStowageInExecutiveModal('voyage-visual-stowage-container', { state: State });
                 } catch (e) {
@@ -68533,6 +68574,10 @@ Compara el documento suministrado (que puede ser un contrato, carta de crédito 
             }
             const isFluvial = typeof isFluvialContext === 'function' ? isFluvialContext() : false;
             const convoyInfo = typeof getFluvialConvoyInfo === 'function' ? getFluvialConvoyInfo() : {};
+            const convoyDesc = (typeof window !== 'undefined' && window.activeBargeStandard)
+                ? `Convoy ${window.activeBargeStandard} - ${window.activeBargeCount || convoyInfo.bargeCount || 10} Barcazas`
+                : (convoyInfo.convoyDesc || convoyInfo.description || 'Convoy Fluvial (TBN)');
+            if (typeof window !== 'undefined') window.convoyDesc = convoyDesc;
             const m = getExecutiveReportMetrics();
             const getVal = (id) => document.getElementById(id)?.value || '';
             const shipments = Math.max(1, coa.shipments || 1);
@@ -68646,10 +68691,9 @@ Compara el documento suministrado (que puede ser un contrato, carta de crédito 
                     ${!isClientMode ? renderExecutiveTceTable('COA') : ''}
                     ${!isClientMode ? renderExecutiveRiskSections() : ''}
 
-                    <!-- CROQUIS NAVAL DEL BUQUE (VisualStowagePlan)
-                         Renderizado entre el Resumen Operativo y Financiero y los Acordeones de Datos -->
-                    <div id="coa-voyage-visual-stowage-container" class="my-4 break-inside-avoid" ${isFluvial ? 'style="display: none;"' : ''}>
-                        ${isFluvial ? '' : renderVoyageStowagePlanFallback(State)}
+                    <!-- CROQUIS NAVAL / PLANO DE ESTIBA MATRICIAL FLUVIAL -->
+                    <div id="coa-voyage-visual-stowage-container" class="my-4 break-inside-avoid">
+                        ${renderVoyageStowagePlanFallback(State)}
                     </div>
                     ${isFluvial ? renderFluvialHydrologyValidationHtml(convoyInfo) : ''}
 
@@ -68723,7 +68767,8 @@ Compara el documento suministrado (que puede ser un contrato, carta de crédito 
             document.getElementById('ai-modal-content').classList.remove('hidden');
             if (isFluvial) {
                 adaptExecutiveReportModalToFluvial(document.getElementById('ai-modal-content'));
-            } else if (typeof window.mountVisualStowageInExecutiveModal === 'function') {
+            }
+            if (typeof window.mountVisualStowageInExecutiveModal === 'function') {
                 try {
                     window.mountVisualStowageInExecutiveModal('coa-voyage-visual-stowage-container', { state: State });
                 } catch (e) {
