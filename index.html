@@ -4285,39 +4285,35 @@
             max-width: none;
             margin: 0;
             display: grid;
-            grid-template-columns: minmax(0, 2fr) minmax(360px, 0.95fr);
+            grid-template-columns: 1fr;
             gap: 1.5rem;
             align-items: start;
-            align-content: start;
+        }
+
+        @media (min-width: 1280px) {
+            #view-estimator .estimator-dashboard-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
         }
 
         #view-estimator .estimator-inputs-column,
         #view-estimator .estimator-results-rail {
             min-width: 0;
+            width: 100%;
             align-self: start;
             margin-top: 0 !important;
         }
 
-        #view-estimator .estimator-commercial-close {
-            grid-column: 1 / -1;
-            min-width: 0;
-            width: 100%;
-        }
-
         #view-estimator .estimator-results-rail {
-            position: sticky;
-            top: 0;
-            max-height: calc(100vh - 3rem);
-            max-height: calc(100svh - 3rem);
-            overflow-y: auto;
-            overscroll-behavior: contain;
-            padding-right: 0.25rem;
-            padding-bottom: 0.25rem;
-            scrollbar-gutter: stable;
+            position: static;
+            max-height: none;
+            overflow: visible;
+            padding-right: 0;
+            padding-bottom: 0;
         }
 
         #view-estimator .estimator-results-rail.space-y-6 > :not([hidden]) ~ :not([hidden]) {
-            margin-top: 1rem;
+            margin-top: 1.5rem;
         }
 
         #view-estimator .estimator-results-rail > .rounded-xl {
@@ -4329,19 +4325,6 @@
         #view-estimator .estimator-results-rail #lumpsum-box,
         #view-estimator .estimator-results-rail .bg-slate-900\/60 {
             padding: 0.75rem !important;
-        }
-
-        @media (max-width: 1279px) {
-            #view-estimator .estimator-dashboard-grid {
-                grid-template-columns: 1fr;
-            }
-
-            #view-estimator .estimator-results-rail {
-                position: static;
-                max-height: none;
-                overflow: visible;
-                padding-right: 0;
-            }
         }
 
         /* Editor views control panel customization */
@@ -6976,9 +6959,6 @@
             max-width: calc(100vw - 1rem) !important;
         }
 
-        #view-estimator .estimator-dashboard-grid {
-            grid-template-columns: minmax(0, 2fr) minmax(320px, 0.95fr);
-        }
 
         #web-databridge-container {
             max-width: 100% !important;
@@ -10452,9 +10432,9 @@
             </div>
 
             <div id="technical-workspace" class="w-full hidden">
-            <div class="estimator-dashboard-grid">
+            <div class="estimator-dashboard-grid grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
                 
-                <!-- COLUMNA IZQUIERDA (Inputs Operativos) -->
+                <!-- COLUMNA IZQUIERDA (Bloques 1, 2, 3, 4 y 5) -->
                 <div class="estimator-inputs-column space-y-6">
                     <!-- 1. Derrota y Puertos -->
                     <div class="collapsible-section bg-white border border-slate-200 rounded-xl p-5 shadow-sm text-slate-800" data-collapsible-section data-default-open="false">
@@ -11503,6 +11483,7 @@
                             </div>
                         </div>
                     </div>
+                    </div>
 
                     <!-- 4. Ajustes Inteligentes (Optimización de Cálculo) -->
                     <div class="collapsible-section bg-white border border-slate-300 rounded-xl p-5 shadow-lg mt-6 text-[#212529]" data-collapsible-section data-default-open="false">
@@ -11777,7 +11758,7 @@
 
                 </div>
 
-                <!-- COLUMNA DERECHA (Finanzas y KPIs) -->
+                <!-- COLUMNA DERECHA (Bloques 6, 7, 8, 9 y 10) -->
                 <div class="estimator-results-rail space-y-6">
                     
                     <!-- Resumen de Costes y Tiempos -->
