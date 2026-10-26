@@ -65,7 +65,7 @@ test('Ro-Ro mode computes capacity using linear meters and truck count instead o
 // 2. COSTOS DE SINCRO-MODALIDAD (BLOQUE 3 - COSTES)
 // ============================================================================
 
-test('Intermodal transfer tariff adds to cost and estimated land savings subtracts from total voyage cost', async () => {
+test('Intermodal transfer tariff adds to OPEX cost and estimated land savings is kept as client commercial value without subtracting from carrier voyage cost', async () => {
   const { estimateFluvialVoyage } = await loadTsModule('../src/services/fluvialEstimator.ts');
 
   const baseParams = {
@@ -92,18 +92,18 @@ test('Intermodal transfer tariff adds to cost and estimated land savings subtrac
   assert.equal(synchromodal.intermodalCost.estimatedLandSavings, 3600);
   assert.equal(synchromodal.intermodalCost.netIntermodalImpact, -1800, 'El impacto neto debe ser -$1,800 a favor del cliente');
 
-  // El costo total del viaje debe incluir el transbordo y restar los ahorros terrestres
+  // El costo total del viaje debe incluir el transbordo y NUNCA restar los ahorros terrestres del cliente
   assert.equal(
     synchromodal.totalVoyageCost,
-    baseline.totalVoyageCost + 1800 - 3600,
-    'El costo total debe restar los ahorros terrestres'
+    baseline.totalVoyageCost + 1800,
+    'El costo total debe ser OPEX puro del armador sin restar ahorros terrestres ajenos'
   );
 
-  // Beneficio neto debe incrementarse por el ahorro terrestre neto
+  // Beneficio neto del armador debe reflejar los costos reales del viaje
   assert.equal(
     synchromodal.executiveSummary.netProfit,
-    baseline.executiveSummary.netProfit + 1800,
-    'El beneficio neto debe reflejar los ahorros terrestres restados'
+    baseline.executiveSummary.netProfit - 1800,
+    'El beneficio neto del armador debe descontar el costo real del transbordo'
   );
 });
 

@@ -10639,6 +10639,58 @@
                             </div>
                         </div>
 
+                        <!-- SUBMÓDULO: NAVEGACIÓN BIDIRECCIONAL & VECTOR DE CORRIENTE FLUVIAL -->
+                        <div id="fluvial-bidirectional-panel" class="mb-4 bg-slate-50 border border-sky-200 rounded-xl p-4 text-slate-800 shadow-sm">
+                            <div class="flex items-center justify-between border-b border-sky-100 pb-2 mb-3">
+                                <h3 class="text-xs font-black uppercase tracking-wider text-sky-950 flex items-center gap-2">
+                                    <i class="fa-solid fa-arrows-up-down text-sky-600"></i> Navegación Bidireccional y Vector de Corriente (SOG)
+                                </h3>
+                                <span class="text-[9px] font-bold uppercase tracking-wider bg-sky-100 text-sky-800 px-2 py-0.5 rounded border border-sky-200">
+                                    Hidrodinámica Fluvial
+                                </span>
+                            </div>
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+                                <div>
+                                    <label for="fluvial-convoy-speed" class="block text-[10px] font-bold text-slate-700 uppercase mb-1">
+                                        Velocidad en Agua (v_convoy) (kn)
+                                    </label>
+                                    <input type="number" id="fluvial-convoy-speed" step="0.1" min="1.0" class="input-gc bg-white border border-slate-300 font-bold text-slate-900 w-full" value="8.0" oninput="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations();">
+                                    <span class="text-[10px] text-slate-500">Régimen crucero agua calma</span>
+                                </div>
+                                <div>
+                                    <label for="fluvial-river-current" class="block text-[10px] font-bold text-slate-700 uppercase mb-1">
+                                        Corriente del Río (riverCurrentKnots) (kn)
+                                    </label>
+                                    <input type="number" id="fluvial-river-current" step="0.1" min="0" class="input-gc bg-white border border-slate-300 font-bold text-sky-700 w-full" value="2.5" oninput="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations();">
+                                    <span class="text-[10px] text-slate-500">Misisipi / Paraná (ref: 2.5 kn)</span>
+                                </div>
+                                <div>
+                                    <label for="fluvial-navigation-direction" class="block text-[10px] font-bold text-slate-700 uppercase mb-1">
+                                        Sentido del Tramo con Carga
+                                    </label>
+                                    <select id="fluvial-navigation-direction" class="input-gc bg-white border border-slate-300 font-bold text-slate-900 w-full text-xs" onchange="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations();">
+                                        <option value="DOWNSTREAM" selected>Aguas Abajo (Downstream: Bajada)</option>
+                                        <option value="UPSTREAM">Aguas Arriba (Upstream: Remontada)</option>
+                                    </select>
+                                    <span class="text-[10px] text-slate-500">Lastre navega en sentido opuesto</span>
+                                </div>
+                            </div>
+                            <div class="pt-2 border-t border-sky-100 flex flex-wrap items-center justify-between gap-2 text-xs">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-slate-600 font-medium">SOG Bajada (Downstream):</span>
+                                    <span id="fluvial-sog-downstream-badge" class="font-mono font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 text-[11px]">10.5 kn</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-slate-600 font-medium">SOG Subida (Upstream):</span>
+                                    <span id="fluvial-sog-upstream-badge" class="font-mono font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300 text-[11px]">5.5 kn</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-slate-600 font-medium">Días Navegación Netos:</span>
+                                    <span id="fluvial-sailing-days-badge" class="font-mono font-bold px-2 py-0.5 rounded bg-sky-100 text-sky-900 border border-sky-300 text-[11px]">4.5 d</span>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Route & Port Constraints (Draft, LOA) -->
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 hidden">
                             <div class="input-group">
@@ -77208,12 +77260,43 @@ window.actualizarGrabCapacityVisibility = function() {
                 totalCapacity = convoy?.totalCapacityMt || (roroTruckCount * 25);
             }
 
-            // 2. Rutas y Tiempos de Navegación
-            const distLaden = parseFloat(document.getElementById('dist-laden')?.value) || 600;
+            // 2. Rutas y Tiempos de Navegación Bidireccional (Vector de Corriente)
+            const distLaden = parseFloat(document.getElementById('dist-laden')?.value) || 0;
             const distBallast = parseFloat(document.getElementById('dist-ballast')?.value) || 0;
-            const totalDist = distLaden + distBallast;
-            const sailingSpeed = 8.0;
-            const sailingDays = totalDist > 0 ? (totalDist / (sailingSpeed * 24)) : 4.5;
+            const hasExplicitDist = (distLaden > 0 || distBallast > 0);
+            const activeDistLaden = hasExplicitDist ? distLaden : 600;
+            const activeDistBallast = hasExplicitDist ? distBallast : 0;
+            const totalDist = activeDistLaden + activeDistBallast;
+
+            // Parámetros de velocidad y corriente fluvial
+            const inputConvoySpeed = parseFloat(document.getElementById('fluvial-convoy-speed')?.value);
+            const v_convoy = (!isNaN(inputConvoySpeed) && inputConvoySpeed > 0) ? inputConvoySpeed : (convoy?.convoySpeedWaterKnots || 8.0);
+
+            const inputRiverCurrent = parseFloat(document.getElementById('fluvial-river-current')?.value);
+            const riverCurrentKnots = (!isNaN(inputRiverCurrent) && inputRiverCurrent >= 0) ? inputRiverCurrent : (convoy?.riverCurrentKnots !== undefined ? convoy.riverCurrentKnots : 2.5);
+
+            const navDirection = document.getElementById('fluvial-navigation-direction')?.value || convoy?.ladenDirection || 'DOWNSTREAM';
+
+            // Velocidad sobre fondo (SOG) diferenciada:
+            // Velocidad de bajada (Downstream): v_convoy + riverCurrentKnots
+            // Velocidad de subida (Upstream): v_convoy - riverCurrentKnots
+            const speedDownstream = Number((v_convoy + riverCurrentKnots).toFixed(2));
+            const speedUpstream = Number(Math.max(1.0, v_convoy - riverCurrentKnots).toFixed(2));
+
+            const speedLaden = navDirection === 'UPSTREAM' ? speedUpstream : speedDownstream;
+            const speedBallast = navDirection === 'UPSTREAM' ? speedDownstream : speedUpstream;
+
+            const sailingDaysLaden = activeDistLaden > 0 ? (activeDistLaden / (speedLaden * 24)) : 0;
+            const sailingDaysBallast = activeDistBallast > 0 ? (activeDistBallast / (speedBallast * 24)) : 0;
+            const sailingDays = Number((sailingDaysLaden + sailingDaysBallast).toFixed(2)) || (totalDist > 0 ? (totalDist / (speedDownstream * 24)) : 4.5);
+
+            // Actualizar indicadores visuales de navegación bidireccional
+            const badgeSogDown = document.getElementById('fluvial-sog-downstream-badge');
+            if (badgeSogDown) badgeSogDown.textContent = speedDownstream.toFixed(1) + ' kn';
+            const badgeSogUp = document.getElementById('fluvial-sog-upstream-badge');
+            if (badgeSogUp) badgeSogUp.textContent = speedUpstream.toFixed(1) + ' kn';
+            const badgeSailingDays = document.getElementById('fluvial-sailing-days-badge');
+            if (badgeSailingDays) badgeSailingDays.textContent = sailingDays.toFixed(2) + ' d' + (activeDistBallast > 0 ? (' (C:' + sailingDaysLaden.toFixed(1) + 'd / L:' + sailingDaysBallast.toFixed(1) + 'd)') : '');
 
             // Trasbordo Intermodal (Buque Oceánico ⇄ Barcaza) - Lectura desde selector y campos bimodal
             const intermodalToggle = document.getElementById('intermodal-transshipment-toggle');
@@ -77309,18 +77392,19 @@ window.actualizarGrabCapacityVisibility = function() {
 
             const totalIntermodalTolls = pdaLocks + pdaTolls + pdaPilotage + transshipmentTariff;
 
-            // 5. Costos de Sincro-modalidad y Ahorros Terrestres Estimados (Deducción)
+            // 5. Costos de Sincro-modalidad y Ahorros Terrestres (Aislamiento Contable Puro)
             const estimatedLandSavings = parseFloat(document.getElementById('fluvial-land-savings')?.value) ?? (convoy?.estimatedLandSavings || 0);
 
             // Suma total de los costos operativos (OPEX motor + barcazas + peajes intermodales importados de DataBridge)
+            // NUNCA restar estimatedLandSavings del costo operativo del armador (refleja OPEX puro del convoy)
             const grossOperatingCost = totalMotorCost + bargesTotalCapex + totalIntermodalTolls;
-            const totalConvoyCost = Math.max(0, grossOperatingCost - estimatedLandSavings);
+            const totalConvoyCost = Math.max(0, grossOperatingCost);
 
             // 6. Ingresos y Beneficio Neto
             const sellingFreight = parseFloat(document.getElementById('freight-sell')?.value) || 35.0;
             const grossRevenue = sellingFreight * totalCapacity;
             const netProfit = grossRevenue - totalConvoyCost;
-            const dailyTce = totalDays > 0 ? (grossRevenue - totalBunkerCost - (pdaLocks + pdaTolls + pdaPilotage) - transshipmentTariff + estimatedLandSavings) / totalDays : 0;
+            const dailyTce = totalDays > 0 ? (grossRevenue - totalBunkerCost - (pdaLocks + pdaTolls + pdaPilotage) - transshipmentTariff) / totalDays : 0;
 
             const costPerTon = totalCapacity > 0 ? (totalConvoyCost / totalCapacity) : 0;
             const costPerTonMotor = totalCapacity > 0 ? (totalMotorCost / totalCapacity) : 0;
@@ -77331,11 +77415,12 @@ window.actualizarGrabCapacityVisibility = function() {
             const elImpactBadges = document.getElementById('intermodal-impact-badges');
             const elIntermodalSelect = document.getElementById('intermodal-port-select');
             if (elImpactText && elImpactBadges) {
-                if (isIntermodalActive && (transshipmentTariff > 0 || nodeHandlingDays > 0)) {
+                if (isIntermodalActive && (transshipmentTariff > 0 || nodeHandlingDays > 0 || estimatedLandSavings > 0)) {
                     const selPort = (elIntermodalSelect && elIntermodalSelect.selectedIndex >= 0 && elIntermodalSelect.value) ? elIntermodalSelect.options[elIntermodalSelect.selectedIndex].text : 'Puerto Hub';
                     elImpactText.innerHTML = '<span class="font-bold text-indigo-950"><i class="fa-solid fa-check-circle text-emerald-600 mr-1"></i> Bimodal Activo:</span> <span class="text-slate-700">' + selPort + '</span>';
                     elImpactBadges.innerHTML = '<span class="bg-indigo-100 text-indigo-900 border border-indigo-200 px-2 py-0.5 rounded font-bold text-[10px]">+$' + Math.round(transshipmentTariff).toLocaleString() + ' OPEX</span>' +
-                                              '<span class="bg-amber-100 text-amber-900 border border-amber-200 px-2 py-0.5 rounded font-bold text-[10px]">+' + nodeHandlingDays + ' d demora</span>';
+                                              '<span class="bg-amber-100 text-amber-900 border border-amber-200 px-2 py-0.5 rounded font-bold text-[10px]">+' + nodeHandlingDays + ' d demora</span>' +
+                                              (estimatedLandSavings > 0 ? ('<span class="bg-emerald-100 text-emerald-900 border border-emerald-200 px-2 py-0.5 rounded font-bold text-[10px]">Valor Cliente: -$' + Math.round(estimatedLandSavings).toLocaleString() + '</span>') : '');
                 } else {
                     elImpactText.innerHTML = '<span class="text-slate-500"><i class="fa-solid fa-circle-xmark text-slate-400 mr-1"></i> Trasbordo Intermodal Desactivado</span>';
                     elImpactBadges.innerHTML = '<span class="bg-slate-100 text-slate-600 border border-slate-200 px-2 py-0.5 rounded font-medium text-[10px]">Sin recargo logístico</span>';
@@ -77381,7 +77466,8 @@ window.actualizarGrabCapacityVisibility = function() {
             if (elNetProfitCharterer) elNetProfitCharterer.textContent = '$' + Math.round(netProfit).toLocaleString() + ' USD';
 
             const elTceLabel = document.getElementById('res-tce-label');
-            if (elTceLabel) elTceLabel.textContent = 'TCE Fluvial: $' + Math.round(dailyTce).toLocaleString() + ' / día (Total: $' + Math.round(grossRevenue - totalBunkerCost - (pdaLocks + pdaTolls + pdaPilotage) - transshipmentTariff + estimatedLandSavings).toLocaleString() + ')';
+            const pureTceNetTotal = grossRevenue - totalBunkerCost - (pdaLocks + pdaTolls + pdaPilotage) - transshipmentTariff;
+            if (elTceLabel) elTceLabel.textContent = 'TCE Fluvial: $' + Math.round(dailyTce).toLocaleString() + ' / día (Total: $' + Math.round(pureTceNetTotal).toLocaleString() + ')';
 
             const elGrossRevenue = document.getElementById('res-owner-gross-revenue');
             if (elGrossRevenue) elGrossRevenue.textContent = '$' + Math.round(grossRevenue).toLocaleString();
