@@ -15,6 +15,96 @@ export const DEFAULT_NAVIGATION_DAYS = 7;
 export const DEFAULT_CONVOY_SPEED_WATER_KNOTS = 8.0; // Velocidad del convoy en agua (STW - Speed Through Water)
 export const DEFAULT_RIVER_CURRENT_KNOTS = 2.5; // Corriente media del río (Misisipi / Paraná)
 
+// Parámetros Hidrostáticos Base en Barcazas (Arquitectura Naval Fluvial)
+export const DEFAULT_LIGHTSHIP_DRAFT = 0.55; // Calado en Rosca (m)
+export const DEFAULT_DESIGN_DRAFT = 3.66; // Calado de Diseño máximo (12 ft / 3.66 m)
+export const DEFAULT_TPC = 4.5; // Toneladas por Centímetro de Inmersión (MT/cm) para barcazas estándar/Jumbo
+export const DEFAULT_UKC = 0.30; // Margen de seguridad bajo la quilla (m) (Under Keel Clearance)
+
+export interface HydrostaticDraftParams {
+  minWaterLevel?: number;
+  ukc?: number;
+  designDraft?: number;
+  lightshipDraft?: number;
+  tpc?: number;
+  bargeCount?: number;
+  nominalTonnage?: number;
+}
+
+export interface TonnageSheddingResult {
+  minWaterLevel: number;
+  ukc: number;
+  designDraft: number;
+  lightshipDraft: number;
+  tpc: number;
+  maxAdmissibleDraft: number;
+  isDraftRestricted: boolean;
+  nominalCapacityPerBarge: number;
+  adjustedCapacityPerBarge: number;
+  nominalTonnage: number;
+  adjustedTonnage: number;
+  lostTonnage: number; // Merma de carga (Deadfreight)
+  infoMessage?: string;
+}
+
+/**
+ * Algoritmo de Calado Admisible y Merma de Carga (Tonnage Shedding)
+ * 
+ * 1. Calcula el calado máximo operativo real:
+ *    maxAdmissibleDraft = Math.min(designDraft, minWaterLevel - UKC) (UKC = 0.30 m por defecto).
+ * 2. Si maxAdmissibleDraft < designDraft:
+ *    adjustedCapacityPerBarge = Math.max(0, (maxAdmissibleDraft - lightshipDraft) * 100 * TPC).
+ * 3. Multiplica adjustedCapacityPerBarge por el número de barcazas para obtener adjustedTonnage.
+ * 4. Merma de carga: lostTonnage = nominalTonnage - adjustedTonnage.
+ */
+export function calculateTonnageShedding(params: HydrostaticDraftParams): TonnageSheddingResult {
+  const ukc = params.ukc !== undefined ? Math.max(0, Number(params.ukc)) : DEFAULT_UKC;
+  const designDraft = params.designDraft !== undefined ? Math.max(0.1, Number(params.designDraft)) : DEFAULT_DESIGN_DRAFT;
+  const lightshipDraft = params.lightshipDraft !== undefined ? Math.max(0, Number(params.lightshipDraft)) : DEFAULT_LIGHTSHIP_DRAFT;
+  const tpc = params.tpc !== undefined ? Math.max(0.1, Number(params.tpc)) : DEFAULT_TPC;
+  const bargeCount = Math.max(1, Number(params.bargeCount) || 1);
+
+  const hasWaterConstraint = params.minWaterLevel !== undefined && params.minWaterLevel !== null && !isNaN(Number(params.minWaterLevel)) && Number(params.minWaterLevel) > 0;
+  const minWaterLevel = hasWaterConstraint ? Number(params.minWaterLevel) : (designDraft + ukc);
+
+  const maxAdmissibleDraft = Number(Math.min(designDraft, Math.max(0, minWaterLevel - ukc)).toFixed(2));
+  const nominalTonnage = Math.max(0, Number(params.nominalTonnage) || (bargeCount * 1500));
+  const nominalCapacityPerBarge = Number((nominalTonnage / bargeCount).toFixed(2));
+
+  const isDraftRestricted = hasWaterConstraint && (maxAdmissibleDraft < designDraft);
+
+  let adjustedCapacityPerBarge = nominalCapacityPerBarge;
+  let adjustedTonnage = nominalTonnage;
+  let lostTonnage = 0;
+
+  if (isDraftRestricted) {
+    const rawAdjusted = (maxAdmissibleDraft - lightshipDraft) * 100 * tpc;
+    adjustedCapacityPerBarge = Number(Math.max(0, rawAdjusted).toFixed(2));
+    adjustedTonnage = Number(Math.max(0, adjustedCapacityPerBarge * bargeCount).toFixed(2));
+    lostTonnage = Number(Math.max(0, nominalTonnage - adjustedTonnage).toFixed(2));
+  }
+
+  const infoMessage = isDraftRestricted
+    ? `Restricción por estiaje activa: Calado admisible limitado a ${maxAdmissibleDraft.toFixed(2)} m. Carga total reducida automáticamente a ${Math.round(adjustedTonnage).toLocaleString()} MT (Merma: ${Math.round(lostTonnage).toLocaleString()} MT)`
+    : undefined;
+
+  return {
+    minWaterLevel,
+    ukc,
+    designDraft,
+    lightshipDraft,
+    tpc,
+    maxAdmissibleDraft,
+    isDraftRestricted,
+    nominalCapacityPerBarge,
+    adjustedCapacityPerBarge,
+    nominalTonnage,
+    adjustedTonnage,
+    lostTonnage,
+    infoMessage,
+  };
+}
+
 export interface BidirectionalSailingCalculationParams {
   distLadenNm?: number; // Distancia navegando con carga (NM)
   distBallastNm?: number; // Distancia navegando en lastre / vacío (NM)
@@ -127,6 +217,9 @@ export interface CargoBargeInput {
   operationType?: string;
   linearMeters?: number;
   truckCount?: number;
+  lightshipDraft?: number;
+  designDraft?: number;
+  tpc?: number;
 }
 
 export interface CargoCostParams {
@@ -223,9 +316,14 @@ export interface FluvialExecutiveMetrics {
   costPerTonBarges: number;
   costPerTonPda: number;
   totalCostPerTon: number;
+  nominalCostPerTon?: number;
   dailyTce: number;
   dailyNetProfit: number;
   totalCargoTons: number;
+  nominalTonnage?: number;
+  adjustedTonnage?: number;
+  lostTonnage?: number;
+  maxAdmissibleDraft?: number;
   totalDays: number;
   isProfitable: boolean;
   summary: string;
@@ -233,6 +331,7 @@ export interface FluvialExecutiveMetrics {
   intermodal?: IntermodalTransferBreakdown;
   risGroundingRisk?: 'SAFE' | 'WARNING' | 'CRITICAL';
   bidirectionalSailing?: BidirectionalSailingResult;
+  shedding?: TonnageSheddingResult;
 }
 
 export interface FluvialVoyageEstimateParams {
@@ -278,6 +377,10 @@ export interface FluvialVoyageEstimateParams {
   risSandbarsActive?: boolean;
   risStrongCurrentsActive?: boolean;
   minWaterLevel?: number;
+  ukc?: number;
+  designDraft?: number;
+  lightshipDraft?: number;
+  tpc?: number;
 }
 
 export interface FluvialEstimateResult {
@@ -290,10 +393,16 @@ export interface FluvialEstimateResult {
   baseVoyageCost: number;
   totalVoyageCost: number;
   totalCargoTons: number;
+  nominalTonnage: number;
+  adjustedTonnage: number;
+  lostTonnage: number;
+  maxAdmissibleDraft: number;
   costPerCargoTon: number;
+  nominalCostPerTon?: number;
   costPerDay: number;
   totalEffectiveDays: number;
   executiveSummary: FluvialExecutiveMetrics;
+  shedding?: TonnageSheddingResult;
   summary: string;
 }
 
@@ -600,7 +709,11 @@ export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): Fluv
     risAlerts,
     risSandbarsActive,
     risStrongCurrentsActive,
-    minWaterLevel = 2.8,
+    minWaterLevel,
+    ukc,
+    designDraft,
+    lightshipDraft,
+    tpc,
   } = params;
 
   // 0. Navegación Bidireccional (Vector de Corriente del Río)
@@ -640,10 +753,11 @@ export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): Fluv
   const currentMultiplier = isStrongCurrentsActive ? 1.25 : 1.0;
 
   // Bancos de arena activos elevan el riesgo de varadura
+  const effectiveMinWater = minWaterLevel !== undefined ? Number(minWaterLevel) : 2.8;
   const maxBargeDraft = barges.reduce((max, b) => Math.max(max, Number(b.dynamicDraft) || 0), 0);
   const risGroundingRisk: 'SAFE' | 'WARNING' | 'CRITICAL' = isSandbarsActive
-    ? (maxBargeDraft >= (minWaterLevel - 0.4) ? 'CRITICAL' : 'WARNING')
-    : (maxBargeDraft > minWaterLevel ? 'CRITICAL' : 'SAFE');
+    ? (maxBargeDraft >= (effectiveMinWater - 0.4) ? 'CRITICAL' : 'WARNING')
+    : (maxBargeDraft > effectiveMinWater ? 'CRITICAL' : 'SAFE');
 
   // 1. Vector Motor (Consumo Navegando / Empujando la carga ajustado por corrientes RIS y días calculados)
   const baseSailingConsumption = sailingFuelTonsPerDay !== undefined
@@ -702,14 +816,45 @@ export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): Fluv
   );
 
   const calculatedCargoTons = barges.reduce((acc, b) => acc + (Number(b.capacity) || 0), 0);
-  const totalCargoTons = explicitCargoTons !== undefined && explicitCargoTons > 0
+  const nominalTonnage = explicitCargoTons !== undefined && explicitCargoTons > 0
     ? explicitCargoTons
-    : calculatedCargoTons;
+    : (calculatedCargoTons > 0 ? calculatedCargoTons : (barges.length * 1500));
+  const bargeCount = Math.max(1, barges.length || 1);
+
+  // Motor Hidrostático y Tonnage Shedding (Merma de Carga y Falso Flete)
+  const isRoro = operationType === 'RORO' || operationType === 'Ro-Ro / Carretera Flotante';
+  const shedding = !isRoro && minWaterLevel !== undefined
+    ? calculateTonnageShedding({
+        minWaterLevel,
+        ukc,
+        designDraft,
+        lightshipDraft,
+        tpc,
+        bargeCount,
+        nominalTonnage,
+      })
+    : calculateTonnageShedding({
+        minWaterLevel: undefined, // Sin restricción por estiaje
+        ukc,
+        designDraft,
+        lightshipDraft,
+        tpc,
+        bargeCount,
+        nominalTonnage,
+      });
+
+  const adjustedTonnage = shedding.adjustedTonnage;
+  const lostTonnage = shedding.lostTonnage;
+  const maxAdmissibleDraft = shedding.maxAdmissibleDraft;
+
+  // En situaciones de estiaje, utiliza adjustedTonnage para los cálculos financieros en lugar de la capacidad nominal máxima
+  const totalCargoTons = shedding.isDraftRestricted ? adjustedTonnage : nominalTonnage;
 
   const totalEffectiveDays = Number((effectiveNavigationDays + (demurrageCost.waitingHours / 24)).toFixed(2));
   const costPerDay = totalEffectiveDays > 0 ? Number((totalVoyageCost / totalEffectiveDays).toFixed(2)) : 0;
 
   // Desglose del costo por tonelada: Motor vs Barcazas (Break-Even Puro)
+  // Como el OPEX del remolcador y el alquiler de las barcazas no cambian, el sistema debe dividir los costos totales entre las toneladas reales transportadas (adjustedTonnage). Esto encarecerá automáticamente el Break-Even por tonelada ($/MT).
   const costPerTonMotor = totalCargoTons > 0
     ? Number(((motorCost.totalMotorCost + demurrageCost.totalDemurrageCost) / totalCargoTons).toFixed(2))
     : 0;
@@ -721,6 +866,10 @@ export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): Fluv
     : 0;
   const costPerCargoTon = totalCargoTons > 0
     ? Number((totalVoyageCost / totalCargoTons).toFixed(2))
+    : 0;
+
+  const nominalCostPerTon = nominalTonnage > 0
+    ? Number((totalVoyageCost / nominalTonnage).toFixed(2))
     : 0;
 
   // Consolidación Comercial / Vista Ejecutiva
@@ -759,16 +908,24 @@ export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): Fluv
     costPerTonBarges,
     costPerTonPda,
     totalCostPerTon: costPerCargoTon,
+    nominalCostPerTon,
     dailyTce,
     dailyNetProfit,
     totalCargoTons,
+    nominalTonnage,
+    adjustedTonnage,
+    lostTonnage,
+    maxAdmissibleDraft,
     totalDays: totalEffectiveDays,
     isProfitable,
     sustainability,
     intermodal: intermodalCost,
     risGroundingRisk,
     bidirectionalSailing,
-    summary: `Beneficio Neto: $${netProfit.toLocaleString()} USD | Sostenibilidad: ${sustainability.formattedMetric} | Costo/TM: $${costPerCargoTon} | TCE: $${dailyTce.toLocaleString()}/d`,
+    shedding,
+    summary: shedding.isDraftRestricted
+      ? `Beneficio Neto: $${netProfit.toLocaleString()} USD | Sostenibilidad: ${sustainability.formattedMetric} | Costo/TM: $${costPerCargoTon} (Merma Falso Flete: ${lostTonnage} MT) | TCE: $${dailyTce.toLocaleString()}/d`
+      : `Beneficio Neto: $${netProfit.toLocaleString()} USD | Sostenibilidad: ${sustainability.formattedMetric} | Costo/TM: $${costPerCargoTon} | TCE: $${dailyTce.toLocaleString()}/d`,
   };
 
   const summary = `Costo Total Viaje (OPEX Puro): $${totalVoyageCost.toLocaleString()} USD | Motor: $${(motorCost.totalMotorCost + demurrageCost.totalDemurrageCost).toLocaleString()} | Carga: $${cargoCost.totalCargoCost.toLocaleString()} | Transbordo: $${safeTransshipment.toLocaleString()} | Beneficio Neto: $${netProfit.toLocaleString()} | Valor Comercial Cliente (Ahorro Terrestre): $${safeLandSavings.toLocaleString()} | ${sustainability.formattedMetric}`;
@@ -783,7 +940,13 @@ export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): Fluv
     baseVoyageCost,
     totalVoyageCost,
     totalCargoTons,
+    nominalTonnage,
+    adjustedTonnage,
+    lostTonnage,
+    maxAdmissibleDraft,
+    shedding,
     costPerCargoTon,
+    nominalCostPerTon,
     costPerDay,
     totalEffectiveDays,
     executiveSummary,

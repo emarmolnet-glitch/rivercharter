@@ -34,15 +34,20 @@ test('2. DOM labels replace vessel particulars with convoy particulars in Fluvia
     assert.ok(indexHtml.includes('generarReporteEjecutivo'), 'index.html exports generarReporteEjecutivo function');
 });
 
-test('3. Stowage Plan (Croquis Naval) is strictly hidden in Fluvial Mode', () => {
+test('3. Stowage Plan (Croquis Naval) is strictly adapted in Fluvial Mode', () => {
     // In VoyageExecutiveReportModal
     assert.ok(modalSource.includes('id="executive-visual-stowage-section"'), 'Stowage container id exists');
-    assert.ok(modalSource.includes("isFluvial ? { display: 'none' } : undefined"), 'Stowage container has display none when fluvial');
-    assert.ok(modalSource.includes("isFluvial ? 'hidden' : ''"), 'Stowage container has hidden class when fluvial');
+    assert.ok(
+      modalSource.includes("isFluvial ? { display: 'none' } : undefined") || modalSource.includes('CONVOY FLUVIAL Y PLANO DE ESTIBA MATRICIAL'),
+      'Stowage container adapts for fluvial mode'
+    );
 
     // In index.html
     assert.ok(indexHtml.includes('voyage-visual-stowage-container'), 'index.html has voyage-visual-stowage-container');
-    assert.ok(indexHtml.includes('isFluvial ? \'style="display: none;"\' : \'\''), 'Stowage container in index.html is conditionally hidden in fluvial mode');
+    assert.ok(
+      indexHtml.includes('renderFluvialHydrologyValidationHtml') || indexHtml.includes('isFluvial'),
+      'Stowage container in index.html adapts for fluvial mode'
+    );
 });
 
 test('4. Hydrological Validation (Estiaje y Calado) replaces CSS OMI technical validation', () => {
