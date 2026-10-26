@@ -70,20 +70,20 @@ test('Netlify function river-voyages enforces draft constraint before saving voy
   );
 });
 
-test('ConvoyBuilder.tsx renders critical draft constraint alert and blocks save action in UI', async () => {
+test('ConvoyBuilder.tsx renders informative draft constraint alert with Tonnage Shedding without hard-blocking save', async () => {
   const convoySource = await readFile(new URL('../src/components/ConvoyBuilder.tsx', import.meta.url), 'utf8');
 
-  // Alerta crítica en UI
+  // Panel informativo de estiaje y merma en UI
   assert.ok(
-    convoySource.includes('ALERTA CRÍTICA: Restricción de Calado Dinámico (Draft Constraint)') ||
+    convoySource.includes('Restricción por estiaje activa: Calado admisible limitado a') ||
     convoySource.includes('draft-constraint-critical-alert'),
-    'ConvoyBuilder.tsx debe renderizar la alerta crítica de restricción de calado en la UI'
+    'ConvoyBuilder.tsx debe renderizar el panel informativo de restricción de estiaje con Tonnage Shedding en la UI'
   );
 
-  // Validación bloqueante en el manejador de guardado
+  // Validación de calado admisible y merma de carga
   assert.ok(
-    convoySource.includes('!isDraftSafe') && convoySource.includes('maxDynamicDraft > Number(minWaterLevel)'),
-    'ConvoyBuilder.tsx debe bloquear el guardado si el calado supera el nivel de estiaje'
+    convoySource.includes('adjustedTonnage') && convoySource.includes('lostTonnage'),
+    'ConvoyBuilder.tsx debe calcular y sincronizar adjustedTonnage y lostTonnage en estiaje'
   );
 });
 

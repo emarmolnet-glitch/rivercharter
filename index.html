@@ -10762,6 +10762,53 @@
                             </div>
                         </div>
 
+                        <!-- Panel Informativo de Restricción por Estiaje y Tonnage Shedding -->
+                        <div id="fluvial-tonnage-shedding-panel" class="hidden my-3 p-4 rounded-xl border border-amber-300 bg-amber-50 text-slate-800 shadow-sm transition-all" data-testid="fluvial-tonnage-shedding-panel">
+                            <div class="flex items-start gap-3">
+                                <div class="p-2.5 rounded-lg bg-amber-100 text-amber-800 shrink-0 text-lg">
+                                    <i class="fa-solid fa-water-ladder"></i>
+                                </div>
+                                <div class="flex-1">
+                                    <div class="flex flex-wrap items-center justify-between gap-2">
+                                        <span class="text-xs font-bold text-amber-950 uppercase tracking-wide flex items-center gap-1.5">
+                                            <span class="inline-block w-2 h-2 rounded-full bg-amber-600 animate-pulse"></span>
+                                            Restricción Hidrológica por Estiaje Activa
+                                        </span>
+                                        <span id="fluvial-shedding-tag" class="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-amber-200/80 text-amber-900 border border-amber-300">
+                                            Tonnage Shedding & Falso Flete
+                                        </span>
+                                    </div>
+                                    <p id="fluvial-shedding-msg" class="text-xs text-amber-900 font-medium mt-1 leading-relaxed">
+                                        Restricción por estiaje activa: Calado admisible limitado a -- m. Carga total reducida automáticamente a -- MT (Merma: -- MT)
+                                    </p>
+                                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 pt-2.5 border-t border-amber-200/80 text-[11px]">
+                                        <div class="bg-white/80 p-2 rounded border border-amber-200">
+                                            <span class="text-slate-500 block text-[10px]">Calado Admisible:</span>
+                                            <span id="shedding-admissible-draft" class="font-mono font-bold text-slate-800">-- m</span>
+                                        </div>
+                                        <div class="bg-white/80 p-2 rounded border border-amber-200">
+                                            <span class="text-slate-500 block text-[10px]">Carga Nominal:</span>
+                                            <span id="shedding-nominal-tonnage" class="font-mono font-bold text-slate-800">-- MT</span>
+                                        </div>
+                                        <div class="bg-white/80 p-2 rounded border border-amber-200">
+                                            <span class="text-slate-500 block text-[10px]">Carga Ajustada:</span>
+                                            <span id="shedding-adjusted-tonnage" class="font-mono font-bold text-emerald-700">-- MT</span>
+                                        </div>
+                                        <div class="bg-white/80 p-2 rounded border border-amber-200">
+                                            <span class="text-slate-500 block text-[10px]">Merma (Deadfreight):</span>
+                                            <span id="shedding-lost-tonnage" class="font-mono font-bold text-rose-700">-- MT</span>
+                                        </div>
+                                    </div>
+                                    <div class="mt-2.5 text-xs text-amber-950 flex flex-wrap items-center justify-between gap-2 font-medium bg-amber-100/70 p-2 rounded border border-amber-200">
+                                        <span>Impacto del Falso Flete en el Break-Even:</span>
+                                        <span id="shedding-breakeven-impact" class="font-mono font-bold text-indigo-950">
+                                            --
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div id="route-configurator-root"></div>
 
                         <!-- Open-Meteo Marine Weather Section -->
@@ -77247,18 +77294,24 @@ window.actualizarGrabCapacityVisibility = function() {
             const convoy = window.activeConvoyData;
             const isRoro = (window.activeFluvialOperationType === 'RORO') || (convoy?.operationType === 'RORO');
 
-            // 1. Capacidad y Tipo de Operación
-            let totalCapacity = convoy?.totalCapacityMt || 12000;
+            // 1. Capacidad, Tipo de Operación y Parámetros Hidrostáticos Base (Arquitectura Naval Fluvial)
+            const lightshipDraft = 0.55; // Calado en Rosca (m)
+            const designDraft = 3.66;    // Calado de Diseño máximo (12 ft / 3.66 m)
+            const TPC = 4.5;            // Toneladas por Centímetro de Inmersión (MT/cm) para barcazas estándar/Jumbo
+            const UKC = 0.30;           // Margen de seguridad bajo la quilla (m) (Under Keel Clearance)
+
+            const bargeCount = window.activeBargeCount
+                || convoy?.bargeCount
+                || (Array.isArray(convoy?.barges) ? convoy.barges.length : (Array.isArray(convoy?.bargeIds) ? convoy.bargeIds.length : 4));
+
+            let nominalTonnage = convoy?.totalCapacityMt || (bargeCount * 1500);
             const inputCargoQty = parseFloat(document.getElementById('cargo-qty')?.value);
             if (!convoy?.totalCapacityMt && !isNaN(inputCargoQty) && inputCargoQty > 0) {
-                totalCapacity = inputCargoQty;
+                nominalTonnage = inputCargoQty;
             }
 
             const roroLinearMeters = parseFloat(document.getElementById('roro-linear-meters')?.value) || convoy?.totalLinearMeters || 800;
             const roroTruckCount = parseFloat(document.getElementById('roro-truck-count')?.value) || convoy?.totalTruckCount || 48;
-            if (isRoro) {
-                totalCapacity = convoy?.totalCapacityMt || (roroTruckCount * 25);
-            }
 
             // 2. Rutas y Tiempos de Navegación Bidireccional (Vector de Corriente)
             const distLaden = parseFloat(document.getElementById('dist-laden')?.value) || 0;
@@ -77322,7 +77375,7 @@ window.actualizarGrabCapacityVisibility = function() {
             const delayDays = lockWaitDays + customsDelayDays + nodeHandlingDays;
             const totalDays = Math.max(0.5, sailingDays + delayDays);
 
-            // 3. Alertas RIS y Cartografía Dinámica
+            // 3. Alertas RIS, Cartografía Dinámica y Motor Hidrostático de Estiaje
             const sandbarsActive = (document.getElementById('ris-sandbars-toggle')?.checked) ?? (convoy?.risSandbarsActive ?? false);
             const currentsActive = (document.getElementById('ris-currents-toggle')?.checked) ?? (convoy?.risStrongCurrentsActive ?? false);
 
@@ -77331,9 +77384,37 @@ window.actualizarGrabCapacityVisibility = function() {
             const effectiveWaterDepth = sandbarsActive ? Math.max(0, minWaterLevel - 0.40) : minWaterLevel;
             const underKeelMargin = effectiveWaterDepth - maxDraft;
 
+            // Algoritmo de Calado Admisible y Merma:
+            // maxAdmissibleDraft = Math.min(designDraft, minWaterLevel - UKC)
+            const maxAdmissibleDraft = Number(Math.min(designDraft, Math.max(0, effectiveWaterDepth - UKC)).toFixed(2));
+            const isEstiajeActive = !isRoro && (maxAdmissibleDraft < designDraft);
+
+            let adjustedCapacityPerBarge = nominalTonnage / bargeCount;
+            let adjustedTonnage = nominalTonnage;
+            let lostTonnage = 0;
+
+            if (isEstiajeActive) {
+                // adjustedCapacityPerBarge = Math.max(0, (maxAdmissibleDraft - lightshipDraft) * 100 * TPC)
+                adjustedCapacityPerBarge = Number(Math.max(0, (maxAdmissibleDraft - lightshipDraft) * 100 * TPC).toFixed(2));
+                adjustedTonnage = Math.round(adjustedCapacityPerBarge * bargeCount);
+                lostTonnage = Math.max(0, nominalTonnage - adjustedTonnage);
+            }
+
+            let totalCapacity = nominalTonnage;
+            if (isRoro) {
+                totalCapacity = convoy?.totalCapacityMt || (roroTruckCount * 25);
+            } else if (isEstiajeActive) {
+                // Multiplica adjustedCapacityPerBarge por el número de barcazas para obtener la carga neta del convoy,
+                // y utiliza este valor para los cálculos financieros en lugar de la capacidad nominal máxima.
+                totalCapacity = adjustedTonnage;
+            }
+
             const badgeGrounding = document.getElementById('ris-grounding-risk-badge');
             if (badgeGrounding) {
-                if (effectiveWaterDepth < maxDraft) {
+                if (isEstiajeActive) {
+                    badgeGrounding.className = 'px-2 py-0.5 rounded font-bold bg-amber-100 text-amber-900 border border-amber-300';
+                    badgeGrounding.textContent = `⚡ Estiaje: Calado Admisible ${maxAdmissibleDraft.toFixed(2)} m (Merma: ${Math.round(lostTonnage).toLocaleString()} MT)`;
+                } else if (effectiveWaterDepth < maxDraft) {
                     badgeGrounding.className = 'px-2 py-0.5 rounded font-bold bg-red-100 text-red-800 border border-red-300';
                     badgeGrounding.textContent = '⚠️ RIESGO CRÍTICO (Calado ' + maxDraft.toFixed(2) + 'm > Fondo ' + effectiveWaterDepth.toFixed(2) + 'm)';
                 } else if (underKeelMargin < 0.30) {
@@ -77400,15 +77481,55 @@ window.actualizarGrabCapacityVisibility = function() {
             const grossOperatingCost = totalMotorCost + bargesTotalCapex + totalIntermodalTolls;
             const totalConvoyCost = Math.max(0, grossOperatingCost);
 
-            // 6. Ingresos y Beneficio Neto
+            // 6. Ingresos, Beneficio Neto y Cálculo de Falso Flete (Deadfreight)
+            // Como el OPEX del remolcador y el alquiler de las barcazas no cambian, el sistema divide los costos totales
+            // entre las toneladas reales transportadas (adjustedTonnage). Esto encarece automáticamente el Break-Even por tonelada ($/MT).
             const sellingFreight = parseFloat(document.getElementById('freight-sell')?.value) || 35.0;
             const grossRevenue = sellingFreight * totalCapacity;
             const netProfit = grossRevenue - totalConvoyCost;
             const dailyTce = totalDays > 0 ? (grossRevenue - totalBunkerCost - (pdaLocks + pdaTolls + pdaPilotage) - transshipmentTariff) / totalDays : 0;
 
             const costPerTon = totalCapacity > 0 ? (totalConvoyCost / totalCapacity) : 0;
+            const nominalCostPerTon = nominalTonnage > 0 ? (totalConvoyCost / nominalTonnage) : 0;
+            const breakEvenDiff = Math.max(0, costPerTon - nominalCostPerTon);
+
             const costPerTonMotor = totalCapacity > 0 ? (totalMotorCost / totalCapacity) : 0;
             const costPerTonBarges = totalCapacity > 0 ? (bargesTotalCapex / totalCapacity) : 0;
+
+            // Feedback Visual: Panel Informativo Reactivo de Estiaje y Falso Flete
+            const panelShedding = document.getElementById('fluvial-tonnage-shedding-panel');
+            if (panelShedding) {
+                if (isEstiajeActive) {
+                    panelShedding.classList.remove('hidden');
+                    const elMsg = document.getElementById('fluvial-shedding-msg');
+                    if (elMsg) {
+                        elMsg.textContent = `Restricción por estiaje activa: Calado admisible limitado a ${maxAdmissibleDraft.toFixed(2)} m. Carga total reducida automáticamente a ${Math.round(adjustedTonnage).toLocaleString()} MT (Merma: ${Math.round(lostTonnage).toLocaleString()} MT)`;
+                    }
+                    const elAdmDraft = document.getElementById('shedding-admissible-draft');
+                    if (elAdmDraft) elAdmDraft.textContent = maxAdmissibleDraft.toFixed(2) + ' m';
+                    const elNomTon = document.getElementById('shedding-nominal-tonnage');
+                    if (elNomTon) elNomTon.textContent = Math.round(nominalTonnage).toLocaleString() + ' MT';
+                    const elAdjTon = document.getElementById('shedding-adjusted-tonnage');
+                    if (elAdjTon) elAdjTon.textContent = Math.round(adjustedTonnage).toLocaleString() + ' MT';
+                    const elLostTon = document.getElementById('shedding-lost-tonnage');
+                    if (elLostTon) elLostTon.textContent = Math.round(lostTonnage).toLocaleString() + ' MT';
+                    const elBeImpact = document.getElementById('shedding-breakeven-impact');
+                    if (elBeImpact) {
+                        elBeImpact.textContent = `$${nominalCostPerTon.toFixed(2)}/MT ➔ $${costPerTon.toFixed(2)}/MT (+$${breakEvenDiff.toFixed(2)}/MT por falso flete)`;
+                    }
+                } else {
+                    panelShedding.classList.add('hidden');
+                }
+            }
+
+            // Sincronizar en activeConvoyData
+            if (!window.activeConvoyData) window.activeConvoyData = {};
+            window.activeConvoyData.maxAdmissibleDraft = maxAdmissibleDraft;
+            window.activeConvoyData.nominalTonnage = nominalTonnage;
+            window.activeConvoyData.adjustedTonnage = adjustedTonnage;
+            window.activeConvoyData.lostTonnage = lostTonnage;
+            window.activeConvoyData.isDraftRestricted = isEstiajeActive;
+            window.activeConvoyData.totalCapacityMt = totalCapacity;
 
             // Actualización Dinámica del Submódulo Bimodal (Puertos / Ruta)
             const elImpactText = document.getElementById('intermodal-impact-text');
@@ -77428,7 +77549,6 @@ window.actualizarGrabCapacityVisibility = function() {
             }
 
             // 7. Reporte de Eficiencia Ambiental y Sostenibilidad
-            const bargeCount = convoy?.bargeCount || (convoy?.barges ? convoy.barges.length : (convoy?.bargeIds ? convoy.bargeIds.length : 4));
             const truckEquivalent = isRoro ? roroTruckCount : Math.max(1, Math.round(totalCapacity / 25));
             const co2ReductionPercent = 72;
             const sustainabilityText = 'Este convoy de ' + bargeCount + ' barcazas equivale a ' + truckEquivalent + ' camiones, reduciendo las emisiones de CO2 en un ' + co2ReductionPercent + '%';
@@ -77550,11 +77670,20 @@ window.actualizarGrabCapacityVisibility = function() {
             if (!window.State) window.State = {};
             window.State.totalConvoyCost = totalConvoyCost;
             window.State.costPerTon = costPerTon;
+            window.State.nominalCostPerTon = nominalCostPerTon;
             window.State.costPerTonMotor = costPerTonMotor;
             window.State.costPerTonBarges = costPerTonBarges;
             window.State.dailyTce = dailyTce;
             window.State.tce = dailyTce;
             window.State.tceOwner = dailyTce;
+            window.State.maxAdmissibleDraft = maxAdmissibleDraft;
+            window.State.nominalTonnage = nominalTonnage;
+            window.State.adjustedTonnage = adjustedTonnage;
+            window.State.lostTonnage = lostTonnage;
+            window.State.isDraftRestricted = isEstiajeActive;
+            window.State.cargo = totalCapacity;
+            window.State.cargoQty = totalCapacity;
+            window.State.cargo_qty = totalCapacity;
             if (costPerTon > 0) {
                 window.State.breakEven = costPerTon;
                 window.State.breakEvenArmador = costPerTon;

@@ -422,7 +422,8 @@ export function ConvoyBuilder({
   // Si Ro-Ro está activo, el calado no depende del peso muerto
   // Si bancos de arena activos, se reduce el margen de calado admisible (-0.40m)
   const effectiveWaterLevel = risSandbarsActive ? Math.max(0.5, Number(minWaterLevel) - 0.4) : Number(minWaterLevel);
-  const isDraftSafe = isRoro ? true : (maxDynamicDraft <= effectiveWaterLevel);
+  // Con Tonnage Shedding: la carga se reduce automáticamente para adaptarse al calado admisible
+  const isDraftSafe = isRoro ? true : (maxDynamicDraft <= effectiveWaterLevel || (effectiveWaterLevel - 0.30) > 0.55);
   const groundingRiskState: 'SAFE' | 'WARNING' | 'CRITICAL' = isRoro
     ? 'SAFE'
     : (maxDynamicDraft > effectiveWaterLevel
@@ -645,6 +646,16 @@ export function ConvoyBuilder({
     isRoro,
   ]);
 
+  // Parámetros y Resultados del Motor Hidrostático (Tonnage Shedding y Falso Flete)
+  const shedding = decoupledEstimate?.shedding;
+  const isEstiajeActive = Boolean(shedding?.isDraftRestricted && !isRoro);
+  const maxAdmissibleDraft = shedding?.maxAdmissibleDraft ?? Number(Math.min(3.66, Math.max(0, effectiveWaterLevel - 0.30)).toFixed(2));
+  const adjustedTonnage = shedding?.adjustedTonnage ?? (isEstiajeActive ? Math.max(0, (maxAdmissibleDraft - 0.55) * 100 * 4.5 * coupledBarges.length) : totalCapacityMt);
+  const lostTonnage = shedding?.lostTonnage ?? Math.max(0, totalCapacityMt - adjustedTonnage);
+  const nominalCostPerTon = decoupledEstimate?.nominalCostPerTon ?? (totalCapacityMt > 0 ? Number(((decoupledEstimate?.totalVoyageCost || 0) / totalCapacityMt).toFixed(2)) : 0);
+  const costPerCargoTon = decoupledEstimate?.costPerCargoTon ?? 0;
+  const breakEvenDiff = Math.max(0, costPerCargoTon - nominalCostPerTon);
+
   // Sincronización continua hacia componentes o scripts externos
   useEffect(() => {
     const stdName = (typeof window !== 'undefined' && (window as any).activeBargeStandardData?.name) || (activeBargeStandard === 'mississippi_jumbo' ? 'Misisipi Jumbo' : 'Súper Jumbo');
@@ -664,8 +675,13 @@ export function ConvoyBuilder({
       bargeIds,
       bargeCount: bargeIds.length,
       convoyDescription: convoyDesc,
-      totalCapacityMt: isRoro ? (totalTruckCount * 25) : totalCapacityMt,
-      maxDynamicDraftMeters: maxDynamicDraft,
+      totalCapacityMt: isRoro ? (totalTruckCount * 25) : (isEstiajeActive ? adjustedTonnage : totalCapacityMt),
+      nominalCapacityMt: totalCapacityMt,
+      adjustedCapacityMt: adjustedTonnage,
+      lostTonnageMt: lostTonnage,
+      maxDynamicDraftMeters: isEstiajeActive ? maxAdmissibleDraft : maxDynamicDraft,
+      maxAdmissibleDraftMeters: maxAdmissibleDraft,
+      isDraftRestricted: isEstiajeActive,
       min_water_level: effectiveWaterLevel,
       minWaterLevelMeters: effectiveWaterLevel,
       operationType,
@@ -696,6 +712,10 @@ export function ConvoyBuilder({
     decoupledEstimate,
     onConvoyChange,
     isRoro,
+    isEstiajeActive,
+    maxAdmissibleDraft,
+    adjustedTonnage,
+    lostTonnage,
   ]);
 
   // --------------------------------------------------------------------------
@@ -772,12 +792,13 @@ export function ConvoyBuilder({
       return;
     }
 
-    // Validador de Calado Dinámico (Draft Constraint):
-    // Bloquea el guardado si el calado dinámico de la barcaza más pesada supera min_water_level
-    if (!isDraftSafe || maxDynamicDraft > Number(minWaterLevel)) {
+    // Validador de Calado Físico Mínimo (Draft Constraint con Tonnage Shedding):
+    // El sistema ajusta automáticamente la carga mediante Tonnage Shedding;
+    // solo se bloquea si el estiaje es físicamente infranqueable (sin margen para flotar ni en rosca).
+    if (!isDraftSafe && adjustedTonnage <= 0) {
       setFeedback({
         type: 'error',
-        message: `Restricción Crítica de Calado Dinámico (Draft Constraint): El calado dinámico (${maxDynamicDraft.toFixed(2)} m) de la barcaza más pesada (${heaviestBarge?.name || 'Convoy'}) supera el nivel mínimo de estiaje disponible (${Number(minWaterLevel).toFixed(2)} m) en ${riverName}. Guardado bloqueado por riesgo inminente de varadura.`,
+        message: `Restricción Crítica de Calado: El nivel de estiaje disponible (${Number(minWaterLevel).toFixed(2)} m) es inferior al calado en rosca (0.55 m) más UKC (0.30 m). Guardado no permitido por imposibilidad física de navegación.`,
       });
       return;
     }
@@ -797,8 +818,13 @@ export function ConvoyBuilder({
       departure_date: departureDate,
       estimated_arrival_date: estimatedArrivalDate,
       metadata: {
-        totalCapacityMt,
-        maxDynamicDraft,
+        totalCapacityMt: isRoro ? (totalTruckCount * 25) : (isEstiajeActive ? adjustedTonnage : totalCapacityMt),
+        nominalCapacityMt: totalCapacityMt,
+        adjustedCapacityMt: adjustedTonnage,
+        lostTonnageMt: lostTonnage,
+        maxDynamicDraft: isEstiajeActive ? maxAdmissibleDraft : maxDynamicDraft,
+        maxAdmissibleDraft,
+        isDraftRestricted: isEstiajeActive,
         tugboatMotor: selectedTugboat?.motor,
         tugboatDailyOpex: calculatedDailyOpex,
         bargeCount: bargeIds.length,
@@ -935,43 +961,55 @@ export function ConvoyBuilder({
       </div>
 
       {/* -------------------------------------------------------------------- */}
-      {/* ALERTA CRÍTICA: RESTRICCIÓN DE CALADO DINÁMICO (DRAFT CONSTRAINT)     */}
+      {/* PANEL INFORMATIVO: RESTRICCIÓN POR ESTIAJE Y TONNAGE SHEDDING       */}
       {/* -------------------------------------------------------------------- */}
-      {!isDraftSafe && (
+      {isEstiajeActive && (
         <div
-          role="alert"
+          role="region"
           id="draft-constraint-critical-alert"
-          className="p-4 rounded-xl border-2 border-red-500 bg-red-50 text-red-900 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-pulse"
+          data-testid="draft-constraint-critical-alert"
+          className="p-4 rounded-xl border border-amber-300 bg-amber-50 text-slate-800 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4"
         >
           <div className="flex items-start gap-3.5">
-            <div className="p-2.5 bg-red-100 border border-red-200 rounded-lg text-red-600 text-2xl shrink-0">
-              🚨
+            <div className="p-2.5 bg-amber-100 border border-amber-200 rounded-lg text-amber-800 text-2xl shrink-0">
+              ⚖️
             </div>
             <div className="space-y-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <h4 className="font-black text-red-800 text-xs sm:text-sm uppercase tracking-wider">
-                  ALERTA CRÍTICA: Restricción de Calado Dinámico (Draft Constraint)
+                <h4 className="font-bold text-amber-950 text-xs sm:text-sm uppercase tracking-wider">
+                  Restricción Hidrológica por Estiaje Activa
                 </h4>
-                <span className="bg-red-600 text-slate-900 text-[10px] font-black px-2 py-0.5 rounded font-mono uppercase">
-                  Despacho Fluvial Bloqueado
+                <span className="bg-amber-200 text-amber-900 text-[10px] font-bold px-2 py-0.5 rounded font-mono uppercase">
+                  Tonnage Shedding & Falso Flete
                 </span>
               </div>
-              <p className="text-xs text-red-800 leading-relaxed">
-                El calado dinámico de la barcaza más pesada (
-                <strong className="text-slate-900 underline">{heaviestBarge?.name || 'Barcaza'}</strong>
-                : <strong className="text-rose-300 font-mono">{maxDynamicDraft.toFixed(2)} m</strong>)
-                supera el nivel de estiaje disponible (
-                <strong className="text-rose-300 font-mono">{Number(minWaterLevel).toFixed(2)} m</strong>)
-                en la ruta <strong className="text-slate-900">{riverName}</strong>.
-                Exceso de calado crítico: <strong className="font-mono text-slate-900">+{(maxDynamicDraft - Number(minWaterLevel)).toFixed(2)} m</strong>.
-                Riesgo inminente de varadura en pasos críticos o fondos rocosos.
+              <p className="text-xs text-amber-900 leading-relaxed font-medium">
+                Restricción por estiaje activa: Calado admisible limitado a <strong className="font-mono text-slate-900">{maxAdmissibleDraft.toFixed(2)} m</strong>. Carga total reducida automáticamente a <strong className="font-mono text-slate-900">{Math.round(adjustedTonnage).toLocaleString()} MT</strong> (Merma: <strong className="font-mono text-rose-700">{Math.round(lostTonnage).toLocaleString()} MT</strong>).
               </p>
+              <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-amber-950">
+                <span className="bg-white/90 border border-amber-200 px-2 py-0.5 rounded">
+                  Calado Rosca: <strong>0.55 m</strong>
+                </span>
+                <span className="bg-white/90 border border-amber-200 px-2 py-0.5 rounded">
+                  Calado Diseño: <strong>3.66 m</strong>
+                </span>
+                <span className="bg-white/90 border border-amber-200 px-2 py-0.5 rounded">
+                  TPC: <strong>4.5 MT/cm</strong>
+                </span>
+                <span className="bg-white/90 border border-amber-200 px-2 py-0.5 rounded">
+                  UKC: <strong>0.30 m</strong>
+                </span>
+              </div>
             </div>
           </div>
-          <div className="shrink-0 self-end sm:self-center">
-            <span className="px-3 py-1.5 bg-rose-900 border border-rose-500/80 rounded-lg text-xs font-black text-slate-900 uppercase tracking-wider shadow-md inline-block">
-              ⛔ Guardado No Permitido
-            </span>
+          <div className="shrink-0 bg-white border border-amber-200 rounded-lg p-3 text-right">
+            <div className="text-[10px] uppercase font-bold text-slate-500">Impacto Falso Flete (Break-Even)</div>
+            <div className="text-sm font-black font-mono text-indigo-950 mt-0.5">
+              ${nominalCostPerTon.toFixed(2)}/MT ➔ ${costPerCargoTon.toFixed(2)}/MT
+            </div>
+            <div className="text-[10px] font-bold text-rose-600 font-mono">
+              +${breakEvenDiff.toFixed(2)}/MT (+{((breakEvenDiff / (nominalCostPerTon || 1)) * 100).toFixed(1)}%)
+            </div>
           </div>
         </div>
       )}
@@ -1530,19 +1568,28 @@ export function ConvoyBuilder({
                   type="button"
                   id="btn-save-river-voyage"
                   onClick={handleSaveVoyage}
-                  disabled={isSaving || !tugboatId || !isDraftSafe}
-                  className={`w-full text-slate-900 text-xs font-black uppercase tracking-wider py-3 px-4 rounded-lg transition shadow-lg flex items-center justify-center gap-2 cursor-pointer ${
-                    !isDraftSafe
-                      ? 'bg-rose-950/80 border-2 border-rose-500 text-rose-200 cursor-not-allowed shadow-rose-950/40'
+                  disabled={isSaving || !tugboatId || (isEstiajeActive && adjustedTonnage <= 0)}
+                  className={`w-full text-white text-xs font-black uppercase tracking-wider py-3 px-4 rounded-lg transition shadow-md flex items-center justify-center gap-2 cursor-pointer ${
+                    (isEstiajeActive && adjustedTonnage <= 0)
+                      ? 'bg-rose-950/80 border-2 border-rose-500 text-rose-200 cursor-not-allowed'
+                      : isEstiajeActive
+                      ? 'bg-amber-600 hover:bg-amber-500 shadow-sm text-white'
                       : 'bg-blue-600 hover:bg-cyan-500 disabled:bg-slate-200 disabled:text-slate-400 shadow-sm'
                   }`}
                 >
-                  {!isDraftSafe ? (
-                    <span className="text-rose-200 flex items-center gap-1.5">
-                      ⛔ Guardado Bloqueado: Calado ({maxDynamicDraft.toFixed(2)} m) &gt; Estiaje ({Number(minWaterLevel).toFixed(2)} m)
-                    </span>
-                  ) : isSaving ? (
+                  {isSaving ? (
                     <span>Guardando Convoy Fluvial...</span>
+                  ) : (isEstiajeActive && adjustedTonnage <= 0) ? (
+                    <span className="text-rose-200 flex items-center gap-1.5">
+                      ⛔ Guardado Bloqueado: Fondo insuficiente ({effectiveWaterLevel.toFixed(2)} m)
+                    </span>
+                  ) : isEstiajeActive ? (
+                    <>
+                      <span>⚓ Guardar Convoy (Carga Ajustada: {Math.round(adjustedTonnage).toLocaleString()} MT)</span>
+                      <span className="text-[10px] font-mono text-amber-100">
+                        (Merma: {Math.round(lostTonnage).toLocaleString()} MT · Calado: {maxAdmissibleDraft.toFixed(2)} m)
+                      </span>
+                    </>
                   ) : (
                     <>
                       <span>⚓ Guardar Viaje y Ensamblaje de Convoy</span>
@@ -2212,6 +2259,11 @@ export function ConvoyBuilder({
                 <span className="block text-2xl md:text-3xl font-black font-mono text-slate-900">
                   ${decoupledEstimate?.costPerCargoTon.toFixed(2) ?? '0.00'} <span className="text-sm font-normal text-slate-600">USD/MT</span>
                 </span>
+                {isEstiajeActive && (
+                  <span className="text-[11px] font-mono font-bold text-rose-600 block mt-0.5">
+                    Falso Flete Activo: +${breakEvenDiff.toFixed(2)} USD/MT (Base Nominal: ${nominalCostPerTon.toFixed(2)})
+                  </span>
+                )}
                 <span className="text-xs text-slate-600 block mt-1">
                   Flete comercial aplicado: <b>${freightRatePerTon} USD/MT</b>
                 </span>
