@@ -792,7 +792,7 @@ function findActionableAiJsonObject(responseText) {
       const rawJson = text.slice(start, end + 1);
       try {
         const parsed = JSON.parse(rawJson);
-        if (["update_field", "calculate_route", "fill_complete_form", "update_fields", "search_vessel", "LOCATE_VESSEL", "renderizar_auditoria_dss"].includes(parsed?.action)
+        if (["update_field", "calculate_route", "fill_complete_form", "update_fields", "search_vessel", "LOCATE_VESSEL", "renderizar_auditoria_dss", "applyDataBridgePayload", "apply_databridge_payload", "databridge_payload"].includes(parsed?.action)
           || parsed?.accion_ui === "renderizar_auditoria_dss"
           || isDraftEmailAction(parsed)) {
           return { action: parsed, start, end: end + 1 };
@@ -812,7 +812,7 @@ function extractActionableAiResponse(responseText) {
   if (jsonBlock) {
     try {
       const action = JSON.parse(jsonBlock[1]);
-      if (["update_field", "calculate_route", "fill_complete_form", "update_fields", "search_vessel", "LOCATE_VESSEL", "renderizar_auditoria_dss"].includes(action?.action)
+      if (["update_field", "calculate_route", "fill_complete_form", "update_fields", "search_vessel", "LOCATE_VESSEL", "renderizar_auditoria_dss", "applyDataBridgePayload", "apply_databridge_payload", "databridge_payload"].includes(action?.action)
         || action?.accion_ui === "renderizar_auditoria_dss"
         || isDraftEmailAction(action)) {
         return {
@@ -1353,6 +1353,22 @@ async function executeActionableAiUpdateFields(actionObj) {
 
         if (!isMapView) {
             if (p.loadingRate || p.dischargeRate) window.recalcularDiasPuerto?.();
+        }
+
+        // RiverCharter Zero-Touch: Inyección de variables, auto-cálculo y renderizado reactivo
+        if (typeof window !== 'undefined' && typeof window.applyDataBridgePayload === 'function') {
+            try {
+                window.applyDataBridgePayload(p);
+            } catch (errPayload) {
+                console.warn('[Cerebro.ia/update_fields] Error en applyDataBridgePayload:', errPayload);
+            }
+        } else if (typeof window !== 'undefined') {
+            if (typeof window.runEngine === 'function') {
+                try { window.runEngine(); } catch (_) {}
+            }
+            if (typeof window.updateFluvialCalculations === 'function') {
+                try { window.updateFluvialCalculations(); } catch (_) {}
+            }
         }
         
         console.log("✅ [Cerebro.ia/update_fields] Inyección completada", p);
@@ -2953,6 +2969,10 @@ async function executeActionableAiAction(actionObj) {
 
     if (actionName === "update_fields" && typeof executeActionableAiUpdateFields === "function") {
         return await executeActionableAiUpdateFields(actionObj);
+    }
+
+    if ((actionName === "applyDataBridgePayload" || actionName === "apply_databridge_payload" || actionName === "databridge_payload") && typeof window !== 'undefined' && typeof window.applyDataBridgePayload === 'function') {
+        return window.applyDataBridgePayload(actionObj.payload || actionObj);
     }
 
     if (actionName === "search_vessel" && typeof executeActionableAiSearchVessel === "function") {
