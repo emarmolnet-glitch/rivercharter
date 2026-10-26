@@ -9346,6 +9346,13 @@
             display: inline-block !important;
         }
 
+        /* Limpieza y Purificación UI del Menú Lateral en RiverCharter (Modo Fluvial) */
+        #app-navigation-sidebar.is-fluvial-sidebar #btn-open-land-charter,
+        body.is-fluvial-mode #btn-open-land-charter,
+        [data-app="rivercharter"] #btn-open-land-charter {
+            display: none !important;
+        }
+
         #app-navigation-sidebar .sidebar-nav-item {
             position: relative;
             display: flex;
@@ -31602,6 +31609,14 @@ function createRouteAnchorElement(type) {
         }
 
         function getPrimaryNavigationModules() {
+            const isFluvialArg = arguments[0];
+            const isFluvial = typeof isFluvialArg === 'boolean'
+                ? isFluvialArg
+                : (typeof isFluvialContext === 'function' ? isFluvialContext() : Boolean(window.isRiverCharter || window.isFluvial));
+            if (isFluvial) {
+                const fluvialIncompatibleIds = new Set(['compatibilidad', 'ais', 'multimodal']);
+                return PRIMARY_MODULES.filter(moduleConfig => !fluvialIncompatibleIds.has(moduleConfig.id));
+            }
             const promotedOptionalModules = OPTIONAL_MODULES.filter(moduleConfig => (
                 moduleConfig.preferenceKey === 'showContainerModules' && userPreferences.showContainerModules
             ));
@@ -31609,56 +31624,62 @@ function createRouteAnchorElement(type) {
         }
 
         function renderPrimaryNavigation() {
+            const isFluvialArg = arguments[0];
+            const isFluvial = typeof isFluvialArg === 'boolean'
+                ? isFluvialArg
+                : (typeof isFluvialContext === 'function' ? isFluvialContext() : Boolean(window.isRiverCharter || window.isFluvial));
             const tabs = document.getElementById('primary-module-tabs');
             const mobileMenu = document.getElementById('mobile-module-nav-menu');
-            const modules = getPrimaryNavigationModules();
+            const modules = getPrimaryNavigationModules(isFluvial);
             if (tabs) {
                 tabs.innerHTML = '';
                 modules.forEach(moduleConfig => {
                     tabs.appendChild(createModuleButton(moduleConfig, 'primary'));
                 });
 
-                // Separador visual (línea vertical) y botón 💼 PROYECTOS a la derecha de AUDITORIA
-                const separator = document.createElement('div');
-                separator.className = 'w-full h-px bg-slate-200 my-1 shrink-0';
-                separator.setAttribute('aria-hidden', 'true');
-                // w-px bg-slate-700
-                tabs.appendChild(separator);
+                if (!isFluvial) {
+                    // Separador visual (línea vertical) y botón 💼 PROYECTOS a la derecha de AUDITORIA
+                    const separator = document.createElement('div');
+                    separator.className = 'w-full h-px bg-slate-200 my-1 shrink-0';
+                    separator.setAttribute('aria-hidden', 'true');
+                    // w-px bg-slate-700
+                    tabs.appendChild(separator);
 
-                const forwarderBtn = document.createElement('button');
-                forwarderBtn.type = 'button';
-                forwarderBtn.id = 'tab-btn-forwarders';
-                forwarderBtn.dataset.moduleId = 'FORWARDERS';
-                forwarderBtn.className = 'tab-btn sidebar-nav-item flex items-center h-10 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors p-2 cursor-pointer w-full text-left';
-                forwarderBtn.setAttribute('title', 'PROYECTOS');
-                forwarderBtn.setAttribute('aria-label', '💼 PROYECTOS');
-                const fwdIcon = MODULE_ICONS['FORWARDERS'];
-                forwarderBtn.innerHTML = `
-                    <div class="sidebar-icon flex items-center justify-center w-6 h-6 shrink-0">${fwdIcon}</div>
-                    <span class="sidebar-text ${isSidebarExpanded ? 'inline-block' : 'hidden'} ml-2 text-xs font-semibold truncate">PROYECTOS</span>
-                `;
-                // 💼 PROYECTOS
-                forwarderBtn.addEventListener('click', () => {
-                    switchTab('FORWARDERS');
-                });
-                tabs.appendChild(forwarderBtn);
+                    const forwarderBtn = document.createElement('button');
+                    forwarderBtn.type = 'button';
+                    forwarderBtn.id = 'tab-btn-forwarders';
+                    forwarderBtn.dataset.moduleId = 'FORWARDERS';
+                    forwarderBtn.className = 'tab-btn sidebar-nav-item flex items-center h-10 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors p-2 cursor-pointer w-full text-left';
+                    forwarderBtn.setAttribute('title', 'PROYECTOS');
+                    forwarderBtn.setAttribute('aria-label', '💼 PROYECTOS');
+                    const fwdIcon = MODULE_ICONS['FORWARDERS'];
+                    forwarderBtn.innerHTML = `
+                        <div class="sidebar-icon flex items-center justify-center w-6 h-6 shrink-0">${fwdIcon}</div>
+                        <span class="sidebar-text ${isSidebarExpanded ? 'inline-block' : 'hidden'} ml-2 text-xs font-semibold truncate">PROYECTOS</span>
+                    `;
+                    // 💼 PROYECTOS
+                    forwarderBtn.addEventListener('click', () => {
+                        switchTab('FORWARDERS');
+                    });
+                    tabs.appendChild(forwarderBtn);
 
-                // Botón Reporte de Mercado en la lista de navegación del Sidebar
-                const marketReportBtn = document.createElement('button');
-                marketReportBtn.type = 'button';
-                marketReportBtn.id = 'btn-market-report-nav';
-                marketReportBtn.className = 'tab-btn sidebar-nav-item flex items-center h-10 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors p-2 cursor-pointer w-full text-left';
-                marketReportBtn.setAttribute('title', 'Generar Reporte de Mercado Actual');
-                marketReportBtn.setAttribute('aria-label', 'Generar Reporte de Mercado Actual');
-                const mktIcon = MODULE_ICONS['marketReport'];
-                marketReportBtn.innerHTML = `
-                    <div class="sidebar-icon flex items-center justify-center w-6 h-6 shrink-0">${mktIcon}</div>
-                    <span class="sidebar-text ${isSidebarExpanded ? 'inline-block' : 'hidden'} ml-2 text-xs font-semibold truncate"><span>Reporte de Mercado</span></span>
-                `;
-                marketReportBtn.addEventListener('click', () => {
-                    generateMarketReport();
-                });
-                tabs.appendChild(marketReportBtn);
+                    // Botón Reporte de Mercado en la lista de navegación del Sidebar
+                    const marketReportBtn = document.createElement('button');
+                    marketReportBtn.type = 'button';
+                    marketReportBtn.id = 'btn-market-report-nav';
+                    marketReportBtn.className = 'tab-btn sidebar-nav-item flex items-center h-10 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors p-2 cursor-pointer w-full text-left';
+                    marketReportBtn.setAttribute('title', 'Generar Reporte de Mercado Actual');
+                    marketReportBtn.setAttribute('aria-label', 'Generar Reporte de Mercado Actual');
+                    const mktIcon = MODULE_ICONS['marketReport'];
+                    marketReportBtn.innerHTML = `
+                        <div class="sidebar-icon flex items-center justify-center w-6 h-6 shrink-0">${mktIcon}</div>
+                        <span class="sidebar-text ${isSidebarExpanded ? 'inline-block' : 'hidden'} ml-2 text-xs font-semibold truncate"><span>Reporte de Mercado</span></span>
+                    `;
+                    marketReportBtn.addEventListener('click', () => {
+                        generateMarketReport();
+                    });
+                    tabs.appendChild(marketReportBtn);
+                }
             }
             if (mobileMenu) {
                 mobileMenu.innerHTML = '';
@@ -31669,20 +31690,25 @@ function createRouteAnchorElement(type) {
                     mobileMenu.appendChild(item);
                 });
 
-                const mobileItem = document.createElement('li');
-                mobileItem.className = 'tools-dropdown-item';
-                const mobileBtn = document.createElement('button');
-                mobileBtn.type = 'button';
-                mobileBtn.id = 'mobile-tab-btn-forwarders';
-                mobileBtn.dataset.moduleId = 'FORWARDERS';
-                mobileBtn.className = 'tools-dropdown-action';
-                mobileBtn.textContent = '💼 PROYECTOS';
-                mobileBtn.addEventListener('click', () => {
-                    switchTab('FORWARDERS');
-                    closeMobileModuleNav();
-                });
-                mobileItem.appendChild(mobileBtn);
-                mobileMenu.appendChild(mobileItem);
+                if (!isFluvial) {
+                    const mobileItem = document.createElement('li');
+                    mobileItem.className = 'tools-dropdown-item';
+                    const mobileBtn = document.createElement('button');
+                    mobileBtn.type = 'button';
+                    mobileBtn.id = 'mobile-tab-btn-forwarders';
+                    mobileBtn.dataset.moduleId = 'FORWARDERS';
+                    mobileBtn.className = 'tools-dropdown-action';
+                    mobileBtn.textContent = '💼 PROYECTOS';
+                    mobileBtn.addEventListener('click', () => {
+                        switchTab('FORWARDERS');
+                        closeMobileModuleNav();
+                    });
+                    mobileItem.appendChild(mobileBtn);
+                    mobileMenu.appendChild(mobileItem);
+                }
+            }
+            if (typeof syncFluvialSidebarElements === 'function') {
+                syncFluvialSidebarElements(isFluvial);
             }
             updateMobileModuleNavLabel(activeNavigationModuleId);
         }
@@ -31737,11 +31763,18 @@ function createRouteAnchorElement(type) {
         });
 
         function renderAdvancedModulesMenu() {
+            const isFluvialArg = arguments[0];
+            const isFluvial = typeof isFluvialArg === 'boolean'
+                ? isFluvialArg
+                : (typeof isFluvialContext === 'function' ? isFluvialContext() : Boolean(window.isRiverCharter || window.isFluvial));
             const menu = document.getElementById('advanced-modules-menu');
             if (!menu) return;
             menu.innerHTML = '';
 
             OPTIONAL_MODULES.forEach(moduleConfig => {
+                if (isFluvial && (moduleConfig.id === 'multimodal' || moduleConfig.id === 'compatibilidad' || moduleConfig.id === 'ais')) {
+                    return;
+                }
                 const item = document.createElement('li');
                 item.className = 'tools-dropdown-item';
                 item.appendChild(createModuleButton(moduleConfig, 'advanced'));
@@ -31839,27 +31872,29 @@ function createRouteAnchorElement(type) {
                 window.openMarketContactsDirectory?.();
             });
 
-            const preferenceItem = document.createElement('li');
-            preferenceItem.className = 'tools-dropdown-item advanced-preference-item';
-            preferenceItem.innerHTML = `
-                <label class="advanced-preference-toggle" for="show-container-modules-toggle">
-                    <input type="checkbox" id="show-container-modules-toggle" ${userPreferences.showContainerModules ? 'checked' : ''}>
-                    <span>Mostrar Cotizador Multimodal en barra superior</span>
-                </label>
-            `;
-            menu.appendChild(preferenceItem);
+            if (!isFluvial) {
+                const preferenceItem = document.createElement('li');
+                preferenceItem.className = 'tools-dropdown-item advanced-preference-item';
+                preferenceItem.innerHTML = `
+                    <label class="advanced-preference-toggle" for="show-container-modules-toggle">
+                        <input type="checkbox" id="show-container-modules-toggle" ${userPreferences.showContainerModules ? 'checked' : ''}>
+                        <span>Mostrar Cotizador Multimodal en barra superior</span>
+                    </label>
+                `;
+                menu.appendChild(preferenceItem);
 
-            const preferenceToggle = document.getElementById('show-container-modules-toggle');
-            if (preferenceToggle) {
-                preferenceToggle.addEventListener('click', event => event.stopPropagation());
-                preferenceToggle.addEventListener('change', event => {
-                    saveUserPreferences({
-                        ...userPreferences,
-                        showContainerModules: Boolean(event.target.checked),
+                const preferenceToggle = document.getElementById('show-container-modules-toggle');
+                if (preferenceToggle) {
+                    preferenceToggle.addEventListener('click', event => event.stopPropagation());
+                    preferenceToggle.addEventListener('change', event => {
+                        saveUserPreferences({
+                            ...userPreferences,
+                            showContainerModules: Boolean(event.target.checked),
+                        });
+                        renderNavbarModules();
+                        updateNavigationContext(activeNavigationModuleId);
                     });
-                    renderNavbarModules();
-                    updateNavigationContext(activeNavigationModuleId);
-                });
+                }
             }
         }
 
@@ -31951,11 +31986,57 @@ function createRouteAnchorElement(type) {
             }
         }
 
-        function renderNavbarModules() {
-            renderPrimaryNavigation();
-            renderAdvancedModulesMenu();
-            renderNplModuleMenu();
+        function syncFluvialSidebarElements() {
+            const isFluvialArg = arguments[0];
+            const isFluvial = typeof isFluvialArg === 'boolean'
+                ? isFluvialArg
+                : (typeof isFluvialContext === 'function' ? isFluvialContext() : Boolean(window.isRiverCharter || window.isFluvial));
+            const sidebar = document.getElementById('app-navigation-sidebar');
+            if (sidebar) {
+                sidebar.classList.toggle('is-fluvial-sidebar', Boolean(isFluvial));
+            }
+            if (typeof document !== 'undefined' && document.body) {
+                document.body.classList.toggle('is-fluvial-mode', Boolean(isFluvial));
+            }
+            const landCharterBtn = document.getElementById('btn-open-land-charter');
+            if (landCharterBtn) {
+                if (isFluvial) {
+                    landCharterBtn.style.setProperty('display', 'none', 'important');
+                    landCharterBtn.setAttribute('aria-hidden', 'true');
+                } else {
+                    landCharterBtn.style.removeProperty('display');
+                    landCharterBtn.removeAttribute('aria-hidden');
+                }
+            }
+            const marketNavBtn = document.getElementById('btn-market-report-nav');
+            if (marketNavBtn && isFluvial && marketNavBtn.parentElement?.id === 'primary-module-tabs') {
+                marketNavBtn.style.setProperty('display', 'none', 'important');
+            }
         }
+        window.syncFluvialSidebarElements = syncFluvialSidebarElements;
+
+        function renderNavbarModules() {
+            const isFluvialArg = arguments[0];
+            const isFluvial = typeof isFluvialArg === 'boolean'
+                ? isFluvialArg
+                : (typeof isFluvialContext === 'function' ? isFluvialContext() : Boolean(window.isRiverCharter || window.isFluvial));
+            renderPrimaryNavigation(isFluvial);
+            renderAdvancedModulesMenu(isFluvial);
+            renderNplModuleMenu();
+            syncFluvialSidebarElements(isFluvial);
+        }
+        window.renderNavbarModules = renderNavbarModules;
+
+        window.setFluvialNavigationMode = function(fluvialMode) {
+            const nextMode = Boolean(fluvialMode);
+            window.isFluvial = nextMode;
+            window.isRiverCharter = nextMode;
+            renderNavbarModules(nextMode);
+            if (nextMode && ['compatibilidad', 'ais', 'multimodal', 'fcl', 'FORWARDERS', 'forwarders'].includes(activeNavigationModuleId)) {
+                switchTab('map');
+            }
+            window.dispatchEvent(new CustomEvent('fluvial:navigation-mode-change', { detail: { isFluvial: nextMode } }));
+        };
 
         function closeAdvancedModulesMenu() {
             const menu = document.getElementById('advanced-modules-menu');
@@ -52100,12 +52181,15 @@ Example:
         }
         window.printExecutiveReportClient = printExecutiveReportClient;
 
-        function isFluvialContext() {
+        function isFluvialContext(override = null) {
+            if (typeof override === 'boolean') return override;
             if (typeof window !== 'undefined') {
                 if (typeof window.isFluvialContext === 'function' && window.isFluvialContext !== isFluvialContext) {
-                    try { return Boolean(window.isFluvialContext()); } catch (_) {}
+                    try { return Boolean(window.isFluvialContext(override)); } catch (_) {}
                 }
-                if (window.isFluvial === true || window.isRiverCharter === true) return true;
+                if (window.isFluvial === false && window.isRiverCharter === false) return false;
+                if (typeof window.isFluvialMode === 'boolean' && !window.isFluvialMode) return false;
+                if (window.isFluvial === true || window.isRiverCharter === true || window.isFluvialMode === true) return true;
                 if (window.activeConvoyData) return true;
                 if (document.getElementById('convoy-builder-root')) return true;
                 if (document.title && /river/i.test(document.title)) return true;
