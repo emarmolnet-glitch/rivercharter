@@ -38,6 +38,11 @@ import {
   type TerminalPdaBreakdown,
 } from '../services/fluvialEstimator.js';
 import {
+  generateFluvialFixtureRecapPdf,
+  buildFluvialFixtureRecapData,
+  type FluvialFixtureRecapTerms,
+} from '../services/fluvialFixtureRecapService.js';
+import {
   DATABRIDGE_FLUVIAL_STANDARDS,
   type FluvialBargeStandard,
 } from '../services/databridgeFluvialService.js';
@@ -2458,6 +2463,65 @@ export function ConvoyBuilder({
                 <span className="text-[10px] text-slate-500 uppercase block">Duración Total</span>
                 <span className="font-bold text-purple-700 font-mono">{totalOperationalDays} días</span>
               </div>
+              <button
+                type="button"
+                id="btn-convoy-export-fixture-recap"
+                onClick={() => {
+                  if (typeof (window as any).exportFluvialFixtureRecapPDF === 'function') {
+                    (window as any).exportFluvialFixtureRecapPDF({
+                      pol: originTerminal,
+                      pod: destinationTerminal,
+                      riverName,
+                      tugboatName: selectedTugboat?.name,
+                      tugboatPowerHp: selectedTugboat?.enginePowerHp,
+                      bargeCount: coupledBarges.length,
+                      freightRate: freightRatePerTon,
+                      nominalTonnage,
+                      adjustedTonnage,
+                      lostTonnage,
+                      maxAdmissibleDraft,
+                      isDraftRestricted: isEstiajeActive,
+                      requiresDoubleLockage,
+                      convoyCols,
+                      convoyRows,
+                      convoyLengthFt,
+                      convoyBeamFt,
+                      doubleLockageHours,
+                      lockCount: routeLockCount,
+                      operationType: isRoro ? 'RORO' : 'BULK',
+                      freeTimeDays: decoupledEstimate?.pdaCost?.portOperatingDays,
+                      freeTimeHours: decoupledEstimate?.pdaCost?.portOperatingHours,
+                      demurrageRatePerDay: selectedTugboat?.dailyOpex ? (selectedTugboat.dailyOpex + (coupledBarges.length * 250) + 500) : 4500,
+                    });
+                  } else {
+                    generateFluvialFixtureRecapPdf({
+                      pol: originTerminal,
+                      pod: destinationTerminal,
+                      riverName,
+                      tugboatName: selectedTugboat?.name,
+                      bargeCount: coupledBarges.length,
+                      freightRate: freightRatePerTon,
+                      nominalTonnage,
+                      adjustedTonnage,
+                      lostTonnage,
+                      maxAdmissibleDraft,
+                      isDraftRestricted: isEstiajeActive,
+                      requiresDoubleLockage,
+                      convoyCols,
+                      convoyRows,
+                      convoyLengthFt,
+                      convoyBeamFt,
+                      doubleLockageHours,
+                      lockCount: routeLockCount,
+                      operationType: isRoro ? 'RORO' : 'BULK',
+                    }, { save: true });
+                  }
+                }}
+                className="bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs px-3.5 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5 cursor-pointer shrink-0"
+                title="Generar y exportar contrato formal Fixture Recap en PDF"
+              >
+                <span>📄</span> Exportar Fixture Recap (PDF)
+              </button>
             </div>
           </div>
 
@@ -2793,8 +2857,23 @@ export function ConvoyBuilder({
             </div>
           </div>
 
-          {/* BOTÓN VOLVER A MODO TÉCNICO */}
-          <div className="flex justify-end pt-2">
+          {/* BOTÓN VOLVER A MODO TÉCNICO Y EXPORTAR FIXTURE RECAP */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+            <button
+              type="button"
+              id="btn-convoy-export-fixture-recap-footer"
+              onClick={() => {
+                if (typeof (window as any).exportFluvialFixtureRecapPDF === 'function') {
+                  (window as any).exportFluvialFixtureRecapPDF();
+                } else {
+                  generateFluvialFixtureRecapPdf({}, { save: true });
+                }
+              }}
+              className="bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold px-4 py-2.5 rounded-lg shadow-sm transition flex items-center gap-2 cursor-pointer"
+            >
+              <i className="fa-solid fa-file-contract"></i>
+              <span>Exportar Fixture Recap (PDF)</span>
+            </button>
             <button
               type="button"
               onClick={() => handleSwitchMode('tech')}

@@ -10317,6 +10317,10 @@
                                     <i class="fa-solid fa-file-lines" aria-hidden="true"></i>
                                     <span>Ver Reporte Ejecutivo del Viaje</span>
                                 </button>
+                                <button id="btn-export-fluvial-fixture-recap" type="button" onclick="exportFluvialFixtureRecapPDF()" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-blue-700 bg-blue-700 hover:bg-blue-800 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 cursor-pointer" title="Exportar contrato formal Fixture Recap en PDF">
+                                    <i class="fa-solid fa-file-contract" aria-hidden="true"></i>
+                                    <span>Exportar Fixture Recap (PDF)</span>
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -78064,6 +78068,40 @@ window.actualizarGrabCapacityVisibility = function() {
                 window.State.breakEven = costPerTon;
                 window.State.breakEvenArmador = costPerTon;
             }
+        };
+
+        /**
+         * FASE 5: EXPORTACIÓN DEL FIXTURE RECAP FLUVIAL (PDF)
+         * Consolida los términos comerciales (Main Terms), cláusula de estiaje y falso flete (Fase 2),
+         * esclusas y navegación (Fase 3), condiciones de terminal y demoras (Fase 4),
+         * y genera un contrato comercial en PDF con formato formal, tabular y firmas digitales.
+         */
+        window.exportFluvialFixtureRecapPDF = function(customTerms = {}) {
+            if (typeof window.showToast === 'function') {
+                window.showToast('Generando Fixture Recap Fluvial en PDF...', true);
+            }
+            if (typeof window.generateFluvialFixtureRecapPdf === 'function') {
+                const doc = window.generateFluvialFixtureRecapPdf(customTerms, { save: true });
+                if (typeof window.showToast === 'function') {
+                    window.showToast('✅ Fixture Recap Fluvial (PDF) exportado exitosamente');
+                }
+                return doc;
+            }
+            console.log('[RiverCharter] Solicitando generación de Fixture Recap...');
+            setTimeout(() => {
+                if (typeof window.generateFluvialFixtureRecapPdf === 'function') {
+                    const doc = window.generateFluvialFixtureRecapPdf(customTerms, { save: true });
+                    if (typeof window.showToast === 'function') {
+                        window.showToast('✅ Fixture Recap Fluvial (PDF) exportado exitosamente');
+                    }
+                    return doc;
+                } else {
+                    console.warn('[RiverCharter] generateFluvialFixtureRecapPdf no está disponible.');
+                    if (typeof window.showToast === 'function') {
+                        window.showToast('❌ Módulo de generación PDF en proceso de inicialización');
+                    }
+                }
+            }, 300);
         };
 
         /**
