@@ -6,6 +6,14 @@ import {
   type BargeType,
 } from '../types/rivercharter.js';
 import { getApiUrl } from '../utils/apiConfig.js';
+import {
+  estimateFluvialVoyage,
+  calculateMotorCost,
+  calculateCargoCost,
+  type FluvialEstimateResult,
+  type DemurrageCostBreakdown,
+} from '../services/fluvialEstimator.js';
+import LockDemurrageModule, { type WaitingTimeEntry } from './LockDemurrageModule.js';
 
 export interface ConvoyBuilderProps {
   initialTugboatId?: number | null;
@@ -208,12 +216,64 @@ export function ConvoyBuilder({
     return coupledBarges.reduce((sum, b) => sum + (Number(b.capacity) || 0), 0);
   }, [coupledBarges]);
 
+  const heaviestBarge = useMemo(() => {
+    if (coupledBarges.length === 0) return null;
+    return [...coupledBarges].sort((a, b) => (Number(b.capacity) || 0) - (Number(a.capacity) || 0))[0];
+  }, [coupledBarges]);
+
   const maxDynamicDraft = useMemo(() => {
     if (coupledBarges.length === 0) return 0;
     return Math.max(...coupledBarges.map((b) => Number(b.dynamicDraft) || 0));
   }, [coupledBarges]);
 
   const isDraftSafe = maxDynamicDraft <= Number(minWaterLevel);
+
+  // Días de navegación estimados a partir de itinerario
+  const navigationDays = useMemo(() => {
+    try {
+      const dep = new Date(departureDate).getTime();
+      const arr = new Date(estimatedArrivalDate).getTime();
+      if (!isNaN(dep) && !isNaN(arr) && arr > dep) {
+        return Math.max(1, Math.round((arr - dep) / (1000 * 3600 * 24)));
+      }
+    } catch (_) {}
+    return 7;
+  }, [departureDate, estimatedArrivalDate]);
+
+  // Estado del módulo de demoras en esclusas / aduanas (Demurrage)
+  const [demurrageData, setDemurrageData] = useState<{
+    waitingHours: number;
+    demurrageCost: number;
+    entries: WaitingTimeEntry[];
+  }>({
+    waitingHours: 12,
+    demurrageCost: 2000,
+    entries: [],
+  });
+
+  // Cálculo de OPEX Desacoplado: Vector Motor + Vector Carga + Demurrage
+  const decoupledEstimate: FluvialEstimateResult | null = useMemo(() => {
+    if (!selectedTugboat) return null;
+    return estimateFluvialVoyage({
+      tugboat: {
+        id: selectedTugboat.id,
+        name: selectedTugboat.name,
+        motor: selectedTugboat.motor,
+        dailyOpex: selectedTugboat.dailyOpex,
+        enginePowerHp: selectedTugboat.enginePowerHp,
+      },
+      navigationDays,
+      barges: coupledBarges.map((b) => ({
+        id: b.id,
+        name: b.name,
+        bargeType: b.bargeType,
+        capacity: Number(b.capacity) || 1500,
+        dynamicDraft: Number(b.dynamicDraft) || 2.7,
+        couplingDays: navigationDays,
+      })),
+      waitingHours: demurrageData.waitingHours,
+    });
+  }, [selectedTugboat, navigationDays, coupledBarges, demurrageData.waitingHours]);
 
   // Sincronización hacia callback padre
   useEffect(() => {
@@ -279,12 +339,22 @@ export function ConvoyBuilder({
     });
   };
 
-  // Guardar viaje y convoy
+  // Guardar viaje y convoy con validación bloqueante de calado dinámico
   const handleSaveVoyage = async () => {
     if (!tugboatId) {
       setFeedback({
         type: 'error',
         message: 'Debes asignar un Remolcador (Tugboat) antes de guardar el viaje.',
+      });
+      return;
+    }
+
+    // Validador de Calado Dinámico (Draft Constraint):
+    // Si el calado supera el nivel de agua disponible, debe devolver un error bloqueante y mostrar una alerta crítica en la UI.
+    if (!isDraftSafe || maxDynamicDraft > Number(minWaterLevel)) {
+      setFeedback({
+        type: 'error',
+        message: `Restricción Crítica de Calado Dinámico (Draft Constraint): El calado dinámico (${maxDynamicDraft.toFixed(2)} m) de la barcaza más pesada (${heaviestBarge?.name || 'Convoy'}) supera el nivel mínimo de estiaje disponible (${Number(minWaterLevel).toFixed(2)} m) en ${riverName}. Guardado bloqueado por riesgo inminente de varadura.`,
       });
       return;
     }
@@ -310,6 +380,9 @@ export function ConvoyBuilder({
         tugboatMotor: selectedTugboat?.motor,
         tugboatDailyOpex: selectedTugboat?.dailyOpex,
         bargeCount: bargeIds.length,
+        barges: coupledBarges,
+        financialEstimate: decoupledEstimate,
+        demurrage: demurrageData,
       },
     };
 
@@ -323,17 +396,24 @@ export function ConvoyBuilder({
       if (typeof onSave === 'function') {
         await onSave(payload);
       } else {
-        // 3. Petición POST al endpoint de guardado de viajes fluviales
-        try {
-          const endpoint = getApiUrl('/api/v1/river-voyages');
-          await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          }).catch((err) => {
-            console.warn('[ConvoyBuilder] Fetch al endpoint no bloquea la sesión:', err);
-          });
-        } catch (_) {}
+        // 3. Petición POST al endpoint de guardado de viajes fluviales con barcazas completas
+        const endpoint = getApiUrl('/api/v1/river-voyages');
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...payload,
+            barges: coupledBarges,
+            max_dynamic_draft: maxDynamicDraft,
+            waiting_hours: demurrageData.waitingHours,
+            demurrage_cost: demurrageData.demurrageCost,
+          }),
+        });
+
+        const resData = await res.json().catch(() => ({}));
+        if (!res.ok || resData.success === false) {
+          throw new Error(resData.error || resData.message || 'Error bloqueante al guardar el viaje fluvial en el servidor');
+        }
       }
 
       // 4. Disparar evento global para sincronizar con mapa y otros módulos
@@ -344,6 +424,8 @@ export function ConvoyBuilder({
               ...payload,
               tugboat: selectedTugboat,
               barges: coupledBarges,
+              financialEstimate: decoupledEstimate,
+              demurrage: demurrageData,
             },
           })
         );
@@ -351,7 +433,7 @@ export function ConvoyBuilder({
 
       setFeedback({
         type: 'success',
-        message: `Viaje fluvial ${payload.voyage_number} guardado con éxito. Remolcador #${payload.tugboat_id} y ${payload.barge_ids.length} barcazas acopladas.`,
+        message: `Viaje fluvial ${payload.voyage_number} guardado con éxito. Remolcador #${payload.tugboat_id} y ${payload.barge_ids.length} barcazas acopladas. OPEX Total: $${decoupledEstimate?.totalVoyageCost.toLocaleString() || '0'} USD.`,
       });
     } catch (err: any) {
       setFeedback({
@@ -360,6 +442,8 @@ export function ConvoyBuilder({
       });
     } finally {
       setIsSaving(false);
+    }
+  };
     }
   };
 
@@ -408,6 +492,46 @@ export function ConvoyBuilder({
           </div>
         </div>
       </div>
+
+      {/* ALERTA CRÍTICA: RESTRICCIÓN DE CALADO DINÁMICO (DRAFT CONSTRAINT) */}
+      {!isDraftSafe && (
+        <div
+          role="alert"
+          id="draft-constraint-critical-alert"
+          className="p-4 rounded-xl border-2 border-rose-500 bg-rose-950/90 text-rose-200 shadow-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-pulse"
+        >
+          <div className="flex items-start gap-3.5">
+            <div className="p-2.5 bg-rose-900/60 border border-rose-500/60 rounded-xl text-rose-300 text-2xl shrink-0">
+              🚨
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h4 className="font-black text-rose-400 text-xs sm:text-sm uppercase tracking-wider">
+                  ALERTA CRÍTICA: Restricción de Calado Dinámico (Draft Constraint)
+                </h4>
+                <span className="bg-rose-600 text-white text-[10px] font-black px-2 py-0.5 rounded font-mono uppercase">
+                  Despacho Fluvial Bloqueado
+                </span>
+              </div>
+              <p className="text-xs text-rose-200/90 leading-relaxed">
+                El calado dinámico de la barcaza más pesada (
+                <strong className="text-white underline">{heaviestBarge?.name || 'Barcaza'}</strong>
+                : <strong className="text-rose-300 font-mono">{maxDynamicDraft.toFixed(2)} m</strong>)
+                supera el nivel de estiaje disponible (
+                <strong className="text-rose-300 font-mono">{Number(minWaterLevel).toFixed(2)} m</strong>)
+                en la ruta <strong className="text-white">{riverName}</strong>.
+                Exceso de calado crítico: <strong className="font-mono text-white">+{(maxDynamicDraft - Number(minWaterLevel)).toFixed(2)} m</strong>.
+                Riesgo inminente de varadura en pasos críticos o fondos rocosos.
+              </p>
+            </div>
+          </div>
+          <div className="shrink-0 self-end sm:self-center">
+            <span className="px-3 py-1.5 bg-rose-900 border border-rose-500/80 rounded-lg text-xs font-black text-white uppercase tracking-wider shadow-md inline-block">
+              ⛔ Guardado No Permitido
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* FEEDBACK BANNER */}
       {feedback && (
@@ -773,10 +897,18 @@ export function ConvoyBuilder({
               type="button"
               id="btn-save-river-voyage"
               onClick={handleSaveVoyage}
-              disabled={isSaving || !tugboatId}
-              className="w-full bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 disabled:text-slate-600 text-white text-xs font-black uppercase tracking-wider py-3 px-4 rounded-lg transition shadow-lg shadow-cyan-950/40 flex items-center justify-center gap-2 cursor-pointer"
+              disabled={isSaving || !tugboatId || !isDraftSafe}
+              className={`w-full text-white text-xs font-black uppercase tracking-wider py-3 px-4 rounded-lg transition shadow-lg flex items-center justify-center gap-2 cursor-pointer ${
+                !isDraftSafe
+                  ? 'bg-rose-950/80 border-2 border-rose-500 text-rose-200 cursor-not-allowed shadow-rose-950/40'
+                  : 'bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 disabled:text-slate-600 shadow-cyan-950/40'
+              }`}
             >
-              {isSaving ? (
+              {!isDraftSafe ? (
+                <span className="text-rose-200 flex items-center gap-1.5">
+                  ⛔ Guardado Bloqueado: Calado ({maxDynamicDraft.toFixed(2)} m) &gt; Estiaje ({Number(minWaterLevel).toFixed(2)} m)
+                </span>
+              ) : isSaving ? (
                 <span>Guardando Convoy Fluvial...</span>
               ) : (
                 <>
@@ -790,6 +922,181 @@ export function ConvoyBuilder({
           </div>
         </section>
       </div>
+
+      {/* SECCIÓN 3: CÁLCULO DE OPEX DESACOPLADO (MOTOR VS CARGA) */}
+      <section
+        id="decoupled-opex-section"
+        className="bg-slate-950/70 border border-slate-800 rounded-xl p-5 space-y-4"
+      >
+        <div className="border-b border-slate-800 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-400">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs md:text-sm font-bold text-emerald-400 uppercase tracking-wider">
+                  3. Núcleo Financiero: Cálculo de OPEX Desacoplado
+                </h3>
+                <span className="bg-emerald-950 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase">
+                  Motor vs Carga
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Estimación de rentabilidad segregada: Costo de Propulsión / Motor y Costo de Barcazas / Carga
+              </p>
+            </div>
+          </div>
+
+          <div className="text-right">
+            <span className="text-[10px] uppercase font-bold text-slate-500 block">Días Estimados del Viaje</span>
+            <span className="text-sm font-mono font-black text-cyan-300">{navigationDays} días de navegación</span>
+          </div>
+        </div>
+
+        {/* VECTORES DE COSTO DESACOPLADOS */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+          {/* VECTOR 1: COSTO DEL MOTOR */}
+          <div className="bg-slate-900 border border-cyan-500/30 rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+              <span className="font-bold text-cyan-300 uppercase flex items-center gap-1.5">
+                <span>⚙️</span> Vector 1: Costo del Motor
+              </span>
+              <span className="text-[10px] font-mono bg-cyan-950 text-cyan-200 border border-cyan-500/30 px-1.5 py-0.5 rounded font-bold">
+                Propulsión
+              </span>
+            </div>
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-slate-300">
+                <span className="text-slate-400">Días de Navegación × OPEX Diario:</span>
+                <span className="font-mono font-bold text-white">
+                  ${decoupledEstimate?.motorCost.opexTotalCost.toLocaleString() ?? 0}
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-500 font-mono">
+                {navigationDays} días × ${selectedTugboat?.dailyOpex?.toLocaleString() || 0}/día
+              </p>
+              <div className="flex justify-between text-slate-300 pt-1 border-t border-slate-800/80">
+                <span className="text-slate-400">Consumo de Combustible Estimado:</span>
+                <span className="font-mono font-bold text-white">
+                  ${decoupledEstimate?.motorCost.estimatedFuelCost.toLocaleString() ?? 0}
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-500 font-mono">
+                {decoupledEstimate?.motorCost.estimatedFuelTons} MT fuel @ ${decoupledEstimate?.motorCost.fuelPricePerTon}/MT
+              </p>
+            </div>
+            <div className="pt-2 border-t border-slate-800 flex justify-between items-center">
+              <span className="text-xs font-bold text-cyan-300 uppercase">Subtotal Motor:</span>
+              <span className="text-base font-mono font-black text-cyan-300">
+                ${decoupledEstimate?.motorCost.totalMotorCost.toLocaleString() ?? 0} USD
+              </span>
+            </div>
+          </div>
+
+          {/* VECTOR 2: COSTO DE CARGA */}
+          <div className="bg-slate-900 border border-emerald-500/30 rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+              <span className="font-bold text-emerald-300 uppercase flex items-center gap-1.5">
+                <span>📦</span> Vector 2: Costo de Carga
+              </span>
+              <span className="text-[10px] font-mono bg-emerald-950 text-emerald-200 border border-emerald-500/30 px-1.5 py-0.5 rounded font-bold">
+                Barcazas
+              </span>
+            </div>
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-slate-300">
+                <span className="text-slate-400">Barcazas en Convoy:</span>
+                <span className="font-mono font-bold text-white">
+                  {coupledBarges.length} unidades
+                </span>
+              </div>
+              <div className="flex justify-between text-slate-300">
+                <span className="text-slate-400">Días Estimados de Acople:</span>
+                <span className="font-mono font-bold text-white">
+                  {navigationDays} días
+                </span>
+              </div>
+              <div className="flex justify-between text-slate-300 pt-1 border-t border-slate-800/80">
+                <span className="text-slate-400">Alquiler o Amortización:</span>
+                <span className="font-mono font-bold text-white">
+                  ~${decoupledEstimate?.cargoCost.bargeCosts[0]?.dailyRate ?? 250}/día por barcaza
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-500 font-mono">
+                {coupledBarges.length} barcazas × {navigationDays} días acopladas
+              </p>
+            </div>
+            <div className="pt-2 border-t border-slate-800 flex justify-between items-center">
+              <span className="text-xs font-bold text-emerald-300 uppercase">Subtotal Carga:</span>
+              <span className="text-base font-mono font-black text-emerald-300">
+                ${decoupledEstimate?.cargoCost.totalCargoCost.toLocaleString() ?? 0} USD
+              </span>
+            </div>
+          </div>
+
+          {/* RESUMEN INTEGRADO BASE */}
+          <div className="bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-700 rounded-xl p-4 space-y-3 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                <span className="font-bold text-white uppercase flex items-center gap-1.5">
+                  <span>📊</span> Gasto Base Operativo
+                </span>
+                <span className="text-[10px] font-mono bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-bold">
+                  Motor + Carga
+                </span>
+              </div>
+              <div className="space-y-1.5 mt-2">
+                <div className="flex justify-between text-slate-300">
+                  <span className="text-slate-400">Subtotal Motor (Propulsión):</span>
+                  <span className="font-mono text-cyan-300">
+                    ${decoupledEstimate?.motorCost.totalMotorCost.toLocaleString() ?? 0}
+                  </span>
+                </div>
+                <div className="flex justify-between text-slate-300">
+                  <span className="text-slate-400">Subtotal Carga (Barcazas):</span>
+                  <span className="font-mono text-emerald-300">
+                    ${decoupledEstimate?.cargoCost.totalCargoCost.toLocaleString() ?? 0}
+                  </span>
+                </div>
+                <div className="flex justify-between text-slate-300 pt-1 border-t border-slate-800/80">
+                  <span className="text-slate-400">Costo Base por Tonelada:</span>
+                  <span className="font-mono font-bold text-white">
+                    {totalCapacityMt > 0 && decoupledEstimate
+                      ? (decoupledEstimate.baseVoyageCost / totalCapacityMt).toFixed(2)
+                      : '0.00'} USD/MT
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="pt-2 border-t border-slate-800 flex justify-between items-center">
+              <span className="text-xs font-bold text-white uppercase">Costo Base Total:</span>
+              <span className="text-lg font-mono font-black text-white">
+                ${decoupledEstimate?.baseVoyageCost.toLocaleString() ?? 0} USD
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* SECCIÓN 4: MÓDULO DE DEMORAS EN ESCLUSAS (DEMURRAGE) */}
+      <section id="lock-demurrage-section">
+        <LockDemurrageModule
+          dailyOpex={selectedTugboat?.dailyOpex || 3400}
+          tugboatName={selectedTugboat?.name || 'Remolcador Fluvial'}
+          enginePowerHp={selectedTugboat?.enginePowerHp}
+          baseVoyageCost={decoupledEstimate?.baseVoyageCost || 0}
+          onDemurrageChange={(data) => {
+            setDemurrageData({
+              waitingHours: data.waitingHours,
+              demurrageCost: data.demurrageCost,
+              entries: data.entries,
+            });
+          }}
+        />
+      </section>
     </div>
   );
 }
