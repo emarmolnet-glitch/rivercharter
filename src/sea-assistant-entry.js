@@ -1084,6 +1084,23 @@ async function executeActionableAiUpdateFields(actionObj) {
         updateInputs(["rate-load", "loading-rate", "gc-laytime-load-val", "load-rate"], p.loadingRate);
         updateInputs(["rate-disch", "discharge-rate", "gc-laytime-disch-val"], p.dischargeRate);
 
+        const freightVal = p.freightSell ?? p.fleteVenta ?? p.freight_sell ?? p.flete ?? p.freight ?? p.fleteUnitario ?? p.sellingFreight;
+        if (freightVal !== undefined && freightVal !== null && freightVal !== "") {
+            updateInputs(["freight-sell", "freight-rate", "input-fleteUnitario", "gc-freight-val", "asb-freight-val"], freightVal);
+            const input = document.getElementById('freight-sell');
+            if (input) {
+                input.value = freightVal;
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            if (typeof window !== 'undefined' && window.State) {
+                window.State.freightSell = Number(freightVal);
+            }
+            if (typeof window !== 'undefined' && typeof window.updateFluvialCalculations === 'function') {
+                window.updateFluvialCalculations();
+            }
+        }
+
         // 1b. PROJECT CARGO ENGINE & VOLUMETRIC HYDRATION
         const rawProjectCargo = p.projectCargo || p.project_cargo || p.payload?.projectCargo || {};
         const unitWeightMT = Number(rawProjectCargo.unitWeightMT ?? rawProjectCargo.unitWeight ?? rawProjectCargo.pesoUnitario ?? p.unitWeightMT ?? p.unitWeight ?? p.pesoUnitario) || 0;

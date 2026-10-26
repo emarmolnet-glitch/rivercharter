@@ -12510,7 +12510,7 @@
                             <div class="sm:col-span-2">
                                 <label id="label-selling-freight" class="mb-1 block text-[10px] font-bold uppercase text-emerald-700">Flete Venta Fletador ($)</label>
                                 <div class="flex">
-                                    <input type="number" id="freight-sell" class="input-gc h-9 rounded-r-none border-slate-300 bg-white text-lg font-bold text-slate-900" value="35.00" step="any" oninput="runEngine()">
+                                    <input type="number" id="freight-sell" class="input-gc h-9 rounded-r-none border-slate-300 bg-white text-lg font-bold text-slate-900" value="35.00" step="any" oninput="runEngine()" onchange="runEngine(); if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations();">
                                     <button type="button" id="btn-calc-charter-freight" onclick="handleFreightMasterTrigger('charterer', event)" class="border-y border-emerald-700 bg-emerald-700 px-2 text-slate-900 transition hover:bg-emerald-800" title="Calcular e iniciar Auto-Flow"><i class="fa-solid fa-calculator"></i></button>
                                     <button id="btn-spot-charter-freight" onclick="predictSpotMarketLocal()" class="rounded-r-md border border-teal-700 bg-teal-700 px-2 text-slate-900 transition hover:bg-teal-800" title="Estimación Algorítmica Spot Real (PMT)"><i class="fa-solid fa-chart-line"></i></button>
                                 </div>
@@ -18249,7 +18249,25 @@
         }
 
         // Caché de sesión de puertos confirmados por Datalastic. Mantiene el contrato {lat, lon} usado por Leaflet.
-        let PORT_DB = {};
+        let PORT_DB = {
+            'Corumbá': { lat: -19.0067, lon: -57.6533, countryCode: 'BR', name: 'Corumbá', unlocode: 'BRCMB' },
+            'Corumbá / Ladário': { lat: -19.0067, lon: -57.6533, countryCode: 'BR', name: 'Corumbá / Ladário', unlocode: 'BRCMB' },
+            'Ladário': { lat: -19.0556, lon: -57.6028, countryCode: 'BR', name: 'Ladário', unlocode: 'BRLAD' },
+            'Gran Rosario': { lat: -32.9468, lon: -60.6393, countryCode: 'AR', name: 'Gran Rosario', unlocode: 'ARROS' },
+            'Rosario': { lat: -32.9468, lon: -60.6393, countryCode: 'AR', name: 'Rosario', unlocode: 'ARROS' },
+            'San Lorenzo': { lat: -32.7480, lon: -60.7330, countryCode: 'AR', name: 'San Lorenzo', unlocode: 'ARSLO' },
+            'Santa Fe': { lat: -31.6499, lon: -60.7077, countryCode: 'AR', name: 'Santa Fe', unlocode: 'ARSFN' },
+            'Asunción': { lat: -25.2867, lon: -57.6470, countryCode: 'PY', name: 'Asunción', unlocode: 'PYASU' },
+            'Nueva Palmira': { lat: -33.8825, lon: -58.4194, countryCode: 'UY', name: 'Nueva Palmira', unlocode: 'UYNVP' },
+            'Miritituba': { lat: -4.2833, lon: -55.9833, countryCode: 'BR', name: 'Miritituba' },
+            'St. Louis': { lat: 38.6270, lon: -90.1994, countryCode: 'US', name: 'St. Louis', unlocode: 'USSTL' },
+            'St. Louis / Granite City': { lat: 38.6270, lon: -90.1994, countryCode: 'US', name: 'St. Louis / Granite City', unlocode: 'USSTL' },
+            'New Orleans': { lat: 29.9511, lon: -90.0715, countryCode: 'US', name: 'New Orleans', unlocode: 'USMSY' },
+            'New Orleans / NOLA': { lat: 29.9511, lon: -90.0715, countryCode: 'US', name: 'New Orleans / NOLA', unlocode: 'USMSY' },
+            'NOLA': { lat: 29.9511, lon: -90.0715, countryCode: 'US', name: 'NOLA', unlocode: 'USMSY' },
+            'Baton Rouge': { lat: 30.4515, lon: -91.1871, countryCode: 'US', name: 'Baton Rouge', unlocode: 'USBTR' },
+            'Memphis': { lat: 35.1495, lon: -90.0490, countryCode: 'US', name: 'Memphis', unlocode: 'USMEM' }
+        };
 
         const WpiCatalogStore = (() => {
             let state = { status: 'idle', ports: [], error: '', loadedAt: null };
@@ -18577,7 +18595,10 @@
             if (!data) {
                 const lowerPort = portName.toLowerCase().trim();
                 if (!lowerPort) return null;
-                const foundKey = Object.keys(PORT_DB).find(key => key.toLowerCase().includes(lowerPort));
+                const foundKey = Object.keys(PORT_DB).find(key => {
+                    const lk = key.toLowerCase();
+                    return lk.includes(lowerPort) || lowerPort.includes(lk);
+                });
                 if (foundKey) data = PORT_DB[foundKey];
             }
             return data;
@@ -20881,6 +20902,13 @@ function createRouteAnchorElement(type) {
             if (route?.coordinates?.length > 1) return route.coordinates;
             const fallback = Array.isArray(fallbackCoordinates) ? fallbackCoordinates : [];
             if (fallback.length > 1) {
+                if (typeof isFluvialRoute === 'function' && isFluvialRoute({ lat: fallback[0][0], lon: fallback[0][1] }, { lat: fallback[fallback.length - 1][0], lon: fallback[fallback.length - 1][1] })) {
+                    const segment = buildFluvialRouteSegment(
+                        { lat: fallback[0][0], lon: fallback[0][1] },
+                        { lat: fallback[fallback.length - 1][0], lon: fallback[fallback.length - 1][1] }
+                    );
+                    if (segment?.coordinates?.length > 1) return segment.coordinates;
+                }
                 console.warn(`[Route Map] ${label || 'Ruta'} sin polyline marítima disponible. Se dibuja línea recta de respaldo.`);
             }
             return fallback;
@@ -20953,7 +20981,35 @@ function createRouteAnchorElement(type) {
             const destination = options.destination || null;
             const polLabel = getRouteEndpointLabel(origin, 'POL');
             const podLabel = getRouteEndpointLabel(destination, 'POD');
-            const normalizedPoints = normalizePointsForLeaflet(puntos, options.coordinateOrder || 'latLon');
+
+            // Detección de Ruta Fluvial (Hidrovía / Misisipi)
+            const isFluvial = Boolean(
+                options.isFluvial ||
+                options.route?.isFluvial ||
+                (typeof isFluvialRoute === 'function' && isFluvialRoute(origin, destination, options))
+            );
+
+            let effectivePoints = puntos;
+            let effectiveGeoJSON = options.geoJSON || options.geojson || null;
+
+            if (isFluvial) {
+                const corridorKey = typeof getFluvialCorridorKey === 'function'
+                    ? getFluvialCorridorKey(origin, destination)
+                    : 'hidrovia_parana_paraguay';
+
+                const normalizedInputPoints = normalizePointsForLeaflet(effectivePoints, options.coordinateOrder || 'latLon');
+                if (!normalizedInputPoints || normalizedInputPoints.length <= 2) {
+                    if (typeof buildFluvialRouteSegment === 'function') {
+                        const segment = buildFluvialRouteSegment(origin, destination, corridorKey);
+                        effectivePoints = segment.coordinates;
+                        if (!effectiveGeoJSON) effectiveGeoJSON = segment.geoJSON;
+                    }
+                } else if (!effectiveGeoJSON && typeof getFluvialCorridorGeoJSON === 'function') {
+                    effectiveGeoJSON = getFluvialCorridorGeoJSON(corridorKey, normalizedInputPoints);
+                }
+            }
+
+            const normalizedPoints = normalizePointsForLeaflet(effectivePoints, options.coordinateOrder || 'latLon');
             const fallbackPoints = origin && destination ? normalizePointsForLeaflet([origin, destination]) : [];
             const usingFallback = normalizedPoints.length < 2 && fallbackPoints.length > 1;
             const leafletPoints = usingFallback
@@ -20981,10 +21037,10 @@ function createRouteAnchorElement(type) {
                 removeMapboxRouteLayers(routeMap, id);
                 routeMap.addSource(`${id}-source`, {
                     type: 'geojson',
-                    data: {
+                    data: effectiveGeoJSON || {
                         type: 'Feature',
                         geometry: { type: 'LineString', coordinates: lngLatCoords },
-                        properties: { planned: true }
+                        properties: { planned: true, isFluvial }
                     }
                 });
                 const dashArray = Array.isArray(options.dashArray) ? options.dashArray : [5, 10];
@@ -21030,33 +21086,48 @@ function createRouteAnchorElement(type) {
                     lngLatCoords.forEach((coord) => bounds.extend(coord));
                     routeMap.fitBounds(bounds, { padding: 50, maxZoom: 8, duration: 600 });
                 }
-                return { painted: true, leafletPoints, lngLatCoords };
+                return { painted: true, leafletPoints, lngLatCoords, geoJSON: effectiveGeoJSON, isFluvial };
             }
 
-            if (typeof L === 'undefined' || typeof L.polyline !== 'function') {
+            if (typeof L === 'undefined' || (typeof L.polyline !== 'function' && typeof L.geoJSON !== 'function')) {
                 console.warn(`[Route Map] ${label} no se pudo pintar: Leaflet no está disponible.`);
                 return { painted: false, leafletPoints };
             }
 
             const pane = ensureLeafletRouteLinePane(routeMap);
-            const polyline = L.polyline(leafletPoints, {
-                color: options.color || ROUTE_LADEN_LINE_COLOR,
-                weight: options.weight || 3,
-                opacity: Number.isFinite(options.opacity) ? options.opacity : 1,
-                dashArray: options.leafletDashArray || '5, 10',
-                pane: pane || undefined,
-                interactive: false
-            });
+            let layerResult;
+            if (isFluvial && effectiveGeoJSON && typeof L.geoJSON === 'function' && options.renderGeoJSON !== false) {
+                layerResult = L.geoJSON(effectiveGeoJSON, {
+                    style: {
+                        color: options.color || ROUTE_LADEN_LINE_COLOR,
+                        weight: options.weight || 3,
+                        opacity: Number.isFinite(options.opacity) ? options.opacity : 1,
+                        dashArray: options.leafletDashArray || (options.id?.includes('ballast') ? '5, 10' : undefined)
+                    },
+                    pane: pane || undefined
+                });
+                layerResult.addTo(options.layer || routeMarkerLayer || routeMap);
+            } else {
+                const polyline = L.polyline(leafletPoints, {
+                    color: options.color || ROUTE_LADEN_LINE_COLOR,
+                    weight: options.weight || 3,
+                    opacity: Number.isFinite(options.opacity) ? options.opacity : 1,
+                    dashArray: options.leafletDashArray || '5, 10',
+                    pane: pane || undefined,
+                    interactive: false
+                });
+                polyline.addTo(options.layer || routeMarkerLayer || routeMap);
+                layerResult = polyline;
+            }
 
-            polyline.addTo(options.layer || routeMarkerLayer || routeMap);
-            if (typeof polyline.bringToFront === 'function') {
-                polyline.bringToFront();
-                requestAnimationFrame(() => polyline.bringToFront());
+            if (typeof layerResult.bringToFront === 'function') {
+                layerResult.bringToFront();
+                requestAnimationFrame(() => layerResult.bringToFront());
             }
-            if (typeof polyline.getBounds === 'function' && typeof routeMap.fitBounds === 'function') {
-                routeMap.fitBounds(polyline.getBounds(), { padding: [50, 50] });
+            if (typeof layerResult.getBounds === 'function' && typeof routeMap.fitBounds === 'function') {
+                routeMap.fitBounds(layerResult.getBounds(), { padding: [50, 50] });
             }
-            return { painted: true, leafletPoints, layer: polyline };
+            return { painted: true, leafletPoints, layer: layerResult, geoJSON: effectiveGeoJSON, isFluvial };
         }
         window.dibujarRuta = dibujarRuta;
 
@@ -32573,14 +32644,15 @@ function createRouteAnchorElement(type) {
 
         async function getCoordinates(query) {
             if(!query) return null;
-            const localLat = parseFloat(PORT_DB[query]?.lat);
-            const localLon = parseFloat(PORT_DB[query]?.lon);
+            const portData = typeof findPortData === 'function' ? findPortData(query) : (PORT_DB[query] || null);
+            const localLat = parseFloat(portData?.lat ?? PORT_DB[query]?.lat);
+            const localLon = parseFloat(portData?.lon ?? PORT_DB[query]?.lon);
             if (Number.isFinite(localLat) && Number.isFinite(localLon)) {
                 return {
                     lat: localLat,
                     lon: localLon,
                     name: query,
-                    countryCode: getPortCountryCode(query, PORT_DB[query])
+                    countryCode: getPortCountryCode(query, portData || PORT_DB[query])
                 };
             }
 
@@ -32817,7 +32889,285 @@ function createRouteAnchorElement(type) {
             };
         }
 
+        // =====================================================================
+        // CORREDORES FLUVIALES: HIDROVÍA PARANÁ-PARAGUAY & RÍO MISISIPI
+        // Reemplazo de trazados geodésicos rectos por trazado real de río (GeoJSON / polilíneas)
+        // =====================================================================
+
+        const HIDROVIA_PARANA_PARAGUAY_CORRIDOR_COORDINATES = [
+            [-18.9950, -57.6530], // Corumbá / Ladário (Alto Paraguay)
+            [-19.1200, -57.6000],
+            [-19.3800, -57.5100],
+            [-19.6500, -57.4400],
+            [-19.9200, -57.7900], // Forte Coimbra
+            [-20.1500, -58.0500], // Puerto Busch / Bahía Negra
+            [-20.5000, -57.9800],
+            [-20.8500, -57.9100],
+            [-21.2500, -57.8500],
+            [-21.7000, -57.9000], // Porto Murtinho
+            [-22.1000, -57.9800],
+            [-22.5500, -57.8800],
+            [-23.1000, -57.6000],
+            [-23.4000, -57.4500], // Concepción (Paraguay)
+            [-23.8000, -57.3000],
+            [-24.0500, -57.2000],
+            [-24.5000, -57.1500], // Rosario (Paraguay)
+            [-24.8500, -57.2500],
+            [-25.0500, -57.4500],
+            [-25.2867, -57.6470], // Asunción
+            [-25.5000, -57.6000], // Villeta
+            [-25.8500, -57.7500],
+            [-26.1800, -58.1800], // Formosa
+            [-26.5000, -58.3000],
+            [-26.8600, -58.3000], // Pilar
+            [-27.2800, -58.6000], // Humaitá
+            [-27.4600, -58.8300], // Confluencia Paraná-Paraguay / Corrientes / Paso de Patria
+            [-27.8000, -58.8500],
+            [-28.1500, -58.9500],
+            [-28.5100, -59.0500], // Bella Vista
+            [-28.8500, -59.1800],
+            [-29.1400, -59.2600], // Goya / Reconquista
+            [-29.5000, -59.3800],
+            [-29.8000, -59.5000], // Esquina
+            [-30.2500, -59.5800],
+            [-30.7400, -59.6500], // La Paz
+            [-31.2500, -60.0500], // Hernandarias
+            [-31.6499, -60.7077], // Santa Fe
+            [-31.7300, -60.5300], // Paraná
+            [-32.0700, -60.6400], // Diamante
+            [-32.4000, -60.6800],
+            [-32.7480, -60.7330], // San Lorenzo (Puerto San Martín)
+            [-32.9468, -60.6393], // Gran Rosario / Rosario
+            [-33.2300, -60.3300], // Villa Constitución
+            [-33.3300, -60.2200], // San Nicolás de los Arroyos
+            [-33.4800, -60.0100], // Ramallo
+            [-33.6700, -59.6600], // San Pedro
+            [-33.8100, -59.5000], // Baradero
+            [-33.8825, -58.4194], // Nueva Palmira
+            [-34.1000, -59.0200], // Zárate
+            [-34.1700, -58.9600], // Campana
+            [-34.4000, -58.5000], // Delta del Paraná
+            [-34.6037, -58.3816]  // Buenos Aires / Río de la Plata
+        ];
+
+        const MISSISSIPPI_CORRIDOR_COORDINATES = [
+            [44.9500, -93.0900], // Minneapolis / St. Paul
+            [44.3000, -92.0500],
+            [43.8000, -91.2500], // La Crosse
+            [43.0500, -91.1500],
+            [42.5000, -90.6600], // Dubuque
+            [42.0000, -90.1500],
+            [41.5200, -90.5800], // Davenport / Rock Island
+            [40.9500, -90.9500],
+            [40.4000, -91.3800], // Keokuk
+            [39.7100, -91.3600], // Hannibal
+            [38.8500, -90.3500], // Alton
+            [38.6270, -90.1994], // St. Louis / Granite City
+            [38.3000, -90.2500], // Crystal City
+            [37.9100, -89.8200], // Chester
+            [37.3000, -89.5200], // Cape Girardeau
+            [36.9900, -89.1800], // Cairo (Confluencia Ohio)
+            [36.5900, -89.5300], // New Madrid
+            [36.1900, -89.6500], // Caruthersville
+            [35.6500, -89.8500],
+            [35.1495, -90.0490], // Memphis
+            [34.5300, -90.5900], // Helena
+            [33.9500, -90.8500],
+            [33.4100, -91.0600], // Greenville
+            [32.8500, -91.1500],
+            [32.3500, -90.8800], // Vicksburg
+            [31.9500, -91.2500],
+            [31.5600, -91.4000], // Natchez
+            [30.9500, -91.5500],
+            [30.4515, -91.1871], // Baton Rouge
+            [30.2900, -91.2300], // Plaquemine
+            [30.1000, -90.9900], // Donaldsonville
+            [30.0600, -90.5600], // Reserve / Gramercy
+            [29.9511, -90.0715], // New Orleans / NOLA
+            [29.8500, -89.9800], // Belle Chasse / Port Sulphur
+            [29.4000, -89.6000],
+            [29.1500, -89.2500]  // Head of Passes / Golfo de México
+        ];
+
+        function getFluvialCorridorGeoJSON(corridorKey, coords) {
+            const coordinates = (coords || []).map((pt) => [Number(pt[1]), Number(pt[0])]);
+            return {
+                type: 'Feature',
+                geometry: {
+                    type: 'LineString',
+                    coordinates
+                },
+                properties: {
+                    corridor: corridorKey,
+                    name: corridorKey === 'mississippi' ? 'Corredor Río Misisipi' : 'Corredor Hidrovía Paraná-Paraguay',
+                    isFluvial: true
+                }
+            };
+        }
+
+        function isFluvialRoute(origin, destination, options = {}) {
+            if (options && (options.isFluvial === true || options.routeType === 'fluvial')) return true;
+            if (typeof window !== 'undefined' && window.activeFluvialOperationType) return true;
+
+            const names = [
+                origin?.name || '',
+                destination?.name || '',
+                typeof origin === 'string' ? origin : '',
+                typeof destination === 'string' ? destination : '',
+                options.origin?.name || '',
+                options.destination?.name || '',
+                options.label || ''
+            ].join(' ').toLowerCase();
+
+            const fluvialRegex = /(corumb|lad[aá]rio|rosario|palmira|parag|paran[aá]|hidrov[ií]a|asunci[oó]n|concepci[oó]n|villeta|santa\s*fe|san\s*lorenzo|san\s*nicol[aá]s|z[aá]rate|campana|misisipi|mississippi|nola|new\s*orleans|st\.?\s*louis|granite\s*city|memphis|baton\s*rouge|cairo)/i;
+            if (fluvialRegex.test(names)) return true;
+
+            const oLat = Number(origin?.lat ?? origin?.[0]);
+            const oLon = Number(origin?.lon ?? origin?.[1]);
+            const dLat = Number(destination?.lat ?? destination?.[0]);
+            const dLon = Number(destination?.lon ?? destination?.[1]);
+
+            if (Number.isFinite(oLat) && Number.isFinite(oLon) && Number.isFinite(dLat) && Number.isFinite(dLon)) {
+                const oParana = oLat <= -17.0 && oLat >= -36.5 && oLon >= -64.0 && oLon <= -54.0;
+                const dParana = dLat <= -17.0 && dLat >= -36.5 && dLon >= -64.0 && dLon <= -54.0;
+                if (oParana && dParana) return true;
+
+                const oMiss = oLat >= 28.0 && oLat <= 46.5 && oLon >= -95.0 && oLon <= -87.0;
+                const dMiss = dLat >= 28.0 && dLat <= 46.5 && dLon >= -95.0 && dLon <= -87.0;
+                if (oMiss && dMiss) return true;
+            }
+
+            return false;
+        }
+
+        function getFluvialCorridorKey(origin, destination) {
+            const text = [
+                origin?.name || '',
+                destination?.name || '',
+                typeof origin === 'string' ? origin : '',
+                typeof destination === 'string' ? destination : '',
+                document.getElementById('port-pol')?.value || '',
+                document.getElementById('port-pod')?.value || '',
+                typeof window !== 'undefined' ? (window.activeBargeStandard || '') : ''
+            ].join(' ').toLowerCase();
+
+            if (
+                text.includes('misisipi') ||
+                text.includes('mississippi') ||
+                text.includes('nola') ||
+                text.includes('orleans') ||
+                text.includes('louis') ||
+                text.includes('memphis') ||
+                text.includes('baton rouge') ||
+                (typeof window !== 'undefined' && window.activeBargeStandard === 'mississippi_jumbo')
+            ) {
+                return 'mississippi';
+            }
+            return 'hidrovia_parana_paraguay';
+        }
+
+        function buildFluvialRouteSegment(origin, destination, corridorKey = null) {
+            const key = corridorKey || getFluvialCorridorKey(origin, destination);
+            const masterCoords = key === 'mississippi'
+                ? MISSISSIPPI_CORRIDOR_COORDINATES
+                : HIDROVIA_PARANA_PARAGUAY_CORRIDOR_COORDINATES;
+
+            const oLat = Number(origin?.lat ?? origin?.[0]);
+            const oLon = Number(origin?.lon ?? origin?.[1]);
+            const dLat = Number(destination?.lat ?? destination?.[0]);
+            const dLon = Number(destination?.lon ?? destination?.[1]);
+
+            if (!Number.isFinite(oLat) || !Number.isFinite(oLon) || !Number.isFinite(dLat) || !Number.isFinite(dLon)) {
+                return {
+                    distance: 0,
+                    coordinates: masterCoords.map(c => [c[0], c[1]]),
+                    geoJSON: getFluvialCorridorGeoJSON(key, masterCoords),
+                    nodes: [origin, destination],
+                    source: 'fluvial-corridor-full',
+                    isFluvial: true,
+                    corridorKey: key,
+                    success: true
+                };
+            }
+
+            let minStartDist = Infinity;
+            let startIdx = 0;
+            let minEndDist = Infinity;
+            let endIdx = masterCoords.length - 1;
+
+            masterCoords.forEach((coord, i) => {
+                const distO = haversine(oLat, oLon, coord[0], coord[1]);
+                if (distO < minStartDist) {
+                    minStartDist = distO;
+                    startIdx = i;
+                }
+                const distD = haversine(dLat, dLon, coord[0], coord[1]);
+                if (distD < minEndDist) {
+                    minEndDist = distD;
+                    endIdx = i;
+                }
+            });
+
+            let corridorSlice = [];
+            if (startIdx <= endIdx) {
+                corridorSlice = masterCoords.slice(startIdx, endIdx + 1);
+            } else {
+                corridorSlice = masterCoords.slice(endIdx, startIdx + 1).reverse();
+            }
+
+            const rawPoints = [
+                [oLat, oLon],
+                ...corridorSlice,
+                [dLat, dLon]
+            ];
+
+            const cleanedPoints = [];
+            rawPoints.forEach((pt) => {
+                if (cleanedPoints.length === 0) {
+                    cleanedPoints.push([Number(pt[0]), Number(pt[1])]);
+                    return;
+                }
+                const prev = cleanedPoints[cleanedPoints.length - 1];
+                const d = haversine(prev[0], prev[1], pt[0], pt[1]);
+                if (d > 0.3 || pt === rawPoints[rawPoints.length - 1]) {
+                    cleanedPoints.push([Number(pt[0]), Number(pt[1])]);
+                }
+            });
+
+            let totalDist = 0;
+            for (let i = 0; i < cleanedPoints.length - 1; i++) {
+                totalDist += haversine(cleanedPoints[i][0], cleanedPoints[i][1], cleanedPoints[i + 1][0], cleanedPoints[i + 1][1]);
+            }
+            if (totalDist <= 0) {
+                totalDist = haversine(oLat, oLon, dLat, dLon) * 1.32;
+            }
+
+            const geoJSON = getFluvialCorridorGeoJSON(key, cleanedPoints);
+
+            return {
+                distance: totalDist,
+                coordinates: cleanedPoints,
+                geoJSON,
+                nodes: [origin, destination],
+                source: 'fluvial-corridor',
+                isFluvial: true,
+                corridorKey: key,
+                success: true
+            };
+        }
+
+        window.isFluvialRoute = isFluvialRoute;
+        window.getFluvialCorridorKey = getFluvialCorridorKey;
+        window.buildFluvialRouteSegment = buildFluvialRouteSegment;
+        window.getFluvialCorridorGeoJSON = getFluvialCorridorGeoJSON;
+        window.HIDROVIA_PARANA_PARAGUAY_CORRIDOR_COORDINATES = HIDROVIA_PARANA_PARAGUAY_CORRIDOR_COORDINATES;
+        window.MISSISSIPPI_CORRIDOR_COORDINATES = MISSISSIPPI_CORRIDOR_COORDINATES;
+
         function buildGeodesicFallbackRouteSegment(origin, destination, reason) {
+            if (isFluvialRoute(origin, destination)) {
+                console.log(`[Routing Engine] Ruta Fluvial detectada para ${origin.name || 'origen'} -> ${destination.name || 'destino'}. Trazando corredor hidrográfico real en lugar de línea geodésica.`);
+                return buildFluvialRouteSegment(origin, destination);
+            }
             console.warn(`[Routing Engine] Ruta marítima no disponible para ${origin.name || 'origen'} -> ${destination.name || 'destino'}. Se usa un arco geodésico de respaldo.`, reason || '');
             const toRadians = value => value * Math.PI / 180;
             const toDegrees = value => value * 180 / Math.PI;
@@ -32913,6 +33263,16 @@ function createRouteAnchorElement(type) {
                     nodes: [origin, destination], 
                     success: true 
                 };
+            }
+
+            // Detección directa de Ruta Fluvial (Hidrovía Paraná-Paraguay y Misisipi)
+            if (isFluvialRoute(origin, destination, options)) {
+                const corridorKey = getFluvialCorridorKey(origin, destination);
+                const fluvialRoute = buildFluvialRouteSegment(origin, destination, corridorKey);
+                if (fluvialRoute && fluvialRoute.coordinates && fluvialRoute.coordinates.length > 1) {
+                    console.log(`[Routing Engine] Ruta Fluvial identificada (${corridorKey}) entre ${origin.name} y ${destination.name}:`, fluvialRoute);
+                    return fluvialRoute;
+                }
             }
 
             const regOrigin = getPortRegion(origin.name, origin.lat, origin.lon);
@@ -46318,7 +46678,11 @@ function scheduleReactiveEngine() {
                 // Sincronizar inputs DOM de la Calculadora principal
                 const setValIfExist = (id, val) => {
                     const el = document.getElementById(id);
-                    if (el) el.value = val;
+                    if (el) {
+                        el.value = val;
+                        el.dispatchEvent(new Event('input', { bubbles: true }));
+                        el.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
                 };
                 setValIfExist('rate-load', updatedLoadRate);
                 setValIfExist('rate-disch', updatedDischargeRate);
