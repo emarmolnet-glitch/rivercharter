@@ -10356,6 +10356,54 @@
                         </div>
                     </div>
 
+                    <!-- SECCIÓN: DESGLOSE PORTUARIO Y TERMINAL (PDA) -->
+                    <div class="bg-white border border-slate-200 p-5 rounded-xl text-slate-800 shadow-sm" id="exec-fluvial-pda-terminal-panel">
+                        <div class="flex items-center justify-between border-b border-slate-200 pb-3 mb-4">
+                            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-2">
+                                <span>🏛️</span> Desglose Portuario y Terminal (PDA)
+                            </h4>
+                            <span class="text-[10px] font-mono bg-sky-50 text-sky-800 border border-sky-200 px-2 py-0.5 rounded font-bold uppercase" id="exec-pda-operation-badge">
+                                Modo Granel (Bulk Cargo)
+                            </span>
+                        </div>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div class="bg-slate-50 border border-slate-200 p-3.5 rounded-xl">
+                                <span class="block text-[10px] uppercase font-bold text-slate-600">Muellaje (Dockage)</span>
+                                <span id="exec-pda-dockage" class="text-xl font-black font-mono text-slate-900">$0 USD</span>
+                                <span id="exec-pda-dockage-detail" class="block text-[10px] text-slate-500 mt-1">$150/día/barcaza</span>
+                            </div>
+                            <div class="bg-slate-50 border border-slate-200 p-3.5 rounded-xl">
+                                <span class="block text-[10px] uppercase font-bold text-slate-600">Practicaje / Amarre</span>
+                                <span id="exec-pda-pilotage" class="text-xl font-black font-mono text-slate-900">$800 USD</span>
+                                <span class="block text-[10px] text-slate-500 mt-1">Coste fijo por maniobra/escala</span>
+                            </div>
+                            <div class="bg-slate-50 border border-slate-200 p-3.5 rounded-xl">
+                                <span class="block text-[10px] uppercase font-bold text-indigo-700">Estiba / Desestiba</span>
+                                <span id="exec-pda-handling" class="text-xl font-black font-mono text-indigo-700">$0 USD</span>
+                                <span id="exec-pda-handling-rate-detail" class="block text-[10px] text-slate-500 mt-1">$3.50/MT</span>
+                            </div>
+                            <div class="bg-slate-50 border border-slate-200 p-3.5 rounded-xl">
+                                <span class="block text-[10px] uppercase font-bold text-purple-700">Días Operativos de Puerto</span>
+                                <span id="exec-pda-port-days" class="text-xl font-black font-mono text-purple-700">0.0 días</span>
+                                <span id="exec-pda-port-hours" class="block text-[10px] text-slate-500 mt-1">0.0 horas de estiba</span>
+                            </div>
+                        </div>
+                        <div class="mt-3 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between text-xs text-slate-600 gap-2 font-mono">
+                            <div>
+                                <span class="font-sans font-semibold text-slate-700">Rendimiento Operativo:</span>
+                                <span id="exec-pda-productivity-metric" class="font-bold text-slate-900 ml-1 px-2 py-0.5 rounded bg-sky-50 border border-sky-200 text-sky-900">250 MT/hora</span>
+                            </div>
+                            <div>
+                                <span class="font-sans font-semibold text-slate-700">Consumo Búnker en Puerto:</span>
+                                <span id="exec-pda-idle-fuel-cost" class="font-bold text-amber-700 ml-1">$0 USD (0.00 MT)</span>
+                            </div>
+                            <div>
+                                <span class="font-sans font-semibold text-slate-700">Total Terminal PDA:</span>
+                                <span id="exec-pda-total-terminal" class="font-bold text-emerald-700 ml-1 text-sm">$0 USD</span>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- REPORTE DE EFICIENCIA AMBIENTAL Y SOSTENIBILIDAD (VISTA EJECUTIVA) -->
                     <div class="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-300 p-5 rounded-xl text-slate-800 shadow-sm" id="exec-sustainability-panel">
                         <div class="flex items-center justify-between border-b border-emerald-200/80 pb-3 mb-3">
@@ -11518,6 +11566,54 @@
                                     </label>
                                     <input type="number" id="fluvial-pda-pilotage" class="input-gc bg-white border border-slate-300 font-bold text-slate-900 w-full" value="2800" step="any" oninput="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations()">
                                     <span class="text-[10px] text-slate-500">Practicaje obligatorio y despachos</span>
+                                </div>
+                                <!-- Muellaje (Dockage) -->
+                                <div class="space-y-1">
+                                    <label for="fluvial-dockage-rate" class="text-[10px] font-bold text-slate-700 uppercase flex items-center min-h-[24px]">
+                                        Muellaje ($/día/barcaza)
+                                    </label>
+                                    <input type="number" id="fluvial-dockage-rate" class="input-gc bg-white border border-slate-300 font-bold text-slate-900 w-full" value="150" step="any" oninput="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations()">
+                                    <span class="text-[10px] text-slate-500">Tarifa terminal amarrada ($150/d)</span>
+                                </div>
+                                <!-- Practicaje y Amarre Escala -->
+                                <div class="space-y-1">
+                                    <label for="fluvial-pilotage-fee" class="text-[10px] font-bold text-slate-700 uppercase flex items-center min-h-[24px]">
+                                        Practicaje/Amarre Escala ($)
+                                    </label>
+                                    <input type="number" id="fluvial-pilotage-fee" class="input-gc bg-white border border-slate-300 font-bold text-slate-900 w-full" value="800" step="any" oninput="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations()">
+                                    <span class="text-[10px] text-slate-500">Fijo maniobra terminal ($800)</span>
+                                </div>
+                                <!-- Tarifa Estiba Granel -->
+                                <div class="space-y-1">
+                                    <label for="fluvial-handling-rate-bulk" class="text-[10px] font-bold text-indigo-700 uppercase flex items-center min-h-[24px]">
+                                        Estiba Granel ($/MT)
+                                    </label>
+                                    <input type="number" id="fluvial-handling-rate-bulk" class="input-gc bg-white border border-slate-300 font-bold text-indigo-900 w-full" value="3.50" step="0.1" oninput="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations()">
+                                    <span class="text-[10px] text-slate-500">Manipulación cinta/cuchara</span>
+                                </div>
+                                <!-- Tarifa Estiba Ro-Ro -->
+                                <div class="space-y-1">
+                                    <label for="fluvial-handling-rate-roro" class="text-[10px] font-bold text-teal-700 uppercase flex items-center min-h-[24px]">
+                                        Estiba Ro-Ro ($/camión)
+                                    </label>
+                                    <input type="number" id="fluvial-handling-rate-roro" class="input-gc bg-white border border-slate-300 font-bold text-teal-900 w-full" value="45" step="1" oninput="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations()">
+                                    <span class="text-[10px] text-slate-500">Tarifa por unidad rodada ($45)</span>
+                                </div>
+                                <!-- Rendimiento Granel -->
+                                <div class="space-y-1">
+                                    <label for="fluvial-bulk-productivity" class="text-[10px] font-bold text-slate-700 uppercase flex items-center min-h-[24px]">
+                                        Ritmo Granel (MT/h)
+                                    </label>
+                                    <input type="number" id="fluvial-bulk-productivity" class="input-gc bg-white border border-slate-300 font-bold text-slate-900 w-full" value="250" step="10" oninput="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations()">
+                                    <span class="text-[10px] text-slate-500">Ritmo estándar 250 MT/hora</span>
+                                </div>
+                                <!-- Rendimiento Ro-Ro -->
+                                <div class="space-y-1">
+                                    <label for="fluvial-roro-productivity" class="text-[10px] font-bold text-slate-700 uppercase flex items-center min-h-[24px]">
+                                        Ritmo Ro-Ro (min/camión)
+                                    </label>
+                                    <input type="number" id="fluvial-roro-productivity" class="input-gc bg-white border border-slate-300 font-bold text-slate-900 w-full" value="15" step="1" oninput="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations()">
+                                    <span class="text-[10px] text-slate-500">15 min/unidad rodada</span>
                                 </div>
                             </div>
 
@@ -77512,9 +77608,6 @@ window.actualizarGrabCapacityVisibility = function() {
             const tugDailyOpex = parseFloat(document.getElementById('fluvial-opex-tugboat')?.value) || 3200;
             const bargesDailyCapex = parseFloat(document.getElementById('fluvial-capex-barges')?.value) || 2400;
 
-            const tugTotalOpex = tugDailyOpex * totalDays;
-            const bargesTotalCapex = bargesDailyCapex * totalDays;
-
             const fuelSailingRate = parseFloat(document.getElementById('fluvial-fuel-sailing-rate')?.value) || 6.5;
             const fuelIdleRate = parseFloat(document.getElementById('fluvial-fuel-idle-rate')?.value) || 0.8;
             const fuelPrice = parseFloat(document.getElementById('fluvial-fuel-price')?.value) || 780;
@@ -77522,11 +77615,50 @@ window.actualizarGrabCapacityVisibility = function() {
             const idleDelayDays = Math.max(0, delayDays - doubleLockageDays);
             const fuelTons = (fuelSailingRate * fuelMultiplier * sailingDays) + (fuelIdleRate * idleDelayDays) + maneuverFuelTons;
             const totalBunkerCost = fuelTons * fuelPrice;
-            const totalMotorCost = tugTotalOpex + totalBunkerCost;
 
             const pdaLocks = parseFloat(document.getElementById('fluvial-pda-locks')?.value) || 0;
             const pdaTolls = parseFloat(document.getElementById('fluvial-pda-tolls')?.value) || 0;
             const pdaPilotage = parseFloat(document.getElementById('fluvial-pda-pilotage')?.value) || 0;
+
+            // Fase 4: Matriz de Tarifas Portuarias Fluviales (PDA Matrix) y Rendimiento de Terminal
+            const dockageDailyRate = parseFloat(document.getElementById('fluvial-dockage-rate')?.value) || 150; // $150/d/barcaza por defecto
+            const pilotageFee = parseFloat(document.getElementById('fluvial-pilotage-fee')?.value) || 800; // $800 por escala
+            const bulkHandlingRate = parseFloat(document.getElementById('fluvial-handling-rate-bulk')?.value) || 3.50; // $3.50/MT
+            const roroHandlingRate = parseFloat(document.getElementById('fluvial-handling-rate-roro')?.value) || 45; // $45/camión
+            const bulkProductivity = parseFloat(document.getElementById('fluvial-bulk-productivity')?.value) || 250; // 250 MT/h
+            const roroMinutesPerTruck = parseFloat(document.getElementById('fluvial-roro-productivity')?.value) || 15; // 15 min/camión
+
+            let portOperatingHours = 0;
+            let handlingCost = 0;
+            let handlingRateApplied = 0;
+            let productivityMetric = '';
+            if (isRoro) {
+                portOperatingHours = (roroTruckCount * roroMinutesPerTruck) / 60;
+                handlingCost = roroTruckCount * roroHandlingRate;
+                handlingRateApplied = roroHandlingRate;
+                productivityMetric = '4 unidades/hora (15 min/unidad)';
+            } else {
+                portOperatingHours = bulkProductivity > 0 ? (totalCapacity / bulkProductivity) : 0;
+                handlingCost = totalCapacity * bulkHandlingRate;
+                handlingRateApplied = bulkHandlingRate;
+                productivityMetric = bulkProductivity + ' MT/hora (cinta/cuchara)';
+            }
+
+            const portOperatingDays = Number((portOperatingHours / 24).toFixed(2));
+            const dockageCost = Number((bargeCount * dockageDailyRate * portOperatingDays).toFixed(2));
+
+            // Consumo de búnker en puerto a régimen de espera/auxiliares (idleFuelTonsPerHour = 0.05 MT/h)
+            const idleFuelPerHour = 0.05;
+            const portFuelTons = Number((portOperatingHours * idleFuelPerHour).toFixed(3));
+            const portFuelCost = Number((portFuelTons * fuelPrice).toFixed(2));
+
+            const totalTerminalPdaCost = Number((dockageCost + pilotageFee + handlingCost).toFixed(2));
+            const totalPortStayDays = delayDays + portOperatingDays;
+            const activeTotalDays = Math.max(0.5, Number((sailingDays + totalPortStayDays).toFixed(2)));
+
+            const tugTotalOpex = tugDailyOpex * activeTotalDays;
+            const bargesTotalCapex = bargesDailyCapex * activeTotalDays;
+            const totalMotorCost = tugTotalOpex + totalBunkerCost + portFuelCost;
 
             let transshipmentTariff = 0;
             if (isIntermodalActive) {
@@ -77547,9 +77679,9 @@ window.actualizarGrabCapacityVisibility = function() {
             // 5. Costos de Sincro-modalidad y Ahorros Terrestres (Aislamiento Contable Puro)
             const estimatedLandSavings = parseFloat(document.getElementById('fluvial-land-savings')?.value) ?? (convoy?.estimatedLandSavings || 0);
 
-            // Suma total de los costos operativos (OPEX motor + barcazas + peajes intermodales importados de DataBridge)
+            // Suma total de los costos operativos (OPEX motor + barcazas + peajes intermodales importados de DataBridge + PDA Terminal)
             // NUNCA restar estimatedLandSavings del costo operativo del armador (refleja OPEX puro del convoy)
-            const grossOperatingCost = totalMotorCost + bargesTotalCapex + totalIntermodalTolls;
+            const grossOperatingCost = totalMotorCost + bargesTotalCapex + totalIntermodalTolls + totalTerminalPdaCost;
             const totalConvoyCost = Math.max(0, grossOperatingCost);
 
             // 6. Ingresos, Beneficio Neto y Cálculo de Falso Flete (Deadfreight)
@@ -77742,6 +77874,64 @@ window.actualizarGrabCapacityVisibility = function() {
                     elExecCargoQty.textContent = Math.round(totalCapacity).toLocaleString() + ' MT';
                 }
             }
+
+            // 9.b. Actualización del Desglose Portuario y Terminal (PDA Matrix Fase 4)
+            const elPdaDockage = document.getElementById('exec-pda-dockage');
+            if (elPdaDockage) elPdaDockage.textContent = '$' + Math.round(dockageCost).toLocaleString() + ' USD';
+
+            const elPdaDockageDetail = document.getElementById('exec-pda-dockage-detail');
+            if (elPdaDockageDetail) elPdaDockageDetail.textContent = `$${dockageDailyRate}/día/barcaza (${bargeCount} b × ${portOperatingDays} d)`;
+
+            const elPdaPilotage = document.getElementById('exec-pda-pilotage');
+            if (elPdaPilotage) elPdaPilotage.textContent = '$' + Math.round(pilotageFee).toLocaleString() + ' USD';
+
+            const elPdaHandling = document.getElementById('exec-pda-handling');
+            if (elPdaHandling) elPdaHandling.textContent = '$' + Math.round(handlingCost).toLocaleString() + ' USD';
+
+            const elPdaHandlingDetail = document.getElementById('exec-pda-handling-rate-detail');
+            if (elPdaHandlingDetail) {
+                elPdaHandlingDetail.textContent = isRoro
+                    ? `$${handlingRateApplied}/camión (${roroTruckCount} camiones)`
+                    : `$${handlingRateApplied.toFixed(2)}/MT (${Math.round(totalCapacity).toLocaleString()} MT)`;
+            }
+
+            const elPdaPortDays = document.getElementById('exec-pda-port-days');
+            if (elPdaPortDays) elPdaPortDays.textContent = portOperatingDays.toFixed(2) + ' días';
+
+            const elPdaPortHours = document.getElementById('exec-pda-port-hours');
+            if (elPdaPortHours) elPdaPortHours.textContent = portOperatingHours.toFixed(1) + ' horas de estiba';
+
+            const elPdaProductivity = document.getElementById('exec-pda-productivity-metric');
+            if (elPdaProductivity) elPdaProductivity.textContent = productivityMetric;
+
+            const elPdaIdleFuel = document.getElementById('exec-pda-idle-fuel-cost');
+            if (elPdaIdleFuel) elPdaIdleFuel.textContent = `$${Math.round(portFuelCost).toLocaleString()} USD (${portFuelTons.toFixed(2)} MT @ espera)`;
+
+            const elPdaTotalTerminal = document.getElementById('exec-pda-total-terminal');
+            if (elPdaTotalTerminal) elPdaTotalTerminal.textContent = '$' + Math.round(totalTerminalPdaCost + portFuelCost).toLocaleString() + ' USD';
+
+            const elPdaOpBadge = document.getElementById('exec-pda-operation-badge');
+            if (elPdaOpBadge) {
+                elPdaOpBadge.textContent = isRoro ? 'Modo Ro-Ro (Carretera Flotante)' : 'Modo Granel (Bulk Cargo)';
+                elPdaOpBadge.className = isRoro
+                    ? 'text-[10px] font-mono bg-teal-50 text-teal-800 border border-teal-200 px-2 py-0.5 rounded font-bold uppercase'
+                    : 'text-[10px] font-mono bg-sky-50 text-sky-800 border border-sky-200 px-2 py-0.5 rounded font-bold uppercase';
+            }
+
+            const elExecPortDays = document.getElementById('exec-port-days');
+            if (elExecPortDays) elExecPortDays.textContent = totalPortStayDays.toFixed(1) + ' días';
+
+            const elExecSeaDays = document.getElementById('exec-sea-days');
+            if (elExecSeaDays) elExecSeaDays.textContent = sailingDays.toFixed(1) + ' días';
+
+            const elExecTotalDays = document.getElementById('exec-total-days');
+            if (elExecTotalDays) elExecTotalDays.textContent = activeTotalDays.toFixed(1) + ' días';
+
+            const elExecLoadRate = document.getElementById('exec-load-rate');
+            if (elExecLoadRate) elExecLoadRate.textContent = isRoro ? '4 uds/h' : bulkProductivity + ' MT/h';
+
+            const elExecDischRate = document.getElementById('exec-disch-rate');
+            if (elExecDischRate) elExecDischRate.textContent = isRoro ? '4 uds/h' : bulkProductivity + ' MT/h';
 
             const elExecVesselType = document.getElementById('exec-vessel-type');
             if (elExecVesselType) {

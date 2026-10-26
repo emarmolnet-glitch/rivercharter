@@ -18,6 +18,13 @@ import {
   calculateBidirectionalSailing,
   calculateConvoyGeometry,
   calculateConvoyArrangement,
+  calculateTerminalPda,
+  DEFAULT_DOCKAGE_DAILY_RATE_PER_BARGE,
+  DEFAULT_PILOTAGE_FEE,
+  DEFAULT_BULK_HANDLING_RATE_PER_TON,
+  DEFAULT_BULK_PRODUCTIVITY_TONS_PER_HOUR,
+  DEFAULT_RORO_HANDLING_RATE_PER_UNIT,
+  DEFAULT_RORO_MINUTES_PER_TRUCK,
   STANDARD_LOCK_LENGTH_FEET,
   STANDARD_LOCK_WIDTH_FEET,
   STANDARD_BARGE_LOA_FEET,
@@ -28,6 +35,7 @@ import {
   DEFAULT_RIVER_CURRENT_KNOTS,
   type FluvialEstimateResult,
   type ConvoyGeometryResult,
+  type TerminalPdaBreakdown,
 } from '../services/fluvialEstimator.js';
 import {
   DATABRIDGE_FLUVIAL_STANDARDS,
@@ -500,7 +508,7 @@ export function ConvoyBuilder({
   }, [selectedTugboat?.id]);
 
   // --------------------------------------------------------------------------
-  // 4. GASTOS PORTUARIOS Y DE CANAL (PDAs FLUVIALES)
+  // 4. GASTOS PORTUARIOS Y DE CANAL (PDAs FLUVIALES Y MATRIZ TERMINAL FASE 4)
   // --------------------------------------------------------------------------
   const [loadPortTariff, setLoadPortTariff] = useState<number>(2400); // Tarifa puerto carga
   const [dischargePortTariff, setDischargePortTariff] = useState<number>(2200); // Tarifa puerto descarga
@@ -509,6 +517,14 @@ export function ConvoyBuilder({
   const [riverPilotage, setRiverPilotage] = useState<number>(1400); // Practicaje fluvial
   const [crossBorderTariffs, setCrossBorderTariffs] = useState<number>(1600); // Aranceles transfronterizos
 
+  // Matriz de Tarifas Portuarias y Rendimiento (Fase 4: Muellaje, Practicaje y Estiba)
+  const [dockageDailyRatePerBarge, setDockageDailyRatePerBarge] = useState<number>(DEFAULT_DOCKAGE_DAILY_RATE_PER_BARGE); // $150/día/barcaza por defecto
+  const [pilotageFee, setPilotageFee] = useState<number>(DEFAULT_PILOTAGE_FEE); // $800 por escala por defecto
+  const [handlingRatePerTon, setHandlingRatePerTon] = useState<number>(DEFAULT_BULK_HANDLING_RATE_PER_TON); // $3.50/MT por defecto
+  const [handlingRatePerUnit, setHandlingRatePerUnit] = useState<number>(DEFAULT_RORO_HANDLING_RATE_PER_UNIT); // $45/camión por defecto
+  const [bulkProductivityTonsPerHour, setBulkProductivityTonsPerHour] = useState<number>(DEFAULT_BULK_PRODUCTIVITY_TONS_PER_HOUR); // 250 MT/hora
+  const [roroMinutesPerTruck, setRoroMinutesPerTruck] = useState<number>(DEFAULT_RORO_MINUTES_PER_TRUCK); // 15 minutos/camión
+
   const fluvialPdaExpenses: FluvialPdaExpenses = useMemo(() => ({
     loadPortTariff,
     dischargePortTariff,
@@ -516,11 +532,55 @@ export function ConvoyBuilder({
     lockDues,
     riverPilotage,
     crossBorderTariffs,
-  }), [loadPortTariff, dischargePortTariff, waterwayTolls, lockDues, riverPilotage, crossBorderTariffs]);
+    dockageDailyRatePerBarge,
+    pilotageFee,
+    handlingRatePerTon,
+    handlingRatePerUnit,
+    bulkProductivityTonsPerHour,
+    roroMinutesPerTruck,
+  }), [
+    loadPortTariff,
+    dischargePortTariff,
+    waterwayTolls,
+    lockDues,
+    riverPilotage,
+    crossBorderTariffs,
+    dockageDailyRatePerBarge,
+    pilotageFee,
+    handlingRatePerTon,
+    handlingRatePerUnit,
+    bulkProductivityTonsPerHour,
+    roroMinutesPerTruck,
+  ]);
 
   const pdaBreakdown = useMemo(() => {
-    return calculateFluvialPda(fluvialPdaExpenses);
-  }, [fluvialPdaExpenses]);
+    return calculateFluvialPda(fluvialPdaExpenses, {
+      bargeCount: coupledBarges.length,
+      operationType,
+      adjustedTonnage: totalCapacityMt,
+      truckCount: totalTruckCount,
+      dockageDailyRatePerBarge,
+      pilotageFee,
+      handlingRatePerTon,
+      handlingRatePerUnit,
+      bulkProductivityTonsPerHour,
+      roroMinutesPerTruck,
+      fuelPricePerTon,
+    });
+  }, [
+    fluvialPdaExpenses,
+    coupledBarges.length,
+    operationType,
+    totalCapacityMt,
+    totalTruckCount,
+    dockageDailyRatePerBarge,
+    pilotageFee,
+    handlingRatePerTon,
+    handlingRatePerUnit,
+    bulkProductivityTonsPerHour,
+    roroMinutesPerTruck,
+    fuelPricePerTon,
+  ]);
 
   // --------------------------------------------------------------------------
   // 5. GESTIÓN DE TIEMPOS, NAVEGACIÓN BIDIRECCIONAL Y DEMORAS
@@ -1966,6 +2026,105 @@ export function ConvoyBuilder({
                 />
               </div>
             </div>
+
+            {/* SUBPANEL: MATRIZ DE TARIFAS PORTUARIAS Y TERMINAL (FASE 4) */}
+            <div className="bg-white border border-slate-200 rounded-lg p-4 space-y-3 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                  <span>⚓</span> Matriz de Tarifas Portuarias Fluviales y Rendimiento (PDA Matrix)
+                </span>
+                <span className="text-[10px] font-mono bg-sky-50 text-sky-800 border border-sky-200 px-2 py-0.5 rounded font-bold uppercase">
+                  {isRoro ? 'Modo Ro-Ro (Carretera Flotante)' : 'Modo Granel (Bulk Cargo)'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                {/* MUELLAJE (DOCKAGE) */}
+                <div>
+                  <label className="block text-[10px] text-slate-600 mb-1 font-bold">
+                    Muellaje ($/día/barcaza)
+                  </label>
+                  <input
+                    type="number"
+                    value={dockageDailyRatePerBarge}
+                    onChange={(e) => setDockageDailyRatePerBarge(Number(e.target.value))}
+                    className="w-full bg-white border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-900 font-mono font-bold"
+                  />
+                  <span className="text-[10px] text-slate-500">Por barcaza atracada en terminal</span>
+                </div>
+
+                {/* PRACTICAJE / AMARRE */}
+                <div>
+                  <label className="block text-[10px] text-slate-600 mb-1 font-bold">
+                    Practicaje / Amarre ($/escala)
+                  </label>
+                  <input
+                    type="number"
+                    value={pilotageFee}
+                    onChange={(e) => setPilotageFee(Number(e.target.value))}
+                    className="w-full bg-white border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-900 font-mono font-bold"
+                  />
+                  <span className="text-[10px] text-slate-500">Fijo por maniobra convoy</span>
+                </div>
+
+                {/* TARIFA ESTIBA SEGÚN MODO */}
+                <div>
+                  <label className="block text-[10px] text-indigo-700 mb-1 font-bold">
+                    {isRoro ? 'Tarifa Estiba ($/camión)' : 'Tarifa Estiba ($/MT)'}
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={isRoro ? handlingRatePerUnit : handlingRatePerTon}
+                    onChange={(e) => {
+                      if (isRoro) setHandlingRatePerUnit(Number(e.target.value));
+                      else setHandlingRatePerTon(Number(e.target.value));
+                    }}
+                    className="w-full bg-white border border-slate-300 rounded px-2.5 py-1.5 text-xs text-indigo-900 font-mono font-bold"
+                  />
+                  <span className="text-[10px] text-slate-500">
+                    {isRoro ? 'Manipulación rodada por unidad' : 'Cinta/cuchara por MT'}
+                  </span>
+                </div>
+
+                {/* RENDIMIENTO OPERATIVO SEGÚN MODO */}
+                <div>
+                  <label className="block text-[10px] text-slate-600 mb-1 font-bold">
+                    {isRoro ? 'Ritmo Embarque (min/camión)' : 'Ritmo Estiba (MT/hora)'}
+                  </label>
+                  <input
+                    type="number"
+                    value={isRoro ? roroMinutesPerTruck : bulkProductivityTonsPerHour}
+                    onChange={(e) => {
+                      if (isRoro) setRoroMinutesPerTruck(Number(e.target.value));
+                      else setBulkProductivityTonsPerHour(Number(e.target.value));
+                    }}
+                    className="w-full bg-white border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-900 font-mono font-bold"
+                  />
+                  <span className="text-[10px] text-slate-500">
+                    {isRoro ? '15 min/unidad rodada expedita' : 'Ritmo estándar cinta/cuchara'}
+                  </span>
+                </div>
+              </div>
+
+              {/* IMPACTO CALCULADO DE PUERTO EN TIEMPO Y BÚNKER */}
+              <div className="bg-sky-50 border border-sky-200 rounded-lg p-3 text-xs flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <span className="font-bold text-sky-950 block">
+                    Tiempo de Estancia en Puerto: {(pdaBreakdown.portOperatingDays ?? 0).toFixed(2)} días ({(pdaBreakdown.portOperatingHours ?? 0).toFixed(1)} horas)
+                  </span>
+                  <span className="text-[11px] text-sky-800">
+                    Muellaje: ${(pdaBreakdown.dockageCost ?? 0).toLocaleString()} USD | Practicaje: ${(pdaBreakdown.pilotageFee ?? 0).toLocaleString()} USD | Estiba: ${(pdaBreakdown.handlingCost ?? 0).toLocaleString()} USD
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] uppercase font-bold text-slate-600 block">Consumo Auxiliares/Espera</span>
+                  <span className="font-mono font-bold text-amber-700">
+                    ${(pdaBreakdown.portFuelCost ?? 0).toLocaleString()} USD ({(pdaBreakdown.portFuelTons ?? 0).toFixed(2)} MT)
+                  </span>
+                </div>
+              </div>
+            </div>
           </section>
 
           {/* ------------------------------------------------------------------ */}
@@ -2454,6 +2613,93 @@ export function ConvoyBuilder({
             </div>
           </div>
 
+          {/* SECCIÓN: DESGLOSE PORTUARIO Y TERMINAL (PDA) */}
+          <div id="convoy-pda-terminal-breakdown" className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🏛️</span>
+                <h4 className="text-xs md:text-sm font-bold text-slate-900 uppercase tracking-wider">
+                  Desglose Portuario y Terminal (PDA)
+                </h4>
+              </div>
+              <span className="text-[10px] font-mono bg-sky-50 text-sky-800 border border-sky-200 px-2 py-0.5 rounded font-bold uppercase">
+                {isRoro ? 'Modo Ro-Ro (Carretera Flotante)' : 'Modo Granel (Bulk Cargo)'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+              {/* MUELLAJE (DOCKAGE) */}
+              <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl space-y-1">
+                <span className="block text-[10px] uppercase font-bold text-slate-500">Muellaje (Dockage)</span>
+                <span className="text-xl md:text-2xl font-black font-mono text-slate-900 block">
+                  ${(decoupledEstimate?.pdaCost?.dockageCost ?? pdaBreakdown.dockageCost ?? 0).toLocaleString()} USD
+                </span>
+                <span className="block text-[10px] text-slate-500">
+                  ${dockageDailyRatePerBarge}/día/barcaza ({coupledBarges.length} barcazas)
+                </span>
+              </div>
+
+              {/* PRACTICAJE / AMARRE */}
+              <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl space-y-1">
+                <span className="block text-[10px] uppercase font-bold text-slate-500">Practicaje / Amarre</span>
+                <span className="text-xl md:text-2xl font-black font-mono text-slate-900 block">
+                  ${(decoupledEstimate?.pdaCost?.pilotageFee ?? pdaBreakdown.pilotageFee ?? pilotageFee).toLocaleString()} USD
+                </span>
+                <span className="block text-[10px] text-slate-500">
+                  Coste fijo por maniobra de escala
+                </span>
+              </div>
+
+              {/* ESTIBA / DESESTIBA */}
+              <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl space-y-1">
+                <span className="block text-[10px] uppercase font-bold text-indigo-700">Estiba / Desestiba</span>
+                <span className="text-xl md:text-2xl font-black font-mono text-indigo-700 block">
+                  ${(decoupledEstimate?.pdaCost?.handlingCost ?? pdaBreakdown.handlingCost ?? 0).toLocaleString()} USD
+                </span>
+                <span className="block text-[10px] text-slate-500">
+                  {isRoro
+                    ? `$${handlingRatePerUnit} USD/camión (${totalTruckCount} camiones)`
+                    : `$${handlingRatePerTon} USD/MT (${Math.round(totalCapacityMt).toLocaleString()} MT)`}
+                </span>
+              </div>
+
+              {/* DÍAS OPERATIVOS DE PUERTO */}
+              <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl space-y-1">
+                <span className="block text-[10px] uppercase font-bold text-purple-700">Días Operativos de Puerto</span>
+                <span className="text-xl md:text-2xl font-black font-mono text-purple-700 block">
+                  {(decoupledEstimate?.pdaCost?.portOperatingDays ?? pdaBreakdown.portOperatingDays ?? 0).toFixed(2)} días
+                </span>
+                <span className="block text-[10px] text-slate-500">
+                  {(decoupledEstimate?.pdaCost?.portOperatingHours ?? pdaBreakdown.portOperatingHours ?? 0).toFixed(1)} horas operativas
+                </span>
+              </div>
+            </div>
+
+            {/* MÉTRICA DINÁMICA DE RENDIMIENTO & CONSUMO EN ESPERA */}
+            <div className="pt-3 border-t border-slate-200 flex flex-wrap items-center justify-between text-xs text-slate-600 gap-2 font-mono">
+              <div>
+                <span className="font-sans font-semibold text-slate-700">Rendimiento Operativo:</span>
+                <span className="font-bold text-slate-900 ml-1.5 px-2 py-0.5 rounded bg-sky-50 border border-sky-200 text-sky-900">
+                  {isRoro
+                    ? `${(60 / roroMinutesPerTruck).toFixed(0)} unidades/hora (${roroMinutesPerTruck} min/camión expedito)`
+                    : `${bulkProductivityTonsPerHour} MT/hora (ritmo cinta/cuchara)`}
+                </span>
+              </div>
+              <div>
+                <span className="font-sans font-semibold text-slate-700">Consumo Búnker en Puerto:</span>
+                <span className="font-bold text-amber-700 ml-1.5">
+                  ${(decoupledEstimate?.pdaCost?.portFuelCost ?? 0).toLocaleString()} USD ({(decoupledEstimate?.pdaCost?.portFuelTons ?? 0).toFixed(2)} MT @ ralentí/auxiliares)
+                </span>
+              </div>
+              <div>
+                <span className="font-sans font-semibold text-slate-700">Total Terminal PDA:</span>
+                <span className="font-bold text-emerald-700 ml-1.5 text-sm">
+                  ${((decoupledEstimate?.pdaCost?.dockageCost ?? 0) + (decoupledEstimate?.pdaCost?.pilotageFee ?? 0) + (decoupledEstimate?.pdaCost?.handlingCost ?? 0)).toLocaleString()} USD
+                </span>
+              </div>
+            </div>
+          </div>
+
           {/* TABLA DE DESGLOSE FINANCIERO COMPLETO (SOLO LECTURA) */}
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 space-y-4">
             <h4 className="text-xs font-bold text-slate-600 uppercase tracking-wider">
@@ -2494,11 +2740,32 @@ export function ConvoyBuilder({
                     <td className="py-2.5 px-3 text-right text-slate-800">${decoupledEstimate?.executiveSummary?.costPerTonBarges.toFixed(2)}</td>
                   </tr>
                   <tr>
-                    <td className="py-2.5 px-3 font-sans font-semibold text-sky-700">Gastos Fluviales (PDAs)</td>
-                    <td className="py-2.5 px-3 text-slate-600 font-sans">Peajes de hidrovía, esclusas, practicaje y puertos</td>
+                    <td className="py-2.5 px-3 font-sans font-semibold text-sky-700">Terminal: Muellaje (Dockage)</td>
+                    <td className="py-2.5 px-3 text-slate-600 font-sans">${dockageDailyRatePerBarge}/d/barcaza durante estancia portuaria</td>
+                    <td className="py-2.5 px-3 text-right text-slate-800">{coupledBarges.length} barcazas ({(decoupledEstimate?.pdaCost?.portOperatingDays ?? 0).toFixed(2)} d)</td>
+                    <td className="py-2.5 px-3 text-right text-slate-900 font-bold">${(decoupledEstimate?.pdaCost?.dockageCost ?? 0).toLocaleString()}</td>
+                    <td className="py-2.5 px-3 text-right text-slate-800">${totalCapacityMt > 0 ? (((decoupledEstimate?.pdaCost?.dockageCost ?? 0)) / totalCapacityMt).toFixed(2) : '0.00'}</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2.5 px-3 font-sans font-semibold text-sky-700">Terminal: Practicaje y Amarre</td>
+                    <td className="py-2.5 px-3 text-slate-600 font-sans">Tarifa fija por maniobra de convoy en terminal</td>
+                    <td className="py-2.5 px-3 text-right text-slate-800">1 escala</td>
+                    <td className="py-2.5 px-3 text-right text-slate-900 font-bold">${(decoupledEstimate?.pdaCost?.pilotageFee ?? pilotageFee).toLocaleString()}</td>
+                    <td className="py-2.5 px-3 text-right text-slate-800">${totalCapacityMt > 0 ? (((decoupledEstimate?.pdaCost?.pilotageFee ?? pilotageFee)) / totalCapacityMt).toFixed(2) : '0.00'}</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2.5 px-3 font-sans font-semibold text-indigo-700">Terminal: Estiba / Desestiba</td>
+                    <td className="py-2.5 px-3 text-slate-600 font-sans">{isRoro ? `Manipulación rodada expedita ($${handlingRatePerUnit}/camión)` : `Ritmo cinta/cuchara ($${handlingRatePerTon}/MT)`}</td>
+                    <td className="py-2.5 px-3 text-right text-slate-800">{isRoro ? `${totalTruckCount} camiones` : `${Math.round(totalCapacityMt).toLocaleString()} MT`}</td>
+                    <td className="py-2.5 px-3 text-right text-slate-900 font-bold">${(decoupledEstimate?.pdaCost?.handlingCost ?? 0).toLocaleString()}</td>
+                    <td className="py-2.5 px-3 text-right text-slate-800">${totalCapacityMt > 0 ? (((decoupledEstimate?.pdaCost?.handlingCost ?? 0)) / totalCapacityMt).toFixed(2) : '0.00'}</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2.5 px-3 font-sans font-semibold text-sky-700">Gastos Fluviales (PDAs de Hidrovía)</td>
+                    <td className="py-2.5 px-3 text-slate-600 font-sans">Peajes de vía navegable, esclusas y aranceles</td>
                     <td className="py-2.5 px-3 text-right text-slate-800">POL / POD</td>
-                    <td className="py-2.5 px-3 text-right text-slate-900 font-bold">${pdaBreakdown.totalPdaCost.toLocaleString()}</td>
-                    <td className="py-2.5 px-3 text-right text-slate-800">${decoupledEstimate?.executiveSummary?.costPerTonPda.toFixed(2)}</td>
+                    <td className="py-2.5 px-3 text-right text-slate-900 font-bold">${((loadPortTariff + dischargePortTariff + waterwayTolls + lockDues + riverPilotage + crossBorderTariffs)).toLocaleString()}</td>
+                    <td className="py-2.5 px-3 text-right text-slate-800">${totalCapacityMt > 0 ? (((loadPortTariff + dischargePortTariff + waterwayTolls + lockDues + riverPilotage + crossBorderTariffs)) / totalCapacityMt).toFixed(2) : '0.00'}</td>
                   </tr>
                   <tr>
                     <td className="py-2.5 px-3 font-sans font-semibold text-teal-700">Sincro-modal: Transbordo Directo</td>
@@ -2516,7 +2783,7 @@ export function ConvoyBuilder({
                   </tr>
                   <tr className="bg-slate-50 font-bold border-t-2 border-slate-200 text-slate-900">
                     <td className="py-3 px-3 font-sans text-slate-900 uppercase">Total Costos Operativos</td>
-                    <td className="py-3 px-3 text-slate-600 font-sans">Suma agregada del viaje fluvial</td>
+                    <td className="py-3 px-3 text-slate-600 font-sans">Suma agregada del viaje fluvial (OPEX + PDA + Terminal)</td>
                     <td className="py-3 px-3 text-right text-purple-700">{totalOperationalDays} días</td>
                     <td className="py-3 px-3 text-right text-emerald-700 text-sm">${decoupledEstimate?.totalVoyageCost.toLocaleString()} USD</td>
                     <td className="py-3 px-3 text-right text-slate-900 text-sm">${decoupledEstimate?.costPerCargoTon.toFixed(2)} USD/MT</td>
