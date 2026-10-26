@@ -69750,6 +69750,10 @@ Compara el documento suministrado (que puede ser un contrato, carta de crédito 
                 }
             } else if (event.data && event.data.type === 'SEACHARTER_DATABRIDGE_MUTATION') {
                 updateDataBridgeConnectionIndicator();
+            } else if (event.data && (event.data.type === 'DATABRIDGE_PAYLOAD' || event.data.type === 'CEREBRO_PAYLOAD' || event.data.action === 'applyDataBridgePayload' || event.data.action === 'update_fields')) {
+                if (typeof window.applyDataBridgePayload === 'function') {
+                    window.applyDataBridgePayload(event.data.payload || event.data);
+                }
             }
         });
 
@@ -69772,6 +69776,10 @@ Compara el documento suministrado (que puede ser un contrato, carta de crédito 
                         const vessel = data.vessel || data.payload?.vessel || (Array.isArray(data.payload?.vessels) && data.payload.vessels.length === 1 ? data.payload.vessels[0] : null);
                         if (vessel) {
                             window.patchSection2Vessel?.(vessel);
+                        }
+                    } else if (data.type === 'DATABRIDGE_PAYLOAD' || data.type === 'CEREBRO_PAYLOAD' || data.action === 'applyDataBridgePayload' || data.action === 'update_fields') {
+                        if (typeof window.applyDataBridgePayload === 'function') {
+                            window.applyDataBridgePayload(data.payload || data);
                         }
                     }
                 });
@@ -77437,6 +77445,368 @@ window.actualizarGrabCapacityVisibility = function() {
                     : (window.convoyDesc || convoy?.convoyDescription || `Convoy ${stdName} - ${count} Barcazas`);
                 elExecVesselType.textContent = dynamicDesc;
             }
+
+            // Sincronización de Break-Even en Modo Técnico y Vista Ejecutiva
+            const elResBreakeven = document.getElementById('res-breakeven');
+            if (elResBreakeven && costPerTon > 0) {
+                elResBreakeven.textContent = '$' + costPerTon.toFixed(2);
+            }
+            const elResCostBase = document.getElementById('res-cost-base-break-even');
+            if (elResCostBase && costPerTon > 0) {
+                elResCostBase.textContent = '$' + costPerTon.toFixed(2) + ' /MT';
+            }
+            const elExecBuyFreight = document.getElementById('exec-buy-freight');
+            if (elExecBuyFreight && costPerTon > 0) {
+                elExecBuyFreight.textContent = '$' + costPerTon.toFixed(2) + ' / MT';
+            }
+
+            // Guardar estado financiero consolidado en State global
+            if (!window.State) window.State = {};
+            window.State.totalConvoyCost = totalConvoyCost;
+            window.State.costPerTon = costPerTon;
+            window.State.costPerTonMotor = costPerTonMotor;
+            window.State.costPerTonBarges = costPerTonBarges;
+            window.State.dailyTce = dailyTce;
+            window.State.tce = dailyTce;
+            window.State.tceOwner = dailyTce;
+            if (costPerTon > 0) {
+                window.State.breakEven = costPerTon;
+                window.State.breakEvenArmador = costPerTon;
+            }
+        };
+
+        /**
+         * AUTOMATIZACIÓN ZERO-TOUCH EN FRONTEND DE RIVERCHARTER
+         * Procesa respuestas de Cerebro IA y payloads de DataBridge.
+         * Realiza binding de variables de búnker y estiaje, invoca el auto-cálculo global,
+         * provee feedback visual (toast / botón IA) y actualiza Vista Ejecutiva y Modo Técnico.
+         */
+        window.applyDataBridgePayload = function(payload, options = {}) {
+            if (!payload || typeof payload !== 'object') {
+                console.warn('[RiverCharter Zero-Touch] Payload inválido o vacío');
+                return null;
+            }
+
+            const p = (payload.payload && typeof payload.payload === 'object')
+                ? payload.payload
+                : ((payload.data && typeof payload.data === 'object') ? payload.data : payload);
+
+            console.group('🌊 [RiverCharter Zero-Touch] Procesando Payload de DataBridge / Cerebro IA');
+            console.log('Payload crudo recibido:', p);
+
+            const setInputValue = (id, val) => {
+                if (val === undefined || val === null || val === '') return null;
+                const el = document.getElementById(id) || document.querySelector(`[name="${id}"]`);
+                if (!el) return null;
+                el.value = String(val);
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+                return el;
+            };
+
+            if (!window.State) window.State = {};
+
+            // --------------------------------------------------------------------------
+            // 1. INYECCIÓN DE NUEVAS VARIABLES (BINDING)
+            // --------------------------------------------------------------------------
+
+            // 1.a. Búnker / MGO (bunker_price)
+            const bunkerPriceRaw = p.bunker_price ?? p.bunkerPrice ?? p.mgo_price ?? p.mgoPrice ?? p.fuel_price ?? p.fluvial_fuel_price;
+            let bunkerPrice = null;
+            if (bunkerPriceRaw !== undefined && bunkerPriceRaw !== null && bunkerPriceRaw !== '') {
+                bunkerPrice = parseFloat(bunkerPriceRaw);
+                if (!isNaN(bunkerPrice) && bunkerPrice > 0) {
+                    setInputValue('fluvial-fuel-price', bunkerPrice); // Input de combustible fluvial / MGO
+                    setInputValue('price-port', bunkerPrice);         // Input MGO general
+
+                    window.State.fluvialFuelPrice = bunkerPrice;
+                    window.State.pricePort = bunkerPrice;
+                    window.State.bunkerPrice = bunkerPrice;
+                    window.State.bunker_price = bunkerPrice;
+                    window.State.mgo = bunkerPrice;
+                    window.State.mgoPrice = bunkerPrice;
+                    console.log(`✓ Búnker MGO mapeado: $${bunkerPrice}/MT en DOM y State`);
+                }
+            }
+
+            // 1.b. Factor de Restricción de Calado / Estiaje (draft_restriction_factor)
+            const draftFactorRaw = p.draft_restriction_factor ?? p.draftRestrictionFactor ?? p.draft_factor ?? p.draftFactor ?? p.estiaje_factor ?? p.estiajeFactor;
+            let draftFactor = null;
+            let netBargeCapacity = null;
+            let totalNetCapacity = null;
+
+            if (draftFactorRaw !== undefined && draftFactorRaw !== null && draftFactorRaw !== '') {
+                draftFactor = parseFloat(draftFactorRaw);
+                if (!isNaN(draftFactor) && draftFactor > 0) {
+                    if (draftFactor > 1) {
+                        draftFactor = draftFactor / 100; // Normalizar porcentaje ej. 85 -> 0.85
+                    }
+
+                    const activeStd = window.activeBargeStandard || window.activeConvoyData?.standard;
+                    const nominalBargeCapacity = parseFloat(
+                        window.activeConvoyData?.capacityPerBarge ||
+                        window.activeConvoyData?.bargeCapacity ||
+                        (activeStd === 'mississippi_jumbo' ? 1500 : 2500)
+                    );
+
+                    const bargeCount = parseInt(
+                        window.activeBargeCount ||
+                        window.activeConvoyData?.bargeCount ||
+                        (Array.isArray(window.activeConvoyData?.barges) ? window.activeConvoyData.barges.length : 4),
+                        10
+                    ) || 4;
+
+                    // Cálculo de capacidad neta por barcaza afectada por estiaje
+                    netBargeCapacity = Math.round(nominalBargeCapacity * draftFactor);
+                    totalNetCapacity = netBargeCapacity * bargeCount;
+
+                    // Mapeo directo al DOM
+                    setInputValue('cargo-qty', totalNetCapacity);
+                    setInputValue('vessel-dwt', totalNetCapacity);
+
+                    if (p.min_water_level || p.minWaterLevel || p.water_level) {
+                        const waterVal = parseFloat(p.min_water_level ?? p.minWaterLevel ?? p.water_level);
+                        if (!isNaN(waterVal)) {
+                            setInputValue('min_water_level', waterVal.toFixed(2));
+                            if (typeof window.syncWaterLevelToConvoy === 'function') {
+                                window.syncWaterLevelToConvoy(waterVal);
+                            }
+                        }
+                    }
+
+                    if (!window.activeConvoyData) window.activeConvoyData = {};
+                    window.activeConvoyData.draftRestrictionFactor = draftFactor;
+                    window.activeConvoyData.draft_restriction_factor = draftFactor;
+                    window.activeConvoyData.nominalBargeCapacity = nominalBargeCapacity;
+                    window.activeConvoyData.capacityPerBarge = netBargeCapacity;
+                    window.activeConvoyData.netCapacityPerBarge = netBargeCapacity;
+                    window.activeConvoyData.totalCapacityMt = totalNetCapacity;
+
+                    window.State.draftRestrictionFactor = draftFactor;
+                    window.State.draft_restriction_factor = draftFactor;
+                    window.State.nominalBargeCapacity = nominalBargeCapacity;
+                    window.State.bargeNetCapacity = netBargeCapacity;
+                    window.State.netBargeCapacity = netBargeCapacity;
+                    window.State.totalNetCapacity = totalNetCapacity;
+                    window.State.cargo = totalNetCapacity;
+                    window.State.cargoQty = totalNetCapacity;
+                    window.State.cargo_qty = totalNetCapacity;
+                    window.State.bargeCount = bargeCount;
+                    console.log(`✓ Estiaje factor ${draftFactor} aplicado: ${netBargeCapacity} TM/barcaza (Total convoy: ${totalNetCapacity} TM)`);
+                }
+            }
+
+            // 1.c. Mapeo de Puertos, Mercancía, Ritmos y Flete
+            if (p.pol) {
+                setInputValue('port-pol', p.pol);
+                setInputValue('input-pol', p.pol);
+                window.State.pol = p.pol;
+            }
+            if (p.pod) {
+                setInputValue('port-pod', p.pod);
+                setInputValue('input-pod', p.pod);
+                window.State.pod = p.pod;
+            }
+            if (p.cargo_type || p.commodity || p.product || p.category) {
+                const comm = p.cargo_type || p.commodity || p.product || p.category;
+                setInputValue('cargo-type', comm);
+                setInputValue('cargo-product', comm);
+                setInputValue('input-commodity', comm);
+                window.State.commodity = comm;
+                window.State.cargoType = comm;
+            }
+            if (p.tonnage && !totalNetCapacity) {
+                const tVal = parseFloat(p.tonnage);
+                if (!isNaN(tVal)) {
+                    setInputValue('cargo-qty', tVal);
+                    window.State.cargo = tVal;
+                    window.State.cargoQty = tVal;
+                }
+            }
+            if (p.loadingRate || p.loading_rate || p.load_rate || p.rate_load) {
+                const lRate = parseFloat(p.loadingRate ?? p.loading_rate ?? p.load_rate ?? p.rate_load);
+                if (!isNaN(lRate)) {
+                    setInputValue('rate-load', lRate);
+                    setInputValue('loading-rate', lRate);
+                    window.State.loadRate = lRate;
+                }
+            }
+            if (p.dischargeRate || p.discharge_rate || p.disch_rate || p.rate_disch) {
+                const dRate = parseFloat(p.dischargeRate ?? p.discharge_rate ?? p.disch_rate ?? p.rate_disch);
+                if (!isNaN(dRate)) {
+                    setInputValue('rate-disch', dRate);
+                    setInputValue('discharge-rate', dRate);
+                    window.State.dischargeRate = dRate;
+                }
+            }
+            if (p.freight_sell ?? p.freightSell ?? p.freight_rate ?? p.freightRate ?? p.fleteVenta ?? p.flete) {
+                const fVal = parseFloat(p.freight_sell ?? p.freightSell ?? p.freight_rate ?? p.freightRate ?? p.fleteVenta ?? p.flete);
+                if (!isNaN(fVal)) {
+                    setInputValue('freight-sell', fVal);
+                    setInputValue('freight-rate', fVal);
+                    window.State.freightSell = fVal;
+                }
+            }
+
+            // --------------------------------------------------------------------------
+            // 2. AUTO-CÁLCULO (TRIGGER AUTOMÁTICO)
+            // --------------------------------------------------------------------------
+            if (typeof window.runEngine === 'function') {
+                try { window.runEngine(); } catch (e) { console.warn('runEngine error:', e); }
+            } else if (typeof runEngine === 'function') {
+                try { runEngine(); } catch (e) { console.warn('runEngine error:', e); }
+            }
+
+            if (typeof window.updateFluvialCalculations === 'function') {
+                try { window.updateFluvialCalculations(); } catch (e) { console.warn('updateFluvialCalculations error:', e); }
+            }
+
+            if (typeof window.recalcularDiasPuerto === 'function') {
+                try { window.recalcularDiasPuerto(); } catch (_) {}
+            }
+            if (typeof window.syncCalculatorAndMatching === 'function') {
+                try { window.syncCalculatorAndMatching('calculator'); } catch (_) {}
+            }
+
+            // --------------------------------------------------------------------------
+            // 3. FEEDBACK DE AUTOMATIZACIÓN (TOAST & ESTADO VISUAL BOTÓN IA)
+            // --------------------------------------------------------------------------
+            const feedbackText = "Cálculo Completado (Datos en Tiempo Real)";
+            const toastDetails = [];
+            if (draftFactor !== null) toastDetails.push(`Estiaje ${(draftFactor * 100).toFixed(0)}% (${netBargeCapacity} TM/barcaza)`);
+            if (bunkerPrice !== null) toastDetails.push(`Búnker MGO $${bunkerPrice}/t`);
+            const fullToastMsg = toastDetails.length > 0
+                ? `✅ ${feedbackText}: ${toastDetails.join(' · ')} aplicados automáticamente`
+                : `✅ ${feedbackText}`;
+
+            // Notificación Toast
+            if (typeof window.showToast === 'function') {
+                window.showToast(fullToastMsg);
+            } else {
+                const toast = document.createElement('div');
+                toast.className = 'fixed bottom-5 right-5 z-[9999] bg-slate-900 text-white px-4 py-2.5 rounded-lg shadow-xl text-xs font-semibold flex items-center gap-2 border border-emerald-500/50 transition-all duration-300';
+                toast.innerHTML = `<span class="text-emerald-400">✓</span><span>${fullToastMsg}</span>`;
+                document.body.appendChild(toast);
+                setTimeout(() => {
+                    toast.style.opacity = '0';
+                    setTimeout(() => toast.remove(), 300);
+                }, 4000);
+            }
+
+            // Estado visual de botones e indicadores de IA
+            const aiButtons = [
+                document.getElementById('sea-assistant-toggle'),
+                document.getElementById('btn-viability-ai'),
+                document.querySelector('.sca-send'),
+                document.getElementById('btn-weather-margin-ia')
+            ].filter(Boolean);
+
+            aiButtons.forEach(btn => {
+                const prevTitle = btn.getAttribute('title') || '';
+                btn.setAttribute('title', feedbackText);
+                btn.setAttribute('aria-label', feedbackText);
+                btn.dataset.aiState = 'completed';
+                btn.classList.add('ring-2', 'ring-emerald-400', 'ring-offset-2');
+
+                const badge = btn.querySelector('.sea-assistant-alert-badge');
+                if (badge) {
+                    badge.textContent = '✓';
+                    badge.hidden = false;
+                    badge.classList.remove('hidden');
+                }
+
+                setTimeout(() => {
+                    btn.classList.remove('ring-2', 'ring-emerald-400', 'ring-offset-2');
+                    if (prevTitle) btn.setAttribute('title', prevTitle);
+                    if (badge) badge.hidden = true;
+                }, 5000);
+            });
+
+            const aiStatusDot = document.getElementById('sea-assistant-dot');
+            if (aiStatusDot) {
+                aiStatusDot.className = "sca-presence-dot w-2.5 h-2.5 rounded-full shrink-0 bg-emerald-500 animate-pulse";
+                setTimeout(() => {
+                    aiStatusDot.className = "sca-presence-dot w-2.5 h-2.5 rounded-full shrink-0 bg-[#6366f1]";
+                }, 5000);
+            }
+
+            // --------------------------------------------------------------------------
+            // 4. RENDERIZADO DE VISTAS (VISTA EJECUTIVA Y MODO TÉCNICO)
+            // --------------------------------------------------------------------------
+            const costPerTon = window.State?.costPerTon || (window.State?.totalConvoyCost && window.State?.cargo ? window.State.totalConvoyCost / window.State.cargo : 0);
+            const dailyTce = window.State?.tce || window.State?.dailyTce || 0;
+
+            // Vista Ejecutiva
+            const elExecCostPerTon = document.getElementById('exec-fluvial-cost-per-ton');
+            if (elExecCostPerTon && costPerTon > 0) {
+                elExecCostPerTon.innerHTML = '$' + costPerTon.toFixed(2) + ' <span class="text-xs font-normal text-slate-500">USD/MT</span>';
+            }
+            const elExecBuyFreight = document.getElementById('exec-buy-freight');
+            if (elExecBuyFreight && costPerTon > 0) {
+                elExecBuyFreight.textContent = '$' + costPerTon.toFixed(2) + ' / MT';
+            }
+            const elExecTce = document.getElementById('exec-fluvial-tce');
+            if (elExecTce && dailyTce) {
+                elExecTce.innerHTML = '$' + Math.round(dailyTce).toLocaleString() + ' <span class="text-xs font-normal text-slate-500">/ día</span>';
+            }
+            const elExecGeneralTce = document.getElementById('exec-tce');
+            if (elExecGeneralTce && dailyTce) {
+                elExecGeneralTce.textContent = '$' + Math.round(dailyTce).toLocaleString() + ' / día';
+            }
+            const elExecStatus = document.getElementById('exec-operation-status');
+            const elExecIcon = document.getElementById('exec-operation-icon');
+            if (elExecStatus) {
+                elExecStatus.textContent = 'COTIZACIÓN ZERO-TOUCH COMPLETADA';
+                elExecStatus.className = 'text-emerald-700 font-extrabold';
+            }
+            if (elExecIcon) elExecIcon.textContent = '🟢';
+
+            // Modo Técnico
+            const elResBreakeven2 = document.getElementById('res-breakeven');
+            if (elResBreakeven2 && costPerTon > 0) {
+                elResBreakeven2.textContent = '$' + costPerTon.toFixed(2);
+            }
+            const elResCostBase2 = document.getElementById('res-cost-base-break-even');
+            if (elResCostBase2 && costPerTon > 0) {
+                elResCostBase2.textContent = '$' + costPerTon.toFixed(2) + ' /MT';
+            }
+            const elResTce = document.getElementById('res-tce-label');
+            if (elResTce && dailyTce) {
+                elResTce.textContent = 'TCE Fluvial: $' + Math.round(dailyTce).toLocaleString() + ' / día';
+            }
+
+            try {
+                window.dispatchEvent(new CustomEvent('rivercharter:zero-touch-completed', {
+                    detail: {
+                        bunkerPrice,
+                        draftFactor,
+                        netBargeCapacity,
+                        totalNetCapacity,
+                        costPerTon,
+                        dailyTce
+                    }
+                }));
+            } catch (_) {}
+
+            console.log('✅ [RiverCharter Zero-Touch] Cotización completada con éxito:', {
+                bunkerPrice,
+                draftFactor,
+                netBargeCapacity,
+                totalNetCapacity,
+                costPerTon,
+                dailyTce
+            });
+            console.groupEnd();
+
+            return {
+                success: true,
+                bunkerPrice,
+                draftFactor,
+                netBargeCapacity,
+                totalNetCapacity,
+                costPerTon,
+                dailyTce
+            };
         };
 
         window.applyRiverCharterVisibility = function() {
