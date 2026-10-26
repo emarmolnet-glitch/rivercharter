@@ -17,6 +17,10 @@ import {
   calculateDefaultBargeRate,
   type FluvialEstimateResult,
 } from '../services/fluvialEstimator.js';
+import {
+  DATABRIDGE_FLUVIAL_STANDARDS,
+  type FluvialBargeStandard,
+} from '../services/databridgeFluvialService.js';
 import LockDemurrageModule, { type WaitingTimeEntry } from './LockDemurrageModule.js';
 
 export interface ConvoyBuilderProps {
@@ -288,6 +292,86 @@ export function ConvoyBuilder({
       }
     }
   };
+
+  // --------------------------------------------------------------------------
+  // TOGGLE RÁPIDO ESTÁNDAR DATABRIDGE (MISISIPI JUMBO VS LATAM SÚPER JUMBO)
+  // --------------------------------------------------------------------------
+  const [activeBargeStandard, setActiveBargeStandard] = useState<'mississippi_jumbo' | 'latam_super_jumbo' | null>(null);
+
+  const handleApplyBargeStandard = (standardKey: 'mississippi_jumbo' | 'latam_super_jumbo') => {
+    setActiveBargeStandard(standardKey);
+    const std = DATABRIDGE_FLUVIAL_STANDARDS[standardKey];
+    if (!std) return;
+
+    // Crea barcazas estandarizadas importadas de DataBridge
+    const standardBarges: Barge[] = Array.from({ length: std.defaultBargeCount }).map((_, idx) => {
+      const id = standardKey === 'mississippi_jumbo' ? 701 + idx : 801 + idx;
+      const prefix = standardKey === 'mississippi_jumbo' ? 'Jumbo Misisipi' : 'Súper Jumbo LatAm';
+      const code = standardKey === 'mississippi_jumbo' ? `B-MS-${idx + 1}` : `B-HP-${idx + 1}`;
+      return {
+        id,
+        name: `${prefix} #${idx + 1}`,
+        bargeNumber: code,
+        bargeType: std.bargeType,
+        capacity: std.capacityMt,
+        dynamicDraft: std.dynamicDraftMeters,
+        linearMeters: Math.round(std.capacityMt * 0.44),
+        truckCount: Math.round(std.capacityMt / 25),
+        iotTrackingId: `IOT-${code}`,
+      };
+    });
+
+    setBargePool((prevPool) => {
+      const existingIds = new Set(prevPool.map((b) => b.id));
+      const toAdd = standardBarges.filter((b) => !existingIds.has(b.id));
+      return [...prevPool, ...toAdd];
+    });
+
+    const newBargeIds = standardBarges.map((b) => b.id);
+    setBargeIds(newBargeIds);
+
+    setBargeDailyRates((prev) => {
+      const updated = { ...prev };
+      newBargeIds.forEach((id) => {
+        updated[id] = std.dailyRateUsd;
+      });
+      return updated;
+    });
+
+    if (typeof window !== 'undefined') {
+      (window as any).activeBargeStandard = standardKey;
+      (window as any).activeBargeStandardData = std;
+      window.dispatchEvent(new CustomEvent('rivercharter:standard-applied', {
+        detail: {
+          standard: standardKey,
+          bargeCount: std.defaultBargeCount,
+          capacityPerBarge: std.capacityMt,
+          totalCapacity: std.capacityMt * std.defaultBargeCount,
+          dynamicDraft: std.dynamicDraftMeters,
+          dimensions: std.dimensions,
+        }
+      }));
+      if (typeof (window as any).updateFluvialCalculations === 'function') {
+        setTimeout(() => (window as any).updateFluvialCalculations(), 10);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).applyFluvialBargeStandard = handleApplyBargeStandard;
+      const handleExternalStandard = (e: any) => {
+        const std = e.detail?.standard;
+        if (std === 'mississippi_jumbo' || std === 'latam_super_jumbo') {
+          handleApplyBargeStandard(std);
+        }
+      };
+      window.addEventListener('rivercharter:set-standard', handleExternalStandard);
+      return () => {
+        window.removeEventListener('rivercharter:set-standard', handleExternalStandard);
+      };
+    }
+  }, []);
 
   // Remolcador actualmente asignado
   const selectedTugboat = useMemo(() => {
@@ -1100,6 +1184,53 @@ export function ConvoyBuilder({
                       }`}
                     >
                       Ro-Ro / Carretera Flotante
+                    </button>
+                  </div>
+                </div>
+
+                {/* TOGGLE RÁPIDO ESTÁNDAR DATABRIDGE FLUVIAL */}
+                <div className="bg-white border border-slate-200 rounded-lg p-3 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                        Estándar de Convoy (DataBridge)
+                      </span>
+                      <span className="text-[9px] font-semibold text-teal-700 bg-teal-50 border border-teal-200 px-1.5 py-0.5 rounded">
+                        Importación Automática
+                      </span>
+                    </div>
+                    <span className="text-xs font-black text-slate-900 block mt-0.5">
+                      {activeBargeStandard === 'mississippi_jumbo'
+                        ? 'Estándar Misisipi (Jumbo) · 1,500 TM/barcaza · 59.4m × 10.7m · Calado 2.74m'
+                        : activeBargeStandard === 'latam_super_jumbo'
+                        ? 'Estándar LatAm (Súper Jumbo) · 2,500 TM/barcaza · 61.0m × 16.5m · Calado 3.20m'
+                        : 'Importar capacidades y dimensiones estándar desde DataBridge'}
+                    </span>
+                  </div>
+                  <div className="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-100 shrink-0">
+                    <button
+                      type="button"
+                      id="btn-toggle-standard-mississippi"
+                      onClick={() => handleApplyBargeStandard('mississippi_jumbo')}
+                      className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                        activeBargeStandard === 'mississippi_jumbo'
+                          ? 'bg-white text-blue-700 shadow-sm border border-slate-200'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Estándar Misisipi (Jumbo)
+                    </button>
+                    <button
+                      type="button"
+                      id="btn-toggle-standard-latam"
+                      onClick={() => handleApplyBargeStandard('latam_super_jumbo')}
+                      className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                        activeBargeStandard === 'latam_super_jumbo'
+                          ? 'bg-white text-blue-700 shadow-sm border border-slate-200'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Estándar LatAm (Súper Jumbo)
                     </button>
                   </div>
                 </div>
