@@ -1004,7 +1004,7 @@
         :root {
             --primary: #004e64;
             --accent: #25a18e;
-            --bg: #004e64;
+            --bg: #f8fafc;
             --text: #334155;
             --danger: #F43F5E;
             --surface: #FFFFFF;
@@ -9622,7 +9622,7 @@
     <link href="./market-contacts.css" rel="stylesheet">
     <link href="./dossiers.css" rel="stylesheet">
 </head>
-<body class="theme-light bg-slate-900 h-screen flex flex-col overflow-hidden" data-app-ready="false" aria-busy="true">
+<body class="theme-light bg-slate-50 text-slate-800 h-screen flex flex-col overflow-hidden" data-app-ready="false" aria-busy="true">
 
     <div id="global-splash-screen" class="fixed inset-0 z-50 bg-slate-900" role="status" aria-live="polite" aria-label="RiverCharter iniciando">
         <div class="global-splash__content">
@@ -10272,7 +10272,7 @@
         <!-- ========================================== -->
         <!-- MÓDULO 1: VOYAGE ESTIMATOR COMPLETO        -->
         <!-- ========================================== -->
-        <div id="view-estimator" class="view-section absolute inset-0 overflow-y-auto p-6 scroll-smooth">
+        <div id="view-estimator" class="view-section absolute inset-0 overflow-y-auto p-6 scroll-smooth bg-slate-50 text-slate-800">
             <!-- CONTROLES DE VISTA -->
             <div class="w-full max-w-6xl mx-auto mb-6 font-sans">
                 <div class="flex justify-end mb-4">
@@ -10455,8 +10455,8 @@
                         <div class="collapsible-section-header flex justify-between items-center mb-4 border-b border-slate-200 pb-2">
                             <h2 id="route-header-title" class="text-sm font-bold text-blue-900 uppercase"><i class="fa-solid fa-route mr-2"></i> 1. Derrota y Puertos Geográficos</h2>
                             <div class="collapsible-section-actions flex items-center gap-2">
-                                <div id="btn-wpi" class="text-xs bg-teal-900/50 text-teal-200 px-3 py-1.5 rounded flex items-center gap-1.5 border border-teal-700/50" title="Búsqueda segura mediante Datalastic Port Finder/Info">
-                                    <i class="fa-solid fa-satellite-dish"></i> Datalastic activo
+                                <div id="btn-wpi" class="text-xs bg-slate-100 text-slate-700 px-3 py-1.5 rounded flex items-center gap-1.5 border border-slate-300 hover:bg-slate-200 transition" title="Búsqueda segura mediante Datalastic Port Finder/Info">
+                                    <i class="fa-solid fa-satellite-dish text-sky-600"></i> Datalastic activo
                                 </div>
                                 <button id="btn-locate-route" onclick="geocodeAllPorts()" class="text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded text-white flex items-center gap-1.5 transition border border-slate-700">
                                     <i class="fa-solid fa-satellite-dish text-sky-400"></i> Localizar Ruta
@@ -10543,14 +10543,92 @@
 
                         </div>
 
+                        <!-- SUBMÓDULO BIMODAL: TRASBORDO INTERMODAL (BUQUE OCEÁNICO ⇄ BARCAZA) -->
+                        <div id="fluvial-bimodal-transshipment-panel" class="mb-4 bg-slate-50 border border-indigo-200 rounded-xl p-4 text-slate-800 shadow-sm">
+                            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-indigo-100 pb-2 mb-3">
+                                <div class="flex items-center gap-2">
+                                    <span class="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-xs">
+                                        <i class="fa-solid fa-arrows-split-up-and-left text-xs"></i>
+                                    </span>
+                                    <div>
+                                        <h3 class="text-xs font-black uppercase tracking-wider text-indigo-950 flex items-center gap-1.5">
+                                            Trasbordo Intermodal (Buque Oceánico ⇄ Barcaza)
+                                        </h3>
+                                        <p class="text-[10px] text-slate-500">Hubs de conexión bimodal en Florida y Sudamérica</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-2.5">
+                                    <label class="flex items-center gap-2 cursor-pointer select-none bg-white border border-indigo-200 px-2.5 py-1 rounded-lg hover:border-indigo-400 transition shadow-xs">
+                                        <input type="checkbox" id="intermodal-transshipment-toggle" class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" onchange="window.toggleTrasbordoIntermodal(this.checked)">
+                                        <span class="text-xs font-bold text-indigo-950">Activar Trasbordo Intermodal</span>
+                                    </label>
+                                    <span id="intermodal-status-badge" class="text-[9px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 px-2 py-0.5 rounded">
+                                        Inactivo
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <!-- Selector desplegable del catálogo local -->
+                                <div class="space-y-1">
+                                    <label for="intermodal-port-select" class="text-[10px] font-bold text-slate-700 uppercase flex items-center min-h-[22px]">
+                                        <i class="fa-solid fa-anchor mr-1 text-indigo-600"></i> Puerto de Trasbordo (Catálogo Local)
+                                    </label>
+                                    <select id="intermodal-port-select" class="input-gc bg-white border border-slate-300 font-bold text-slate-900 w-full rounded px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-indigo-500" onchange="window.seleccionarNodoIntermodalLocal(this.value)">
+                                        <option value="">-- Sin trasbordo / Seleccionar Hub --</option>
+                                        <optgroup label="Florida (EE. UU.)">
+                                            <option value="port_everglades">Port Everglades ($1,800 / 1.2 días)</option>
+                                            <option value="port_tampa_bay">Port Tampa Bay ($1,600 / 1.5 días)</option>
+                                            <option value="miami">Miami ($1,900 / 1.3 días)</option>
+                                        </optgroup>
+                                        <optgroup label="Sudamérica">
+                                            <option value="gran_rosario">Gran Rosario ($3,200 / 2.5 días)</option>
+                                            <option value="nueva_palmira">Nueva Palmira ($2,900 / 2.0 días)</option>
+                                            <option value="miritituba">Miritituba ($3,100 / 2.2 días)</option>
+                                        </optgroup>
+                                    </select>
+                                    <span id="intermodal-corridor-desc" class="text-[10px] text-slate-500 block">Autocompleta tarifa de terminal y días de demora asociados</span>
+                                </div>
+
+                                <!-- Costo de Terminal ($) Autocompletado -->
+                                <div class="space-y-1">
+                                    <div class="flex justify-between items-center min-h-[22px]">
+                                        <label for="intermodal-terminal-cost" class="text-[10px] font-bold text-slate-700 uppercase flex items-center">
+                                            <i class="fa-solid fa-dollar-sign mr-1 text-emerald-600"></i> Costo de Terminal ($)
+                                        </label>
+                                        <span class="text-[9px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded">Partida Peajes/OPEX</span>
+                                    </div>
+                                    <input type="number" id="intermodal-terminal-cost" class="input-gc bg-white border border-slate-300 font-bold text-slate-900 w-full" value="0" step="any" min="0" oninput="window.handleIntermodalCustomInput()">
+                                    <span class="text-[10px] text-slate-500">Tarifa de manipulación y muelle intermodal</span>
+                                </div>
+
+                                <!-- Días de Demora (Handling Delay) Autocompletado -->
+                                <div class="space-y-1">
+                                    <div class="flex justify-between items-center min-h-[22px]">
+                                        <label for="intermodal-handling-delay" class="text-[10px] font-bold text-slate-700 uppercase flex items-center">
+                                            <i class="fa-solid fa-clock-rotate-left mr-1 text-amber-600"></i> Días de Demora (Handling Delay)
+                                        </label>
+                                        <span class="text-[9px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">+ Tiempo Total</span>
+                                    </div>
+                                    <input type="number" id="intermodal-handling-delay" class="input-gc bg-white border border-slate-300 font-bold text-slate-900 w-full" value="0" step="0.1" min="0" oninput="window.handleIntermodalCustomInput()">
+                                    <span class="text-[10px] text-slate-500">Tiempo de espera y transferencia bimodal</span>
+                                </div>
+                            </div>
+
+                            <div id="intermodal-impact-summary" class="mt-3 pt-2 border-t border-indigo-100 flex flex-wrap items-center justify-between text-[11px] text-slate-600">
+                                <span id="intermodal-impact-text">Trasbordo desactivado: sin recargo logístico adicional.</span>
+                                <span id="intermodal-impact-badges" class="flex items-center gap-2"></span>
+                            </div>
+                        </div>
+
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 bg-slate-50 p-3 rounded-lg border border-slate-200 text-slate-800">
                             <div class="input-group">
                                 <label id="label-dist-ballast" class="text-indigo-400">Distancia Lastre (NM)</label>
-                                <input type="number" id="dist-ballast" class="input-gc font-bold text-indigo-300" value="0" step="any" oninput="runEngine()">
+                                <input type="number" id="dist-ballast" class="input-gc font-bold text-indigo-300" value="0" step="any" oninput="runEngine(); if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations();">
                             </div>
                             <div class="input-group">
                                 <label id="label-dist-laden" class="text-emerald-400">Distancia Carga (NM)</label>
-                                <input type="number" id="dist-laden" class="input-gc font-bold text-emerald-300" value="0" step="any" oninput="runEngine()">
+                                <input type="number" id="dist-laden" class="input-gc font-bold text-emerald-300" value="0" step="any" oninput="runEngine(); if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations();">
                             </div>
                             <div class="input-group">
                                 <label id="label-dist-total" class="text-amber-400">Total Millas (NM)</label>
@@ -11318,7 +11396,7 @@
                                         <label for="fluvial-transshipment-tariff" class="text-[10px] font-bold text-slate-700 uppercase flex items-center min-h-[24px]">
                                             Costo de Terminal ($)
                                         </label>
-                                        <input type="number" id="fluvial-transshipment-tariff" class="input-gc bg-white border border-slate-300 font-bold text-slate-900 w-full" value="3200" step="any" oninput="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations()">
+                                        <input type="number" id="fluvial-transshipment-tariff" class="input-gc bg-white border border-slate-300 font-bold text-slate-900 w-full" value="3200" step="any" oninput="if(typeof window.syncFluvialToIntermodal==='function') window.syncFluvialToIntermodal(); if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations()">
                                         <span class="text-[10px] text-slate-500">Automatización EE. UU. vs sobrecostos Sudamérica</span>
                                     </div>
                                     <div class="space-y-1 bg-emerald-50/70 border border-emerald-200 p-2.5 rounded-lg">
@@ -11537,7 +11615,7 @@
                                     <label for="fluvial-handling-delay-days" class="text-[10px] font-bold text-slate-700 uppercase flex items-center min-h-[24px]">
                                         <i class="fa-solid fa-clock-rotate-left mr-1 text-amber-600"></i> Demora Carga/Descarga (Días)
                                     </label>
-                                    <input type="number" id="fluvial-handling-delay-days" class="input-gc bg-white border border-slate-300 font-bold text-slate-900 w-full" value="2.50" step="0.25" min="0" oninput="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations()">
+                                    <input type="number" id="fluvial-handling-delay-days" class="input-gc bg-white border border-slate-300 font-bold text-slate-900 w-full" value="2.50" step="0.25" min="0" oninput="if(typeof window.syncFluvialToIntermodal==='function') window.syncFluvialToIntermodal(); if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations()">
                                     <span class="text-[10px] text-slate-500">Días de demora por carga/descarga importados</span>
                                 </div>
                                 <div class="space-y-1">
@@ -42582,7 +42660,9 @@ function scheduleReactiveEngine() {
                     dischargeMethod: document.getElementById('metodo_descarga_pod')?.selectedOptions?.[0]?.text
                         || document.getElementById('metodo_descarga_pod')?.value
                         || State.dischargeMethod,
-                    vesselType: ownerClassAnalysis?.shipClass?.label || State.vesselType || State.vessel?.type || 'Buque estándar',
+                    vesselType: ((typeof isFluvialContext === 'function' && isFluvialContext()) || window.isRiverCharter || window.isFluvial)
+                        ? (window.convoyDesc || ((window.activeBargeStandard === 'mississippi_jumbo' ? 'Convoy Jumbo Misisipi' : 'Convoy Súper Jumbo') + ' - ' + (window.activeBargeCount || 10) + ' Barcazas'))
+                        : (ownerClassAnalysis?.shipClass?.label || State.vesselType || State.vessel?.type || 'Buque estándar'),
                     seaDays: T_sea,
                     portDays: T_port,
                     totalDays,
@@ -51795,9 +51875,11 @@ Example:
                 || (Array.isArray(convoy.barges) ? convoy.barges.length : (Number(convoy.bargeCount) || 10));
             const tugboatName = convoy.tugboat?.name || convoy.tugboatName || 'Remolcador Río Paraná';
             const convoyType = convoy.convoyType || (bargeCount >= 16 ? 'Súper Jumbo' : bargeCount >= 8 ? 'Jumbo' : 'Estándar');
-            const convoyDesc = (typeof window !== 'undefined' && window.activeBargeStandard)
-                ? `Convoy ${window.activeBargeStandard} - ${window.activeBargeCount || bargeCount || 10} Barcazas`
-                : (convoy.description || convoy.convoyDescription || `${convoyType} - ${bargeCount} Barcazas` || 'Convoy Fluvial (TBN)');
+            const standardKey = (typeof window !== 'undefined' && window.activeBargeStandard) || (convoy && convoy.standard) || 'latam_super_jumbo';
+            const stdName = standardKey === 'mississippi_jumbo' ? 'Jumbo Misisipi' : 'Súper Jumbo';
+            const convoyDesc = (typeof window !== 'undefined' && window.convoyDesc)
+                || (typeof window !== 'undefined' && window.activeBargeStandard ? `Convoy ${stdName} - ${window.activeBargeCount || bargeCount || 10} Barcazas` : null)
+                || (convoy.description || convoy.convoyDescription || `Convoy ${stdName} - ${bargeCount} Barcazas` || 'Convoy Fluvial (TBN)');
             const description = convoyDesc;
             if (typeof window !== 'undefined') window.convoyDesc = convoyDesc;
             const dynamicDraft = Number(convoy.totalDraft || convoy.dynamicDraft || convoy.draft || 2.85);
@@ -51823,30 +51905,30 @@ Example:
             const underKeelClearance = (minWaterLevel - dynamicDraft).toFixed(2);
 
             return `
-                <div id="executive-fluvial-hydrology-validation" class="my-4 p-4 rounded-xl border bg-slate-800/80 border-slate-700 break-inside-avoid">
-                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-700/60 pb-2 mb-3">
-                        <h5 class="font-bold text-sky-400 uppercase flex items-center gap-2 text-xs">
-                            <i class="fa-solid fa-water"></i> Validación de Estiaje y Calado
+                <div id="executive-fluvial-hydrology-validation" class="my-4 p-4 rounded-xl border bg-slate-50 border-slate-200 text-slate-800 break-inside-avoid shadow-sm">
+                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2 mb-3">
+                        <h5 class="font-bold text-sky-900 uppercase flex items-center gap-2 text-xs">
+                            <i class="fa-solid fa-water text-sky-600"></i> Validación de Estiaje y Calado
                         </h5>
-                        <span class="px-2.5 py-0.5 rounded text-[11px] font-bold ${isApto ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-500/40' : 'bg-red-950/80 text-red-400 border border-red-500/40'}">
+                        <span class="px-2.5 py-0.5 rounded text-[11px] font-bold ${isApto ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-red-100 text-red-800 border border-red-300'}">
                             ${isApto ? '✅ APTO PARA NAVEGAR' : '⚠️ ALERTA DE ESTIAJE'}
                         </span>
                     </div>
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                        <div class="bg-slate-900/60 p-3 rounded-lg border border-slate-800">
-                            <span class="text-slate-400 block text-[10px] uppercase font-bold">Calado Dinámico del Convoy</span>
-                            <span class="font-mono font-bold text-sm ${isApto ? 'text-emerald-400' : 'text-red-400'}">${dynamicDraft.toFixed(2)} m</span>
+                        <div class="bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
+                            <span class="text-slate-500 block text-[10px] uppercase font-bold">Calado Dinámico del Convoy</span>
+                            <span class="font-mono font-bold text-sm ${isApto ? 'text-emerald-700' : 'text-red-700'}">${dynamicDraft.toFixed(2)} m</span>
                         </div>
-                        <div class="bg-slate-900/60 p-3 rounded-lg border border-slate-800">
-                            <span class="text-slate-400 block text-[10px] uppercase font-bold">Límite Hidrométrico (Estiaje)</span>
-                            <span class="font-mono font-bold text-sm text-sky-300">${minWaterLevel.toFixed(2)} m</span>
+                        <div class="bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
+                            <span class="text-slate-500 block text-[10px] uppercase font-bold">Límite Hidrométrico (Estiaje)</span>
+                            <span class="font-mono font-bold text-sm text-sky-800">${minWaterLevel.toFixed(2)} m</span>
                         </div>
-                        <div class="bg-slate-900/60 p-3 rounded-lg border border-slate-800">
-                            <span class="text-slate-400 block text-[10px] uppercase font-bold">Margen Bajo Quilla (UKC)</span>
-                            <span class="font-mono font-bold text-sm text-white">${underKeelClearance} m</span>
+                        <div class="bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
+                            <span class="text-slate-500 block text-[10px] uppercase font-bold">Margen Bajo Quilla (UKC)</span>
+                            <span class="font-mono font-bold text-sm text-slate-900">${underKeelClearance} m</span>
                         </div>
                     </div>
-                    <div class="mt-2 text-[10px] text-slate-400 italic">
+                    <div class="mt-2 text-[10px] text-slate-500 italic">
                         Resumen hidrológico sincronizado con DataBridge Fluvial. Navegación validada frente a restricciones de paso y estiaje.
                     </div>
                 </div>
@@ -76808,6 +76890,173 @@ window.actualizarGrabCapacityVisibility = function() {
             window.updateFluvialCalculations();
         };
 
+        // Catálogo Local de Nodos Intermodales (Buque Oceánico ⇄ Barcaza) para RiverCharter Frontend
+        const CATALOGO_NODOS_INTERMODALES = {
+            // Florida
+            port_everglades: {
+                id: 'port_everglades',
+                name: 'Port Everglades',
+                region: 'Florida',
+                terminalCost: 1800,
+                cost: 1800,
+                delayDays: 1.2,
+                days: 1.2,
+                desc: 'Hub Intermodal Florida (Oceánico ⇄ Barcaza)'
+            },
+            port_tampa_bay: {
+                id: 'port_tampa_bay',
+                name: 'Port Tampa Bay',
+                region: 'Florida',
+                terminalCost: 1600,
+                cost: 1600,
+                delayDays: 1.5,
+                days: 1.5,
+                desc: 'Golfo de Florida (Acceso Aguas Profundas)'
+            },
+            miami: {
+                id: 'miami',
+                name: 'Miami',
+                region: 'Florida',
+                terminalCost: 1900,
+                cost: 1900,
+                delayDays: 1.3,
+                days: 1.3,
+                desc: 'Hub Transatlántico & Caribe (Florida)'
+            },
+            // Sudamérica
+            gran_rosario: {
+                id: 'gran_rosario',
+                name: 'Gran Rosario',
+                region: 'Sudamérica',
+                terminalCost: 3200,
+                cost: 3200,
+                delayDays: 2.5,
+                days: 2.5,
+                desc: 'Hidrovía Paraná-Paraguay (Santa Fe, Argentina)'
+            },
+            nueva_palmira: {
+                id: 'nueva_palmira',
+                name: 'Nueva Palmira',
+                region: 'Sudamérica',
+                terminalCost: 2900,
+                cost: 2900,
+                delayDays: 2.0,
+                days: 2.0,
+                desc: 'Río Uruguay / Delta del Paraná (Uruguay)'
+            },
+            miritituba: {
+                id: 'miritituba',
+                name: 'Miritituba',
+                region: 'Sudamérica',
+                terminalCost: 3100,
+                cost: 3100,
+                delayDays: 2.2,
+                days: 2.2,
+                desc: 'Río Tapajós - Arco Norte (Brasil)'
+            }
+        };
+        window.CATALOGO_NODOS_INTERMODALES = CATALOGO_NODOS_INTERMODALES;
+
+        window.seleccionarNodoIntermodalLocal = function(nodeKey) {
+            const toggle = document.getElementById('intermodal-transshipment-toggle');
+            const elCost = document.getElementById('intermodal-terminal-cost');
+            const elDelay = document.getElementById('intermodal-handling-delay');
+            const badge = document.getElementById('intermodal-status-badge');
+            const desc = document.getElementById('intermodal-corridor-desc');
+
+            if (!nodeKey || !CATALOGO_NODOS_INTERMODALES[nodeKey]) {
+                if (toggle) toggle.checked = false;
+                if (elCost) elCost.value = 0;
+                if (elDelay) elDelay.value = 0;
+                if (badge) {
+                    badge.className = 'text-[9px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200 px-2 py-0.5 rounded';
+                    badge.textContent = 'Inactivo';
+                }
+                if (desc) desc.textContent = 'Autocompleta tarifa de terminal y días de demora asociados';
+
+                const elFluvialTariff = document.getElementById('fluvial-transshipment-tariff');
+                if (elFluvialTariff) elFluvialTariff.value = 0;
+                const elFluvialDelay = document.getElementById('fluvial-handling-delay-days');
+                if (elFluvialDelay) elFluvialDelay.value = 0;
+
+                window.updateFluvialCalculations();
+                return;
+            }
+
+            const node = CATALOGO_NODOS_INTERMODALES[nodeKey];
+            if (toggle) toggle.checked = true;
+            if (elCost) elCost.value = node.terminalCost;
+            if (elDelay) elDelay.value = node.delayDays;
+
+            if (badge) {
+                badge.className = 'text-[9px] font-bold uppercase tracking-wider bg-indigo-100 text-indigo-800 border border-indigo-300 px-2 py-0.5 rounded';
+                badge.textContent = '✓ Bimodal: ' + node.name + ' (' + node.region + ')';
+            }
+            if (desc) {
+                desc.textContent = node.desc + ' | Tarifa: $' + node.terminalCost.toLocaleString() + ' | Demora: ' + node.delayDays + ' d';
+            }
+
+            // Sincronizar elementos legacy para coherencia total
+            const elFluvialTariff = document.getElementById('fluvial-transshipment-tariff');
+            if (elFluvialTariff) elFluvialTariff.value = node.terminalCost;
+            const elFluvialDelay = document.getElementById('fluvial-handling-delay-days');
+            if (elFluvialDelay) elFluvialDelay.value = node.delayDays;
+
+            window.updateFluvialCalculations();
+        };
+
+        window.toggleTrasbordoIntermodal = function(isActive) {
+            const select = document.getElementById('intermodal-port-select');
+            if (isActive) {
+                if (!select.value) {
+                    select.value = 'gran_rosario';
+                }
+                window.seleccionarNodoIntermodalLocal(select.value);
+            } else {
+                if (select) select.value = '';
+                window.seleccionarNodoIntermodalLocal('');
+            }
+        };
+
+        window.handleIntermodalCustomInput = function() {
+            const toggle = document.getElementById('intermodal-transshipment-toggle');
+            const elCost = document.getElementById('intermodal-terminal-cost');
+            const elDelay = document.getElementById('intermodal-handling-delay');
+            const badge = document.getElementById('intermodal-status-badge');
+
+            const cost = parseFloat(elCost?.value) || 0;
+            const delay = parseFloat(elDelay?.value) || 0;
+
+            if (toggle && (cost > 0 || delay > 0)) {
+                toggle.checked = true;
+            }
+
+            if (badge && toggle?.checked) {
+                badge.className = 'text-[9px] font-bold uppercase tracking-wider bg-indigo-100 text-indigo-800 border border-indigo-300 px-2 py-0.5 rounded';
+                badge.textContent = '✓ Bimodal Personalizado';
+            }
+
+            const elFluvialTariff = document.getElementById('fluvial-transshipment-tariff');
+            if (elFluvialTariff) elFluvialTariff.value = cost;
+            const elFluvialDelay = document.getElementById('fluvial-handling-delay-days');
+            if (elFluvialDelay) elFluvialDelay.value = delay;
+
+            window.updateFluvialCalculations();
+        };
+
+        window.syncFluvialToIntermodal = function() {
+            const elFluvialTariff = document.getElementById('fluvial-transshipment-tariff');
+            const elFluvialDelay = document.getElementById('fluvial-handling-delay-days');
+            const elIntermodalCost = document.getElementById('intermodal-terminal-cost');
+            const elIntermodalDelay = document.getElementById('intermodal-handling-delay');
+            if (elFluvialTariff && elIntermodalCost) {
+                elIntermodalCost.value = elFluvialTariff.value;
+            }
+            if (elFluvialDelay && elIntermodalDelay) {
+                elIntermodalDelay.value = elFluvialDelay.value;
+            }
+        };
+
         window.seleccionarNodoTrasbordoDataBridge = async function(nodeKey) {
             const nodes = {
                 gran_rosario: {
@@ -76892,6 +77141,18 @@ window.actualizarGrabCapacityVisibility = function() {
                 badge.className = 'text-[9px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded';
             }
 
+            // Sincronizar con el selector bimodal frontend si existe
+            const elIntermodalSelect = document.getElementById('intermodal-port-select');
+            const elIntermodalToggle = document.getElementById('intermodal-transshipment-toggle');
+            const elIntermodalCost = document.getElementById('intermodal-terminal-cost');
+            const elIntermodalDelay = document.getElementById('intermodal-handling-delay');
+            if (elIntermodalSelect && CATALOGO_NODOS_INTERMODALES[nodeKey]) {
+                elIntermodalSelect.value = nodeKey;
+                if (elIntermodalToggle) elIntermodalToggle.checked = true;
+                if (elIntermodalCost) elIntermodalCost.value = node.terminalCost;
+                if (elIntermodalDelay) elIntermodalDelay.value = node.delayDays;
+            }
+
             window.updateFluvialCalculations();
         };
 
@@ -76919,9 +77180,27 @@ window.actualizarGrabCapacityVisibility = function() {
             const sailingSpeed = 8.0;
             const sailingDays = totalDist > 0 ? (totalDist / (sailingSpeed * 24)) : 4.5;
 
+            // Trasbordo Intermodal (Buque Oceánico ⇄ Barcaza) - Lectura desde selector y campos bimodal
+            const intermodalToggle = document.getElementById('intermodal-transshipment-toggle');
+            const intermodalSelect = document.getElementById('intermodal-port-select');
+            const isIntermodalActive = intermodalToggle ? intermodalToggle.checked : (intermodalSelect?.value ? true : false);
+
+            let nodeHandlingDays = 0;
+            if (isIntermodalActive) {
+                const customDelay = parseFloat(document.getElementById('intermodal-handling-delay')?.value);
+                if (!isNaN(customDelay)) {
+                    nodeHandlingDays = customDelay;
+                } else if (intermodalSelect?.value && CATALOGO_NODOS_INTERMODALES[intermodalSelect.value]) {
+                    nodeHandlingDays = CATALOGO_NODOS_INTERMODALES[intermodalSelect.value].delayDays;
+                } else {
+                    nodeHandlingDays = parseFloat(document.getElementById('fluvial-handling-delay-days')?.value) || 0;
+                }
+            } else if (!intermodalToggle && !intermodalSelect) {
+                nodeHandlingDays = parseFloat(document.getElementById('fluvial-handling-delay-days')?.value) || 0;
+            }
+
             const lockWaitDays = parseFloat(document.getElementById('fluvial-lock-wait-days')?.value) || 0;
             const customsDelayDays = parseFloat(document.getElementById('fluvial-customs-delay-days')?.value) || 0;
-            const nodeHandlingDays = parseFloat(document.getElementById('fluvial-handling-delay-days')?.value) || 0;
             const delayDays = lockWaitDays + customsDelayDays + nodeHandlingDays;
             const totalDays = Math.max(0.5, sailingDays + delayDays);
 
@@ -76978,7 +77257,21 @@ window.actualizarGrabCapacityVisibility = function() {
             const pdaLocks = parseFloat(document.getElementById('fluvial-pda-locks')?.value) || 0;
             const pdaTolls = parseFloat(document.getElementById('fluvial-pda-tolls')?.value) || 0;
             const pdaPilotage = parseFloat(document.getElementById('fluvial-pda-pilotage')?.value) || 0;
-            const transshipmentTariff = parseFloat(document.getElementById('fluvial-transshipment-tariff')?.value) ?? (convoy?.directTransshipmentTariff || 0);
+
+            let transshipmentTariff = 0;
+            if (isIntermodalActive) {
+                const customCost = parseFloat(document.getElementById('intermodal-terminal-cost')?.value);
+                if (!isNaN(customCost)) {
+                    transshipmentTariff = customCost;
+                } else if (intermodalSelect?.value && CATALOGO_NODOS_INTERMODALES[intermodalSelect.value]) {
+                    transshipmentTariff = CATALOGO_NODOS_INTERMODALES[intermodalSelect.value].terminalCost;
+                } else {
+                    transshipmentTariff = parseFloat(document.getElementById('fluvial-transshipment-tariff')?.value) ?? (convoy?.directTransshipmentTariff || 0);
+                }
+            } else if (!intermodalToggle && !intermodalSelect) {
+                transshipmentTariff = parseFloat(document.getElementById('fluvial-transshipment-tariff')?.value) ?? (convoy?.directTransshipmentTariff || 0);
+            }
+
             const totalIntermodalTolls = pdaLocks + pdaTolls + pdaPilotage + transshipmentTariff;
 
             // 5. Costos de Sincro-modalidad y Ahorros Terrestres Estimados (Deducción)
@@ -76997,6 +77290,22 @@ window.actualizarGrabCapacityVisibility = function() {
             const costPerTon = totalCapacity > 0 ? (totalConvoyCost / totalCapacity) : 0;
             const costPerTonMotor = totalCapacity > 0 ? (totalMotorCost / totalCapacity) : 0;
             const costPerTonBarges = totalCapacity > 0 ? (bargesTotalCapex / totalCapacity) : 0;
+
+            // Actualización Dinámica del Submódulo Bimodal (Puertos / Ruta)
+            const elImpactText = document.getElementById('intermodal-impact-text');
+            const elImpactBadges = document.getElementById('intermodal-impact-badges');
+            const elIntermodalSelect = document.getElementById('intermodal-port-select');
+            if (elImpactText && elImpactBadges) {
+                if (isIntermodalActive && (transshipmentTariff > 0 || nodeHandlingDays > 0)) {
+                    const selPort = (elIntermodalSelect && elIntermodalSelect.selectedIndex >= 0 && elIntermodalSelect.value) ? elIntermodalSelect.options[elIntermodalSelect.selectedIndex].text : 'Puerto Hub';
+                    elImpactText.innerHTML = '<span class="font-bold text-indigo-950"><i class="fa-solid fa-check-circle text-emerald-600 mr-1"></i> Bimodal Activo:</span> <span class="text-slate-700">' + selPort + '</span>';
+                    elImpactBadges.innerHTML = '<span class="bg-indigo-100 text-indigo-900 border border-indigo-200 px-2 py-0.5 rounded font-bold text-[10px]">+$' + Math.round(transshipmentTariff).toLocaleString() + ' OPEX</span>' +
+                                              '<span class="bg-amber-100 text-amber-900 border border-amber-200 px-2 py-0.5 rounded font-bold text-[10px]">+' + nodeHandlingDays + ' d demora</span>';
+                } else {
+                    elImpactText.innerHTML = '<span class="text-slate-500"><i class="fa-solid fa-circle-xmark text-slate-400 mr-1"></i> Trasbordo Intermodal Desactivado</span>';
+                    elImpactBadges.innerHTML = '<span class="bg-slate-100 text-slate-600 border border-slate-200 px-2 py-0.5 rounded font-medium text-[10px]">Sin recargo logístico</span>';
+                }
+            }
 
             // 7. Reporte de Eficiencia Ambiental y Sostenibilidad
             const bargeCount = convoy?.bargeCount || (convoy?.barges ? convoy.barges.length : (convoy?.bargeIds ? convoy.bargeIds.length : 4));
@@ -77089,6 +77398,17 @@ window.actualizarGrabCapacityVisibility = function() {
                 } else {
                     elExecCargoQty.textContent = Math.round(totalCapacity).toLocaleString() + ' MT';
                 }
+            }
+
+            const elExecVesselType = document.getElementById('exec-vessel-type');
+            if (elExecVesselType) {
+                const standardKey = window.activeBargeStandard || (window.activeConvoyData && window.activeConvoyData.standard) || 'latam_super_jumbo';
+                const stdName = standardKey === 'mississippi_jumbo' ? 'Jumbo Misisipi' : 'Súper Jumbo';
+                const count = window.activeBargeCount || convoy?.bargeCount || (Array.isArray(convoy?.barges) ? convoy.barges.length : (Array.isArray(convoy?.bargeIds) ? convoy.bargeIds.length : 10));
+                const dynamicDesc = isRoro
+                    ? `Convoy Ro-Ro (${roroTruckCount} Camiones)`
+                    : (window.convoyDesc || convoy?.convoyDescription || `Convoy ${stdName} - ${count} Barcazas`);
+                elExecVesselType.textContent = dynamicDesc;
             }
         };
 

@@ -374,7 +374,21 @@
         setText('exec-cargo-type', calcResults.cargoType || 'Carga no definida');
         setText('exec-load-rate', formatDailyRate(calcResults.loadRate));
         setText('exec-disch-rate', formatDailyRate(calcResults.dischargeRate));
-        setText('exec-vessel-type', calcResults.vesselType || 'Buque no definido');
+        const isFluvialContextActive = Boolean(
+            (typeof root !== 'undefined' && (root.isRiverCharter || root.isFluvial || (typeof root.isFluvialContext === 'function' && root.isFluvialContext()))) ||
+            (typeof documentRef !== 'undefined' && documentRef.getElementById('convoy-builder-root'))
+        );
+        let effectiveVesselType = calcResults.vesselType;
+        if (isFluvialContextActive) {
+            const fluvialConvoyDesc = (typeof root !== 'undefined' && (root.convoyDesc || (root.activeConvoyData && (root.activeConvoyData.convoyDescription || root.activeConvoyData.description)))) ||
+                (typeof root !== 'undefined' && root.activeBargeCount ? `Convoy Súper Jumbo - ${root.activeBargeCount} Barcazas` : null);
+            if (fluvialConvoyDesc) {
+                effectiveVesselType = fluvialConvoyDesc;
+            } else if (!effectiveVesselType || effectiveVesselType === 'Handysize' || effectiveVesselType === 'Buque estándar') {
+                effectiveVesselType = 'Convoy Súper Jumbo - 10 Barcazas';
+            }
+        }
+        setText('exec-vessel-type', effectiveVesselType || 'Buque no definido');
         setText('exec-sea-days', formatDays(calcResults.seaDays));
         setText('exec-port-days', formatDays(calcResults.portDays));
         setText('exec-total-days', formatDays(calcResults.totalDays));
