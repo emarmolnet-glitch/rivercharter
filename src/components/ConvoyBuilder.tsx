@@ -609,13 +609,15 @@ export function ConvoyBuilder({
 
   // Sincronización continua hacia componentes o scripts externos
   useEffect(() => {
-    const stdName = (typeof window !== 'undefined' && (window as any).activeBargeStandardData?.name) || (standardKey === 'mississippi_jumbo' ? 'Misisipi Jumbo' : 'Súper Jumbo');
+    const stdName = (typeof window !== 'undefined' && (window as any).activeBargeStandardData?.name) || (activeBargeStandard === 'mississippi_jumbo' ? 'Misisipi Jumbo' : 'Súper Jumbo');
     const convoyDesc = isRoro
       ? `Convoy Ro-Ro (${totalTruckCount} Camiones)`
       : `${stdName} - ${bargeIds.length} Barcazas`;
 
     if (typeof window !== 'undefined') {
       (window as any).activeBargeCount = bargeIds.length;
+      (window as any).convoyDesc = convoyDesc;
+      (window as any).activeBargeStandard = activeBargeStandard;
     }
 
     onConvoyChange?.({
@@ -642,7 +644,7 @@ export function ConvoyBuilder({
     tugboatId,
     selectedTugboat,
     bargeIds,
-    standardKey,
+    activeBargeStandard,
     effectiveWaterLevel,
     totalCapacityMt,
     maxDynamicDraft,
