@@ -163,6 +163,70 @@ export interface SaveRiverVoyagePayload {
   metadata?: Record<string, unknown>;
 }
 
+// ============================================================================
+// FLUVIAL TECHNICAL & EXECUTIVE COST STRUCTURES
+// ============================================================================
+
+/**
+ * Desglose diario de OPEX del Remolcador (tripulación, seguros, mantenimiento)
+ */
+export interface TugboatOpexBreakdown {
+  crewDaily: number; // Coste diario de tripulación
+  insuranceDaily: number; // Seguros del remolcador
+  maintenanceDaily: number; // Mantenimiento y consumibles
+  otherDaily?: number; // Otros costes operativos
+  totalDailyOpex: number; // Suma total del OPEX diario
+}
+
+/**
+ * Módulo de Combustible Fluvial (Bunkers exclusivo del remolcador)
+ */
+export interface FluvialBunkers {
+  fuelPricePerTon: number; // Precio combustible ($/MT)
+  sailingFuelTonsPerDay: number; // Consumo navegando / empujando carga (MT/día)
+  idleFuelTonsPerDay: number; // Consumo en ralentí / espera en esclusas (MT/día)
+}
+
+/**
+ * Gastos Portuarios y Fluviales (PDAs de Hidrovía)
+ */
+export interface FluvialPdaExpenses {
+  loadPortTariff: number; // Tarifas puerto de carga ($)
+  dischargePortTariff: number; // Tarifas puerto de descarga ($)
+  waterwayTolls: number; // Peajes de hidrovía ($)
+  lockDues: number; // Derechos de esclusas ($)
+  riverPilotage: number; // Practicaje fluvial ($)
+  crossBorderTariffs: number; // Aranceles transfronterizos ($)
+  totalPdaCost?: number; // Subtotal general de gastos portuarios y de canal
+}
+
+/**
+ * Gestión de Tiempos y Demoras Fluviales
+ */
+export interface FluvialDelays {
+  navigationDays: number; // Días estimados de navegación
+  lockWaitDays: number; // Tiempos de espera en esclusas (días)
+  customsDelayDays: number; // Demoras aduaneras (días)
+  totalDelayDays: number; // Total días extra (esclusas + aduanas)
+  totalOperationalDays: number; // Días totales de la operación
+}
+
+/**
+ * Métricas Consolidadas de la Vista Ejecutiva (Dashboard de solo lectura)
+ */
+export interface FluvialExecutiveMetrics {
+  grossFreightRevenue: number; // Ingresos brutos por flete ($)
+  totalVoyageCost: number; // Costo total del viaje ($)
+  netProfit: number; // Beneficio neto ($)
+  costPerTonMotor: number; // Costo por tonelada del motor ($/MT)
+  costPerTonBarges: number; // Costo por tonelada de barcazas ($/MT)
+  costPerTonPda: number; // Costo por tonelada de gastos fluviales ($/MT)
+  totalCostPerTon: number; // Costo total por tonelada ($/MT)
+  dailyTce: number; // TCE (Time Charter Equivalent) diario ($/día)
+  totalCargoTons: number; // Toneladas de carga agregadas
+  isProfitable: boolean; // Estado de rentabilidad
+}
+
 /**
  * Evento de Acople/Desacople para auditoría telemétrica
  */

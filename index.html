@@ -960,6 +960,7 @@
     <script type="module" src="./voyage-cost-engine.js"></script>
     <script type="module" src="./stress-test-engine.js"></script>
     <script type="module" src="./src/route-configurator-entry.tsx"></script>
+    <script type="module" src="./src/convoy-builder-entry.tsx"></script>
     <script type="module">
         window.loadDecisionSupportModule = () => import('./src/DecisionSupportModule.js');
     </script>
@@ -10281,11 +10282,11 @@
             <!-- CONTROLES DE VISTA -->
             <div class="w-full max-w-6xl mx-auto mb-6 font-sans">
                 <div class="flex justify-end mb-4">
-                    <div class="bg-slate-200 p-1 rounded-lg inline-flex items-center">
-                        <button id="btn-mode-exec" onclick="setCalculatorMode('exec')" class="px-5 py-2 rounded-md text-sm font-bold bg-white text-blue-700 shadow-sm transition-all">
+                    <div class="bg-slate-100 p-1 rounded-lg inline-flex items-center border border-slate-200">
+                        <button id="btn-mode-exec" onclick="setCalculatorMode('exec')" class="px-5 py-2 rounded-md text-sm font-bold bg-white text-blue-700 shadow-sm border border-slate-200 transition-all">
                             💼 Vista Ejecutiva
                         </button>
-                        <button id="btn-mode-tech" onclick="setCalculatorMode('tech')" class="px-5 py-2 rounded-md text-sm font-bold text-slate-500 hover:text-slate-800 transition-all">
+                        <button id="btn-mode-tech" onclick="setCalculatorMode('tech')" class="px-5 py-2 rounded-md text-sm font-bold text-slate-600 hover:text-slate-900 transition-all">
                             ⚙️ Modo Técnico
                         </button>
                     </div>
@@ -10295,20 +10296,20 @@
                 <div id="executive-dashboard" class="flex flex-col gap-4">
 
                     <!-- CABECERA: ESTADO DE LA OPERACIÓN -->
-                    <div class="bg-emerald-50 border border-emerald-200 p-5 rounded-xl shadow-sm">
+                    <div class="bg-white border border-slate-200 p-5 rounded-xl shadow-sm text-slate-800">
                         <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                             <div>
-                                <h3 class="text-emerald-800 font-extrabold text-xl mb-1 flex items-center gap-2">
+                                <h3 class="text-emerald-700 font-extrabold text-xl mb-1 flex items-center gap-2">
                                     <span id="exec-operation-icon" class="text-slate-400">⚪</span> <span id="exec-operation-status">OPERACIÓN PENDIENTE</span>
                                 </h3>
-                                <p class="text-emerald-700 text-sm font-medium ml-6">Ruta: <span id="exec-pol" class="font-bold text-emerald-900">N/D</span> ➔ <span id="exec-pod" class="font-bold text-emerald-900">N/D</span></p>
+                                <p class="text-slate-600 text-sm font-medium ml-6">Ruta: <span id="exec-pol" class="font-bold text-slate-900">N/D</span> ➔ <span id="exec-pod" class="font-bold text-slate-900">N/D</span></p>
                             </div>
                             <div class="flex flex-col gap-2 sm:shrink-0 sm:items-stretch">
-                                <button id="btn-validate-section2-executive" type="button" data-master-validation-action onclick="handleMasterValidationAndCalculate(event)" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-blue-700 bg-gradient-to-r from-blue-700 to-indigo-700 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-white shadow-sm transition hover:from-blue-600 hover:to-indigo-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-wait disabled:opacity-70" aria-live="polite">
+                                <button id="btn-validate-section2-executive" type="button" data-master-validation-action onclick="handleMasterValidationAndCalculate(event)" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-sky-600 bg-sky-600 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-white shadow-sm transition hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 disabled:cursor-wait disabled:opacity-70" aria-live="polite">
                                     <i class="fa-solid fa-calculator" aria-hidden="true"></i>
                                     <span>Validar Especificaciones / Calcular</span>
                                 </button>
-                                <button id="btn-executive-report-summary" type="button" data-executive-report-action onclick="generateExecutiveReport()" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-emerald-700 bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2">
+                                <button id="btn-executive-report-summary" type="button" data-executive-report-action onclick="generateExecutiveReport()" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-emerald-600 bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2">
                                     <i class="fa-solid fa-file-lines" aria-hidden="true"></i>
                                     <span>Ver Reporte Ejecutivo del Viaje</span>
                                 </button>
@@ -10317,35 +10318,67 @@
                     </div>
 
                     <!-- TARJETA: MERCANCÍA Y RITMOS -->
-                    <div class="bg-white border border-slate-200 p-4 rounded-xl shadow-sm">
-                        <h4 class="text-xs text-slate-400 font-bold uppercase mb-3 tracking-wider">📦 Resumen de Mercancía y Ritmos</h4>
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-slate-600">
-                            <div>Volumen: <strong class="text-slate-800 text-base" id="exec-cargo-qty">0 MT</strong> (<span id="exec-cargo-type">N/D</span>)</div>
-                            <div>Ritmo Carga: <strong class="text-slate-800 text-base" id="exec-load-rate">0</strong> MT/día</div>
-                            <div>Ritmo Desc.: <strong class="text-slate-800 text-base" id="exec-disch-rate">0</strong> MT/día</div>
+                    <div class="bg-white border border-slate-200 p-4 rounded-xl shadow-sm text-slate-800">
+                        <h4 class="text-xs text-slate-500 font-bold uppercase mb-3 tracking-wider">📦 Resumen de Mercancía y Ritmos</h4>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-slate-700">
+                            <div>Volumen: <strong class="text-slate-900 text-base" id="exec-cargo-qty">0 MT</strong> (<span id="exec-cargo-type">N/D</span>)</div>
+                            <div>Ritmo Carga: <strong class="text-slate-900 text-base" id="exec-load-rate">0</strong> MT/día</div>
+                            <div>Ritmo Desc.: <strong class="text-slate-900 text-base" id="exec-disch-rate">0</strong> MT/día</div>
                         </div>
                     </div>
 
-                    <div class="bg-slate-50 border border-slate-200 p-4 rounded-xl shadow-sm">
-                        <h4 class="text-xs text-slate-400 font-bold uppercase mb-3 tracking-wider">⏱️ Buque y Duración Operativa</h4>
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-slate-600">
-                            <div>Tipo: <strong class="block text-slate-800" id="exec-vessel-type">N/D</strong></div>
-                            <div>Navegación: <strong class="block text-slate-800" id="exec-sea-days">0.0 días</strong></div>
-                            <div>Puerto: <strong class="block text-slate-800" id="exec-port-days">0.0 días</strong></div>
-                            <div>Total: <strong class="block text-slate-800" id="exec-total-days">0.0 días</strong></div>
+                    <!-- RESUMEN FLUVIAL CONSOLIDADO (BENEFICIO NETO, COSTO/TONELADA MOTOR VS BARCAZAS, TCE DIARIO) -->
+                    <div class="bg-white border border-slate-200 p-5 rounded-xl text-slate-800 shadow-sm" id="exec-fluvial-consolidated-panel">
+                        <div class="flex items-center justify-between border-b border-slate-200 pb-3 mb-4">
+                            <h4 class="text-xs font-bold uppercase tracking-wider text-blue-900 flex items-center gap-2">
+                                <span>🌊</span> Resumen Fluvial Consolidado (Modo Técnico ➔ Vista Ejecutiva)
+                            </h4>
+                            <span class="text-[10px] font-mono bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded font-bold uppercase">
+                                Dashboard Solo Lectura
+                            </span>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div class="bg-slate-50 border border-emerald-200 p-4 rounded-xl">
+                                <span class="block text-[10px] uppercase font-bold text-slate-600">Beneficio Neto de la Operación</span>
+                                <span id="exec-fluvial-net-profit" class="text-2xl font-black font-mono text-emerald-600">$0 USD</span>
+                                <span class="block text-[10px] text-slate-500 mt-1">Ingresos de flete menos costes totales</span>
+                            </div>
+                            <div class="bg-slate-50 border border-blue-200 p-4 rounded-xl">
+                                <span class="block text-[10px] uppercase font-bold text-slate-600">Costo Total por Tonelada</span>
+                                <span id="exec-fluvial-cost-per-ton" class="text-2xl font-black font-mono text-slate-900">$0.00 <span class="text-xs font-normal text-slate-500">USD/MT</span></span>
+                                <div class="text-[10px] text-slate-600 mt-1 space-y-0.5 font-mono">
+                                    <div>Motor (Remolcador): <span id="exec-fluvial-cost-motor" class="text-blue-700 font-bold">$0.00</span> USD/MT</div>
+                                    <div>Barcazas (Carga): <span id="exec-fluvial-cost-barges" class="text-emerald-700 font-bold">$0.00</span> USD/MT</div>
+                                </div>
+                            </div>
+                            <div class="bg-slate-50 border border-purple-200 p-4 rounded-xl">
+                                <span class="block text-[10px] uppercase font-bold text-slate-600">TCE Diario de la Operación</span>
+                                <span id="exec-fluvial-tce" class="text-2xl font-black font-mono text-purple-700">$0 <span class="text-xs font-normal text-slate-500">/ día</span></span>
+                                <span class="block text-[10px] text-slate-500 mt-1">Time Charter Equivalent por día de operación</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white border border-slate-200 p-4 rounded-xl shadow-sm text-slate-800">
+                        <h4 class="text-xs text-slate-500 font-bold uppercase mb-3 tracking-wider">⏱️ Convoy y Duración Operativa</h4>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-slate-700">
+                            <div>Tipo: <strong class="block text-slate-900" id="exec-vessel-type">Convoy Fluvial</strong></div>
+                            <div>Navegación: <strong class="block text-slate-900" id="exec-sea-days">0.0 días</strong></div>
+                            <div>Puerto / Esperas: <strong class="block text-slate-900" id="exec-port-days">0.0 días</strong></div>
+                            <div>Total: <strong class="block text-slate-900" id="exec-total-days">0.0 días</strong></div>
                         </div>
                     </div>
 
                     <!-- TARJETAS DUALES: ARMADOR VS FLETADOR -->
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <!-- Lado Armador -->
-                        <div class="bg-slate-50 border border-slate-200 p-5 rounded-xl shadow-sm">
-                            <h4 class="text-xs text-slate-500 font-bold uppercase mb-4 border-b border-slate-200 pb-2 flex items-center gap-2">
-                                <span>🚢</span> LADO DEL ARMADOR
+                        <div class="bg-white border border-slate-200 p-5 rounded-xl shadow-sm text-slate-800">
+                            <h4 class="text-xs text-indigo-900 font-bold uppercase mb-4 border-b border-slate-200 pb-2 flex items-center gap-2">
+                                <span>🚢</span> LADO DEL ARMADOR / OPERADOR
                             </h4>
                             <div class="mb-4">
                                 <span class="block text-xs text-slate-500 font-medium mb-1 uppercase tracking-wide">Flete de Compra (Sub-let)</span>
-                                <span class="text-2xl font-black text-slate-800" id="exec-buy-freight">$0.00 / MT</span>
+                                <span class="text-2xl font-black text-slate-900" id="exec-buy-freight">$0.00 / MT</span>
                             </div>
                             <div>
                                 <span class="block text-xs text-slate-500 font-medium mb-1 uppercase tracking-wide">Beneficio Diario (TCE)</span>
@@ -10354,37 +10387,37 @@
                         </div>
 
                         <!-- Lado Fletador (Nuestra Casa) -->
-                        <div class="bg-blue-50 border border-blue-200 p-5 rounded-xl shadow-sm">
-                            <h4 class="text-xs text-blue-700 font-bold uppercase mb-4 border-b border-blue-200 pb-2 flex items-center gap-2">
+                        <div class="bg-white border border-slate-200 p-5 rounded-xl shadow-sm text-slate-800">
+                            <h4 class="text-xs text-blue-900 font-bold uppercase mb-4 border-b border-slate-200 pb-2 flex items-center gap-2">
                                 <span>🏢</span> LADO DEL FLETADOR (NUESTRA CASA)
                             </h4>
                             <div class="mb-4">
-                                <span class="block text-xs text-blue-600 font-medium mb-1 uppercase tracking-wide">Flete de Venta (Cliente)</span>
-                                <span class="text-2xl font-black text-blue-900" id="exec-sell-freight">$0.00 / MT</span>
+                                <span class="block text-xs text-slate-500 font-medium mb-1 uppercase tracking-wide">Flete de Venta (Cliente)</span>
+                                <span class="text-2xl font-black text-blue-700" id="exec-sell-freight">$0.00 / MT</span>
                             </div>
                             <div>
-                                <span class="block text-xs text-blue-600 font-medium mb-1 uppercase tracking-wide">Beneficio Total Fletador</span>
-                                <span class="text-xl font-bold text-blue-700" id="exec-charterer-profit">$0</span>
-                                <span class="mt-2 block text-xs font-semibold text-blue-600">Spread: <span id="exec-spread-mt">$0.00 / MT</span></span>
+                                <span class="block text-xs text-slate-500 font-medium mb-1 uppercase tracking-wide">Beneficio Total Fletador</span>
+                                <span class="text-xl font-bold text-emerald-600" id="exec-charterer-profit">$0</span>
+                                <span class="mt-2 block text-xs font-semibold text-slate-600">Spread: <span id="exec-spread-mt" class="text-blue-700 font-bold">$0.00 / MT</span></span>
                             </div>
                         </div>
                     </div>
 
                     <!-- INSIGHTS Y RIESGOS OPERATIVOS -->
-                    <div class="bg-indigo-50 border border-indigo-100 p-5 rounded-xl shadow-sm mt-1">
-                        <h4 class="text-xs text-indigo-700 font-bold uppercase mb-3 flex items-center gap-2 tracking-wider">
-                            <span>💡</span> INSIGHT COMERCIAL Y AUDITORÍA DE RIESGOS
+                    <div class="bg-white border border-slate-200 p-5 rounded-xl shadow-sm mt-1 text-slate-800">
+                        <h4 class="text-xs text-blue-900 font-bold uppercase mb-3 flex items-center gap-2 tracking-wider">
+                            <span>💡</span> INSIGHT COMERCIAL Y AUDITORÍA DE RIESGOS FLUVIALES
                         </h4>
                         <div class="flex flex-col md:flex-row gap-4 md:items-start text-sm">
                             <!-- Alerta de Riesgo -->
-                            <div class="shrink-0 bg-white border border-amber-200 p-3 rounded-lg flex flex-col items-center justify-center min-w-[140px]">
-                                <span class="text-[10px] text-amber-600 font-bold uppercase mb-1">Riesgo Demoras</span>
+                            <div class="shrink-0 bg-slate-50 border border-slate-200 p-3 rounded-lg flex flex-col items-center justify-center min-w-[140px]">
+                                <span class="text-[10px] text-amber-700 font-bold uppercase mb-1">Riesgo Demoras</span>
                                 <span class="text-amber-500 text-2xl mb-1">⚠️</span>
-                                <span class="font-bold text-amber-700" id="exec-risk-level">N/D</span>
+                                <span class="font-bold text-amber-800" id="exec-risk-level">N/D</span>
                             </div>
                             <!-- Explicación Puntos Clave -->
-                            <div class="text-indigo-900 leading-relaxed">
-                                <p id="exec-insight-text">Introduce POL, POD y volumen de carga para generar el análisis ejecutivo.</p>
+                            <div class="text-slate-600 leading-relaxed">
+                                <p id="exec-insight-text">Introduce POL, POD, nivel de agua y convoy de barcazas para generar el análisis ejecutivo fluvial.</p>
                             </div>
                         </div>
                     </div>
@@ -10397,9 +10430,9 @@
                 <!-- COLUMNA IZQUIERDA (Inputs Operativos) -->
                 <div class="estimator-inputs-column space-y-6">
                     <!-- 1. Derrota y Puertos -->
-                    <div class="collapsible-section bg-slate-900 border border-slate-700 rounded-xl p-5 shadow-lg" data-collapsible-section data-default-open="false">
-                        <div class="collapsible-section-header flex justify-between items-center mb-4 border-b border-slate-800 pb-2">
-                            <h2 id="route-header-title" class="text-sm font-bold text-blue-400 uppercase"><i class="fa-solid fa-route mr-2"></i> 1. Derrota y Puertos Geográficos</h2>
+                    <div class="collapsible-section bg-white border border-slate-200 rounded-xl p-5 shadow-sm text-slate-800" data-collapsible-section data-default-open="false">
+                        <div class="collapsible-section-header flex justify-between items-center mb-4 border-b border-slate-200 pb-2">
+                            <h2 id="route-header-title" class="text-sm font-bold text-blue-900 uppercase"><i class="fa-solid fa-route mr-2"></i> 1. Derrota y Puertos Geográficos</h2>
                             <div class="collapsible-section-actions flex items-center gap-2">
                                 <div id="btn-wpi" class="text-xs bg-teal-900/50 text-teal-200 px-3 py-1.5 rounded flex items-center gap-1.5 border border-teal-700/50" title="Búsqueda segura mediante Datalastic Port Finder/Info">
                                     <i class="fa-solid fa-satellite-dish"></i> Datalastic activo
@@ -10410,8 +10443,8 @@
                             </div>
                         </div>
 
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                            <div class="space-y-1">
+                        <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-4">
+                            <div class="space-y-1 hidden" data-oceanic="true" style="display: none !important;">
                                 <label id="label-port-ballast" data-i18n="label_port_ballast" class="text-[10px] font-bold text-emerald-400 uppercase flex items-center min-h-[28px]">Puerto Previo (Lastre)</label>
                                 <input type="text" id="port-ballast" class="input-gc text-emerald-300 font-bold" value="" placeholder="Ej: Puerto Rico" autocomplete="off" inputmode="text" spellcheck="false">
                                 <div id="port-ballast-limits" class="text-[10px] text-emerald-500/80 font-medium mt-1"></div>
@@ -10466,9 +10499,20 @@
                                     </div>
                                 </div>
                             </div>
+                            <div class="space-y-1">
+                                <div class="flex justify-between items-center w-full min-h-[28px]">
+                                    <label id="label-min-water-level" for="min_water_level" class="text-[10px] font-bold text-blue-900 uppercase flex items-center">
+                                        <i class="fa-solid fa-water mr-1 text-sky-600"></i> Calado Mín. Estiaje (min_water_level) (m)
+                                    </label>
+                                    <span class="text-[9px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">Fluvial</span>
+                                </div>
+                                <input type="number" id="min_water_level" name="min_water_level" step="0.01" min="0" class="input-gc text-slate-900 font-bold bg-white border border-slate-300 rounded px-2.5 py-1.5 w-full focus:border-blue-500" value="2.80" placeholder="2.80" oninput="if(typeof window.syncWaterLevelToConvoy==='function') window.syncWaterLevelToConvoy(this.value); if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations();">
+                                <div id="min-water-level-limits" class="text-[10px] text-slate-500 font-medium mt-1">Límite hidrométrico crítico de la ruta</div>
+                            </div>
+
                         </div>
 
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 bg-slate-950 p-3 rounded-lg border border-slate-800">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 bg-slate-50 p-3 rounded-lg border border-slate-200 text-slate-800">
                             <div class="input-group">
                                 <label id="label-dist-ballast" class="text-indigo-400">Distancia Lastre (NM)</label>
                                 <input type="number" id="dist-ballast" class="input-gc font-bold text-indigo-300" value="0" step="any" oninput="runEngine()">
@@ -10533,9 +10577,9 @@
                     </div>
 
                     <!-- 2. Buque, Carga y Tiempos -->
-                    <div class="collapsible-section bg-slate-900 border border-slate-700 rounded-xl p-5 shadow-lg" data-collapsible-section data-default-open="false">
-                        <div class="collapsible-section-header flex justify-between items-center mb-4 border-b border-slate-800 pb-2">
-                            <h2 id="vessel-header-title" class="text-sm font-bold text-blue-400 uppercase"><i class="fa-solid fa-anchor mr-2"></i> 2. Especificaciones del Buque y Carga / Ship Requirements</h2>
+                    <div class="collapsible-section bg-white border border-slate-200 rounded-xl p-5 shadow-sm text-slate-800" data-collapsible-section data-default-open="false">
+                        <div class="collapsible-section-header flex justify-between items-center mb-4 border-b border-slate-200 pb-2">
+                            <h2 id="vessel-header-title" class="text-sm font-bold text-blue-900 uppercase"><i class="fa-solid fa-anchor mr-2"></i> 2. Especificaciones del Buque y Carga / Ship Requirements</h2>
                             <div class="collapsible-section-actions flex items-center gap-2">
                                 <button id="btn-vessel-specs-real-1" onclick="autoFillVesselSpecs()" class="badge-ai text-[10px] text-sky-400 hover:text-sky-300 transition" title="Buscar especificaciones reales en internet (IA)">
                                     <i class="fa-solid fa-robot mr-0.5"></i> Specs (IA)
@@ -10555,8 +10599,13 @@
                         <div id="vessel-compatibility-warning" class="hidden bg-red-950/80 border border-red-500 text-red-200 font-bold p-3 rounded-lg mb-4 text-center tracking-wide text-sm">
                             NOTICE: THIS VESSEL IS NOT COMPATIBLE DUE TO EXCESS WEIGHT.
                         </div>
+
+                        <!-- ENSAMBLADOR DE CONVOY FLUVIAL (REACT CONVOYBUILDER) -->
+                        <div id="convoy-builder-root" class="mb-6"></div>
                         
-                        <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
+                        <!-- Oceanic single-vessel inputs hidden in RiverCharter -->
+<div id="oceanic-vessel-specs" data-oceanic="true" class="hidden" style="display: none !important;">
+<div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
                             <div class="input-group">
                                 <label class="flex items-center min-h-[28px]">
                                     <span id="label-vessel-name-real">Nombre del Buque</span>
@@ -11039,15 +11088,99 @@
                                 <span>Validar Especificaciones / Calcular</span>
                             </button>
                         </div>
+</div>
                     </div>
 
                     <!-- 3. Bunkers y Gastos -->
-                    <div class="collapsible-section bg-slate-900 border border-slate-700 rounded-xl p-5 shadow-lg" data-collapsible-section data-default-open="false">
-                        <div class="collapsible-section-header flex justify-between items-center mb-4 border-b border-slate-800 pb-2">
-                            <h2 id="costs-header-title" class="text-sm font-bold text-blue-400 uppercase"><i class="fa-solid fa-gas-pump mr-2"></i> 3. Estructura de Costes (OPEX, Bunkers, PDAs)</h2>
+                    <div class="collapsible-section bg-white border border-slate-200 rounded-xl p-5 shadow-sm text-slate-800" data-collapsible-section data-default-open="false">
+                        <div class="collapsible-section-header flex justify-between items-center mb-4 border-b border-slate-200 pb-2">
+                            <h2 id="costs-header-title" class="text-sm font-bold text-blue-900 uppercase"><i class="fa-solid fa-gas-pump mr-2"></i> 3. Estructura de Costes (OPEX, Bunkers, PDAs)</h2>
                         </div>
                         
-                        <!-- Bunkers Matrix -->
+                        
+                        <!-- ESTRUCTURA DE COSTES FLUVIALES: OPEX REMOLCADOR, CAPEX BARCAZAS, BUNKERS, PDAS -->
+                        <div id="fluvial-costs-panel" class="bg-slate-50 border border-slate-200 p-4 rounded-xl mb-4 text-slate-800 shadow-sm">
+                            <div class="flex items-center justify-between border-b border-slate-200 pb-2 mb-3">
+                                <h3 class="text-xs font-black uppercase tracking-wider text-blue-900 flex items-center gap-2">
+                                    <i class="fa-solid fa-coins text-amber-600"></i> Estructura de Costes Fluviales (RiverCharter)
+                                </h3>
+                                <span class="text-[9px] font-bold uppercase tracking-wider bg-blue-100 text-blue-800 px-2 py-0.5 rounded border border-blue-200">
+                                    Convoy Fluvial
+                                </span>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                                <!-- OPEX Remolcador -->
+                                <div class="space-y-1">
+                                    <label for="fluvial-opex-tugboat" class="text-[10px] font-bold text-slate-700 uppercase flex items-center min-h-[24px]">
+                                        OPEX Remolcador ($/día)
+                                    </label>
+                                    <input type="number" id="fluvial-opex-tugboat" class="input-gc bg-white border border-slate-300 font-bold text-slate-900 w-full" value="3200" step="any" oninput="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations()">
+                                    <span class="text-[10px] text-slate-500">Tripulación, seguros y mantenimiento</span>
+                                </div>
+                                <!-- CAPEX Barcazas -->
+                                <div class="space-y-1">
+                                    <label for="fluvial-capex-barges" class="text-[10px] font-bold text-slate-700 uppercase flex items-center min-h-[24px]">
+                                        CAPEX Diario Barcazas ($/día)
+                                    </label>
+                                    <input type="number" id="fluvial-capex-barges" class="input-gc bg-white border border-slate-300 font-bold text-slate-900 w-full" value="2400" step="any" oninput="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations()">
+                                    <span class="text-[10px] text-slate-500">Alquiler / amortización diaria convoy</span>
+                                </div>
+                                <!-- Bunker Navegando -->
+                                <div class="space-y-1">
+                                    <label for="fluvial-fuel-sailing-rate" class="text-[10px] font-bold text-slate-700 uppercase flex items-center min-h-[24px]">
+                                        Bunkers Navegando (t/d)
+                                    </label>
+                                    <input type="number" id="fluvial-fuel-sailing-rate" class="input-gc bg-white border border-slate-300 font-bold text-slate-900 w-full" value="6.5" step="0.1" oninput="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations()">
+                                    <span class="text-[10px] text-slate-500">Consumo empujando con carga</span>
+                                </div>
+                                <!-- Bunker Ralentí -->
+                                <div class="space-y-1">
+                                    <label for="fluvial-fuel-idle-rate" class="text-[10px] font-bold text-slate-700 uppercase flex items-center min-h-[24px]">
+                                        Bunkers Ralentí / Espera (t/d)
+                                    </label>
+                                    <input type="number" id="fluvial-fuel-idle-rate" class="input-gc bg-white border border-slate-300 font-bold text-slate-900 w-full" value="0.8" step="0.1" oninput="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations()">
+                                    <span class="text-[10px] text-slate-500">Consumo en esclusas y esperas</span>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                <!-- Precio Combustible Fluvial -->
+                                <div class="space-y-1">
+                                    <label for="fluvial-fuel-price" class="text-[10px] font-bold text-emerald-800 uppercase flex items-center min-h-[24px]">
+                                        Precio Combustible Fluvial ($/t)
+                                    </label>
+                                    <input type="number" id="fluvial-fuel-price" class="input-gc bg-white border border-slate-300 font-bold text-emerald-700 w-full" value="780" step="any" oninput="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations()">
+                                    <span class="text-[10px] text-slate-500">Gasoil fluvial local / MGO</span>
+                                </div>
+                                <!-- Peajes Esclusas -->
+                                <div class="space-y-1">
+                                    <label for="fluvial-pda-locks" class="text-[10px] font-bold text-slate-700 uppercase flex items-center min-h-[24px]">
+                                        PDA Esclusas ($)
+                                    </label>
+                                    <input type="number" id="fluvial-pda-locks" class="input-gc bg-white border border-slate-300 font-bold text-slate-900 w-full" value="3500" step="any" oninput="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations()">
+                                    <span class="text-[10px] text-slate-500">Derechos de paso de esclusas</span>
+                                </div>
+                                <!-- Peajes Vía Navegable -->
+                                <div class="space-y-1">
+                                    <label for="fluvial-pda-tolls" class="text-[10px] font-bold text-slate-700 uppercase flex items-center min-h-[24px]">
+                                        Peajes Hidrovía ($)
+                                    </label>
+                                    <input type="number" id="fluvial-pda-tolls" class="input-gc bg-white border border-slate-300 font-bold text-slate-900 w-full" value="4200" step="any" oninput="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations()">
+                                    <span class="text-[10px] text-slate-500">Tasas de balizamiento y dragado</span>
+                                </div>
+                                <!-- Practicaje y Aduanas Fluviales -->
+                                <div class="space-y-1">
+                                    <label for="fluvial-pda-pilotage" class="text-[10px] font-bold text-slate-700 uppercase flex items-center min-h-[24px]">
+                                        Prácticos y Aduanas Fluviales ($)
+                                    </label>
+                                    <input type="number" id="fluvial-pda-pilotage" class="input-gc bg-white border border-slate-300 font-bold text-slate-900 w-full" value="2800" step="any" oninput="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations()">
+                                    <span class="text-[10px] text-slate-500">Practicaje obligatorio y despachos</span>
+                                </div>
+                            </div>
+                        </div>
+
+<!-- Oceanic Bunkers & Flags hidden in RiverCharter -->
+<div id="oceanic-bunkers-specs" data-oceanic="true" class="hidden" style="display: none !important;">
+<!-- Bunkers Matrix -->
                         <div class="bg-slate-950 p-4 rounded-lg border border-slate-800 mb-4">
                             <div id="bunker-arbitrage-toolbar" class="mb-4 flex flex-wrap items-center gap-3 rounded-lg bg-slate-900/80 p-3" role="toolbar" aria-label="Herramientas de combustible y arbitraje de bunkers">
                                 <div class="min-w-0 flex-1">
@@ -11214,7 +11347,25 @@
                         </h2>
                         </div>
                         
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        
+                        <!-- GESTIÓN DE TIEMPOS Y DEMORAS FLUVIALES (ESCLUSAS Y ADUANAS) -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 bg-slate-50 border border-slate-200 p-4 rounded-xl shadow-sm text-slate-800">
+                            <div class="space-y-1">
+                                <label for="fluvial-lock-wait-days" class="text-[10px] font-bold text-blue-900 uppercase flex items-center min-h-[24px]">
+                                    <i class="fa-solid fa-hourglass-half mr-1 text-indigo-600"></i> Esperas en Esclusas (Días)
+                                </label>
+                                <input type="number" id="fluvial-lock-wait-days" class="input-gc bg-white border border-slate-300 font-bold text-slate-900 w-full" value="1.5" min="0" step="0.25" oninput="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations()">
+                                <span class="text-[10px] text-slate-500">Tiempo de espera acumulado en esclusas del convoy</span>
+                            </div>
+                            <div class="space-y-1">
+                                <label for="fluvial-customs-delay-days" class="text-[10px] font-bold text-blue-900 uppercase flex items-center min-h-[24px]">
+                                    <i class="fa-solid fa-passport mr-1 text-emerald-600"></i> Demoras en Aduanas / Pasos Fronterizos (Días)
+                                </label>
+                                <input type="number" id="fluvial-customs-delay-days" class="input-gc bg-white border border-slate-300 font-bold text-slate-900 w-full" value="1.0" min="0" step="0.25" oninput="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations()">
+                                <span class="text-[10px] text-slate-500">Inspecciones aduaneras y permisos de tránsito internacional</span>
+                            </div>
+                        </div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                             <div class="input-group">
                                 <div class="flex items-center justify-between gap-2 mb-1">
                                     <label class="text-sky-400 font-bold block text-xs">ETA Base Radar / ETA Radar (YYYY-MM-DD)</label>
@@ -11423,9 +11574,9 @@
                 <div class="estimator-results-rail space-y-6">
                     
                     <!-- Resumen de Costes y Tiempos -->
-                    <div class="collapsible-section bg-slate-900 border border-slate-700 rounded-xl p-5 shadow-lg" data-collapsible-section data-default-open="false">
-                        <div class="collapsible-section-header mb-3 border-b border-slate-800 pb-2">
-                            <h2 id="summary-header-title" data-i18n="calc_summary_title" class="text-sm font-bold text-slate-300 uppercase"><i class="fa-solid fa-chart-pie mr-2"></i> 6. RESUMEN DE OPERACIÓN</h2>
+                    <div class="collapsible-section bg-white border border-slate-200 rounded-xl p-5 shadow-sm text-slate-800" data-collapsible-section data-default-open="false">
+                        <div class="collapsible-section-header mb-3 border-b border-slate-200 pb-2">
+                            <h2 id="summary-header-title" data-i18n="calc_summary_title" class="text-sm font-bold text-blue-900 uppercase"><i class="fa-solid fa-chart-pie mr-2"></i> 6. RESUMEN DE OPERACIÓN</h2>
                         </div>
 
                         <div class="flex justify-between items-center mb-1 text-sm mono">
@@ -11459,11 +11610,11 @@
                                     <div class="flex justify-between"><span>Consumo Navegación</span><strong id="res-fuel-nav">0.00 t · $0</strong></div>
                                     <div class="flex justify-between"><span>Consumo Puerto</span><strong id="res-fuel-port">0.00 t · $0</strong></div>
                                     <div class="flex justify-between gap-2">
-                                        <span class="inline-flex items-center gap-1">Consumo Fondeo <button type="button" class="text-slate-400 hover:text-sky-500" onclick="configureAnchorageFuelRate('main')" title="Configurar consumo diario de fondeo"><i class="fa-solid fa-gear"></i></button></span>
+                                        <span class="inline-flex items-center gap-1">Consumo Fondeo <button type="button" class="text-slate-600 hover:text-sky-500" onclick="configureAnchorageFuelRate('main')" title="Configurar consumo diario de fondeo"><i class="fa-solid fa-gear"></i></button></span>
                                         <strong id="res-fuel-anchorage" contenteditable="true" oninput="handleFuelBreakdownManualOverride('res-fuel-anchorage')" title="Editar para activar override manual">0.00 t · $0</strong>
                                     </div>
                                     <div class="flex justify-between gap-2">
-                                        <span class="inline-flex items-center gap-1">Consumo Auxiliar (Fondeo) <button type="button" class="text-slate-400 hover:text-sky-500" onclick="configureAnchorageFuelRate('aux')" title="Configurar consumo auxiliar diario"><i class="fa-solid fa-gear"></i></button></span>
+                                        <span class="inline-flex items-center gap-1">Consumo Auxiliar (Fondeo) <button type="button" class="text-slate-600 hover:text-sky-500" onclick="configureAnchorageFuelRate('aux')" title="Configurar consumo auxiliar diario"><i class="fa-solid fa-gear"></i></button></span>
                                         <strong id="bunker-fondeo-display" contenteditable="true" oninput="handleFuelBreakdownManualOverride('bunker-fondeo-display')" title="Editar para activar override manual">0.00 t · $0</strong>
                                     </div>
                                 </div>
@@ -11489,10 +11640,10 @@
                             </div>
 
                             <!-- Solid Navy Blue Bar for TOTAL COSTS with white text for perfect contrast -->
-                            <div class="flex justify-between items-center bg-[#1E3A8A] text-white p-3 rounded-lg mt-3 font-bold no-print shadow-md" id="total-costs-bar">
-                                <span id="label-total-costs-basis" class="text-white uppercase tracking-wider text-xs font-extrabold">TOTAL COSTS:</span>
-                                <span class="text-base md:text-lg font-black text-white" id="res-cost-total-container">
-                                    <span id="res-cost-total" class="text-white">$0</span>
+                            <div class="flex justify-between items-center bg-[#1E3A8A] text-slate-900 p-3 rounded-lg mt-3 font-bold no-print shadow-md" id="total-costs-bar">
+                                <span id="label-total-costs-basis" class="text-slate-900 uppercase tracking-wider text-xs font-extrabold">TOTAL COSTS:</span>
+                                <span class="text-base md:text-lg font-black text-slate-900" id="res-cost-total-container">
+                                    <span id="res-cost-total" class="text-slate-900">$0</span>
                                 </span>
                             </div>
 
@@ -11677,7 +11828,7 @@
                                         <div id="res-market-benchmark-alert" class="mt-1 inline-flex rounded px-2 py-1 text-[10px] font-black uppercase bg-slate-200 text-slate-600">Sin referencia</div>
                                     </div>
                                 </div>
-                                <section id="market-intel-dashboard" class="mt-3 rounded-xl border border-slate-800 bg-slate-950 p-3 text-white shadow-lg shadow-slate-950/10" aria-labelledby="market-intel-dashboard-title">
+                                <section id="market-intel-dashboard" data-oceanic="true" class="hidden" style="display: none !important;" aria-labelledby="market-intel-dashboard-title">
                                     <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                                         <div class="min-w-0">
                                             <div class="flex flex-wrap items-center gap-2">
@@ -11714,7 +11865,7 @@
                                         </label>
                                     </div>
                                 </section>
-                                <div id="baltic-spot-reference-card" class="mt-3 overflow-hidden rounded-xl border border-sky-200 bg-white shadow-sm" aria-live="polite">
+                                <div id="baltic-spot-reference-card" data-oceanic="true" class="hidden" style="display: none !important;" aria-live="polite">
                                     <div class="border-b border-sky-100 bg-gradient-to-r from-sky-50 via-white to-emerald-50 px-3 py-2.5">
                                         <div class="flex items-center gap-2 text-[10px] font-black uppercase tracking-wide text-sky-900">
                                             <span class="inline-flex h-5 w-5 items-center justify-center rounded bg-sky-100 text-sky-700" aria-hidden="true"><i class="fa-solid fa-chart-line text-[9px]"></i></span>
@@ -12064,9 +12215,9 @@
 
 
                     <!-- FLETE REAL Y BENEFICIO NETO DESGLOSADO -->
-                    <div class="estimator-commercial-close collapsible-section bg-slate-900 border border-slate-700 rounded-xl p-5 shadow-lg relative overflow-hidden" data-collapsible-section data-default-open="false">
-                        <div class="collapsible-section-header flex items-center justify-between mb-4 border-b border-slate-800 pb-2">
-                            <h2 data-i18n="calc_negotiation_title" class="text-sm font-bold text-blue-400 uppercase">
+                    <div class="estimator-commercial-close collapsible-section bg-white border border-slate-200 rounded-xl p-5 shadow-sm relative overflow-hidden text-slate-800" data-collapsible-section data-default-open="false">
+                        <div class="collapsible-section-header flex items-center justify-between mb-4 border-b border-slate-200 pb-2">
+                            <h2 data-i18n="calc_negotiation_title" class="text-sm font-bold text-blue-900 uppercase">
                                 <i class="fa-solid fa-handshake mr-2"></i> 8. NEGOCIACIÓN COMERCIAL
                             </h2>
                         </div>
@@ -12087,8 +12238,8 @@
                                 <label id="label-buying-freight" class="mb-1 block text-[10px] font-bold uppercase text-indigo-700">Flete Compra Armador ($)</label>
                                 <div class="flex">
                                     <input type="number" id="freight-rate" class="input-gc h-9 rounded-r-none border-slate-300 bg-white text-lg font-bold text-slate-900" value="32.50" step="any" oninput="runEngine()">
-                                    <button type="button" id="btn-calc-owner-freight" onclick="handleFreightMasterTrigger('owner', event)" class="border-y border-indigo-700 bg-indigo-700 px-2 text-white transition hover:bg-indigo-800" title="Calcular e iniciar Auto-Flow"><i class="fa-solid fa-calculator"></i></button>
-                                    <button id="btn-spot-owner-freight" onclick="predictSpotMarketLocal()" class="rounded-r-md border border-blue-700 bg-blue-700 px-2 text-white transition hover:bg-blue-800" title="Estimación Algorítmica Spot Real (PMT)"><i class="fa-solid fa-chart-line"></i></button>
+                                    <button type="button" id="btn-calc-owner-freight" onclick="handleFreightMasterTrigger('owner', event)" class="border-y border-indigo-700 bg-indigo-700 px-2 text-slate-900 transition hover:bg-indigo-800" title="Calcular e iniciar Auto-Flow"><i class="fa-solid fa-calculator"></i></button>
+                                    <button id="btn-spot-owner-freight" onclick="predictSpotMarketLocal()" class="rounded-r-md border border-blue-700 bg-blue-700 px-2 text-slate-900 transition hover:bg-blue-800" title="Estimación Algorítmica Spot Real (PMT)"><i class="fa-solid fa-chart-line"></i></button>
                                 </div>
                             </div>
 
@@ -12144,8 +12295,8 @@
                                 <label id="label-selling-freight" class="mb-1 block text-[10px] font-bold uppercase text-emerald-700">Flete Venta Fletador ($)</label>
                                 <div class="flex">
                                     <input type="number" id="freight-sell" class="input-gc h-9 rounded-r-none border-slate-300 bg-white text-lg font-bold text-slate-900" value="35.00" step="any" oninput="runEngine()">
-                                    <button type="button" id="btn-calc-charter-freight" onclick="handleFreightMasterTrigger('charterer', event)" class="border-y border-emerald-700 bg-emerald-700 px-2 text-white transition hover:bg-emerald-800" title="Calcular e iniciar Auto-Flow"><i class="fa-solid fa-calculator"></i></button>
-                                    <button id="btn-spot-charter-freight" onclick="predictSpotMarketLocal()" class="rounded-r-md border border-teal-700 bg-teal-700 px-2 text-white transition hover:bg-teal-800" title="Estimación Algorítmica Spot Real (PMT)"><i class="fa-solid fa-chart-line"></i></button>
+                                    <button type="button" id="btn-calc-charter-freight" onclick="handleFreightMasterTrigger('charterer', event)" class="border-y border-emerald-700 bg-emerald-700 px-2 text-slate-900 transition hover:bg-emerald-800" title="Calcular e iniciar Auto-Flow"><i class="fa-solid fa-calculator"></i></button>
+                                    <button id="btn-spot-charter-freight" onclick="predictSpotMarketLocal()" class="rounded-r-md border border-teal-700 bg-teal-700 px-2 text-slate-900 transition hover:bg-teal-800" title="Estimación Algorítmica Spot Real (PMT)"><i class="fa-solid fa-chart-line"></i></button>
                                 </div>
                             </div>
 
@@ -12175,14 +12326,14 @@
                             </div>
 
                             <!-- ZONA INFERIOR: RESULTADOS / BOTTOM LINE -->
-                            <section class="rounded-2xl border border-slate-600 bg-slate-950/70 p-4 shadow-xl shadow-black/15 sm:p-6" aria-labelledby="negotiation-bottom-line-title">
-                                <div class="mb-5 border-b border-slate-800 pb-3">
+                            <section class="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm sm:p-6 text-slate-800" aria-labelledby="negotiation-bottom-line-title">
+                                <div class="mb-5 border-b border-slate-200 pb-3">
                                     <p class="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Bottom Line</p>
-                                    <h3 id="negotiation-bottom-line-title" class="mt-1 text-base font-black text-white">Resultado de la Negociación</h3>
+                                    <h3 id="negotiation-bottom-line-title" class="mt-1 text-base font-black text-slate-900">Resultado de la Negociación</h3>
                                 </div>
 
                                 <div class="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-6">
-                                    <article class="min-h-52 rounded-xl border border-indigo-500/40 bg-slate-900 p-5 text-center shadow-lg sm:p-6">
+                                    <article class="min-h-52 rounded-xl border border-slate-200 bg-white p-5 text-center shadow-sm sm:p-6 text-slate-800">
                                         <div class="mb-2 flex items-center justify-center gap-1.5">
                                             <div id="label-owner-profit-header" class="text-[11px] text-slate-400 font-bold uppercase">Beneficio Armador</div>
                                             <span id="owner-profit-tooltip" class="cursor-help text-[11px] text-slate-500" title="El Beneficio Neto descuenta el Coste Total Riesgo global del viaje.">ℹ️</span>
@@ -12193,29 +12344,29 @@
                                             <i class="fa-solid fa-route"></i>
                                             Simular Viaje Siguiente (Armador)
                                         </button>
-                                        <div class="mt-3 border-t border-slate-800 pt-2 transition-all duration-300 text-2xl font-black text-indigo-300" id="res-tce-label">TCE Obtenido: $0 / día (Total: $0)</div>
-                                        <details id="owner-net-breakdown" class="mt-3 border-t border-slate-800 pt-2 text-left">
+                                        <div class="mt-3 border-t border-slate-200 pt-2 transition-all duration-300 text-2xl font-black text-indigo-300" id="res-tce-label">TCE Obtenido: $0 / día (Total: $0)</div>
+                                        <details id="owner-net-breakdown" class="mt-3 border-t border-slate-200 pt-2 text-left">
                                             <summary class="cursor-pointer text-[10px] font-black uppercase text-indigo-300">Desglose Neto Armador</summary>
                                             <div class="mt-2 space-y-1 text-[10px] text-slate-400">
                                                 <div class="flex justify-between gap-2"><span>Ingreso Bruto</span><strong id="res-owner-gross-revenue" class="mono text-slate-200">$0</strong></div>
                                                 <div class="flex justify-between gap-2"><span>Viaje + ETS + Ajustes</span><strong id="res-owner-voyage-costs" class="mono text-red-300">$0</strong></div>
                                                 <div class="flex justify-between gap-2"><span>Costes Operativos (OPEX/CAPEX)</span><strong id="res-owner-opex-capex" class="mono text-orange-300">$0</strong></div>
-                                                <div class="flex justify-between gap-2 border-t border-slate-800 pt-1 font-bold"><span>Beneficio Neto Final</span><strong id="res-owner-final-net" class="mono text-emerald-300">$0</strong></div>
+                                                <div class="flex justify-between gap-2 border-t border-slate-200 pt-1 font-bold"><span>Beneficio Neto Final</span><strong id="res-owner-final-net" class="mono text-emerald-300">$0</strong></div>
                                             </div>
                                         </details>
                                     </article>
 
-                                    <article class="min-h-52 rounded-xl border border-emerald-500/40 bg-slate-900 p-5 text-center shadow-lg sm:p-6">
+                                    <article class="min-h-52 rounded-xl border border-slate-200 bg-white p-5 text-center shadow-sm sm:p-6 text-slate-800">
                                         <div id="label-charter-profit-header" class="text-[11px] text-slate-400 font-bold uppercase mb-1">Arbitraje Comercial (Fletador)</div>
                                         <div class="text-4xl font-black text-emerald-400 mono leading-none" id="res-net-profit-charterer">$0</div>
                                         <div id="label-risk-free-profit" class="text-[10px] text-slate-500 mt-2">Beneficio Libre de Riesgo</div>
-                                        <details id="charterer-net-breakdown" class="mt-3 border-t border-slate-800 pt-2 text-left">
+                                        <details id="charterer-net-breakdown" class="mt-3 border-t border-slate-200 pt-2 text-left">
                                             <summary class="cursor-pointer text-[10px] font-black uppercase text-emerald-300">Desglose Neto Fletador</summary>
                                             <div class="mt-2 space-y-1 text-[10px] text-slate-400">
                                                 <div class="flex justify-between gap-2"><span>Ingresos Venta (Cliente)</span><strong id="res-charterer-gross-revenue" class="mono text-slate-200">$0</strong></div>
                                                 <div class="flex justify-between gap-2"><span>Coste Fletamento (Pago Armador)</span><strong id="res-charterer-freight-cost" class="mono text-red-300">$0</strong></div>
                                                 <div class="flex justify-between gap-2"><span>Comisiones (Brokerage)</span><strong id="res-charterer-commission-cost" class="mono text-red-300">$0</strong></div>
-                                                <div class="flex justify-between gap-2 border-t border-slate-800 pt-1 font-bold"><span>Beneficio Neto Fletador</span><strong id="res-charterer-final-net" class="mono text-emerald-300">$0</strong></div>
+                                                <div class="flex justify-between gap-2 border-t border-slate-200 pt-1 font-bold"><span>Beneficio Neto Fletador</span><strong id="res-charterer-final-net" class="mono text-emerald-300">$0</strong></div>
                                             </div>
                                         </details>
                                         <div id="owner-purchase-effectiveness" class="mt-3 rounded-md border border-slate-700 bg-slate-950/40 px-2 py-1.5 text-[10px] font-bold text-slate-400">Efectividad de Compra: -</div>
@@ -12345,7 +12496,7 @@
                     </div>
 
                     <div id="stress-test-panel" class="collapsible-section bg-slate-900 border border-slate-700 rounded-xl p-5 shadow-lg no-print" data-collapsible-section data-default-open="false">
-                        <div class="collapsible-section-header mb-4 flex items-center justify-between gap-3 border-b border-slate-800 pb-2">
+                        <div class="collapsible-section-header mb-4 flex items-center justify-between gap-3 border-b border-slate-200 pb-2">
                             <div data-collapsible-title>
                                 <h2 data-i18n="calc_risk_title" class="text-sm font-bold text-amber-300 uppercase">
                                     <i class="fa-solid fa-triangle-exclamation mr-2"></i> 9. MATRIZ DE RIESGO
@@ -12368,7 +12519,7 @@
                     <div id="smart-advisor-panel" class="hidden no-print"></div>
 
                     <div id="shadow-estimator-panel" class="collapsible-section bg-slate-900 border border-slate-700 rounded-xl p-5 shadow-lg no-print" data-collapsible-section data-default-open="false" style="display: none;">
-                        <div class="collapsible-section-header flex flex-col gap-3 border-b border-slate-800 pb-3 md:flex-row md:items-center md:justify-between">
+                        <div class="collapsible-section-header flex flex-col gap-3 border-b border-slate-200 pb-3 md:flex-row md:items-center md:justify-between">
                             <div data-collapsible-title>
                                 <h2 class="text-sm font-bold text-indigo-300 uppercase">
                                     <i class="fa-solid fa-layer-group mr-2"></i> 10. SIMULADOR DE VIAJE COMBINADO (SHADOW ESTIMATOR)
@@ -12383,15 +12534,15 @@
                             </div>
                         </div>
                         <div class="mt-3 grid grid-cols-1 gap-3 text-[10px] text-slate-400 md:grid-cols-3">
-                            <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+                            <div class="rounded-lg border border-slate-200 bg-slate-950/40 p-3">
                                 <span class="block font-black uppercase text-slate-500">Estado</span>
                                 <strong class="mt-1 block text-slate-200">Sandbox local</strong>
                             </div>
-                            <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+                            <div class="rounded-lg border border-slate-200 bg-slate-950/40 p-3">
                                 <span class="block font-black uppercase text-slate-500">Lectura</span>
                                 <strong class="mt-1 block text-slate-200">Viaje 1 como snapshot</strong>
                             </div>
-                            <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+                            <div class="rounded-lg border border-slate-200 bg-slate-950/40 p-3">
                                 <span class="block font-black uppercase text-slate-500">Persistencia</span>
                                 <strong class="mt-1 block text-slate-200">Sin escritura global</strong>
                             </div>
@@ -12400,14 +12551,14 @@
 
                     <div id="shadow-estimator-modal" class="fixed inset-0 z-[10000] hidden pointer-events-none items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm no-print" role="dialog" aria-modal="true" aria-labelledby="shadow-estimator-title">
                         <div class="w-full max-w-3xl overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl">
-                            <div class="flex items-start justify-between gap-4 border-b border-slate-800 p-5">
+                            <div class="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
                                 <div>
                                     <h3 id="shadow-estimator-title" class="text-sm font-black uppercase tracking-wide text-indigo-200">Shadow Estimator Armador</h3>
                                     <p class="mt-1 text-[11px] text-slate-500">Los inputs viven solo mientras este modal esta abierto.</p>
                                 </div>
                                 <button id="btn-close-shadow-estimator" type="button" class="rounded-md border border-slate-700 bg-slate-950/60 px-3 py-2 text-[10px] font-black uppercase text-slate-300 transition hover:border-red-400 hover:text-red-200">Cerrar</button>
                             </div>
-                            <div class="border-b border-slate-800 bg-slate-950/35 p-5">
+                            <div class="border-b border-slate-200 bg-slate-950/35 p-5">
                                 <div class="mb-2 flex items-center justify-between gap-3">
                                     <span class="text-[10px] font-black uppercase tracking-wide text-slate-400">Auto-Simulacion Rapida por Distancia</span>
                                     <span id="shadow-auto-source" class="text-[10px] font-bold text-slate-500">PDA base: $0</span>
@@ -12456,7 +12607,7 @@
                                         <label for="shadow-break-even-freight" class="mb-1 block text-[10px] font-black uppercase text-emerald-300">Flete Minimo Necesario (Break-Even USD Total · Viaje 2 Hipotético)</label>
                                         <input id="shadow-break-even-freight" type="number" min="0" step="1000" class="input-gc w-full text-sm font-black text-emerald-300" readonly title="Break-even TOTAL en USD del segundo viaje hipotético (relet). No es el break-even $/MT del viaje activo: ese lo publica el motor principal.">
                                     </div>
-                                    <div class="rounded-lg border border-slate-800 bg-slate-950/40 p-3 text-[10px] text-slate-400">
+                                    <div class="rounded-lg border border-slate-200 bg-slate-950/40 p-3 text-[10px] text-slate-400">
                                         <div class="flex justify-between gap-3"><span>Beneficio Neto Viaje 1</span><strong id="shadow-base-profit" class="mono text-slate-200">$0</strong></div>
                                         <div class="mt-1 flex justify-between gap-3"><span>Dias Viaje 1</span><strong id="shadow-base-days" class="mono text-slate-200">0</strong></div>
                                         <div class="mt-1 flex justify-between gap-3"><span>OPEX diario</span><strong id="shadow-base-daily" class="mono text-slate-200">$0</strong></div>
@@ -75532,20 +75683,149 @@ window.actualizarGrabCapacityVisibility = function() {
                 execDash.classList.remove('hidden');
                 execDash.classList.add('flex');
                 techWork.classList.add('hidden');
-                btnExec.classList.add('bg-white', 'text-blue-700', 'shadow-sm');
-                btnExec.classList.remove('text-slate-500');
-                btnTech.classList.remove('bg-white', 'text-blue-700', 'shadow-sm');
-                btnTech.classList.add('text-slate-500');
+                if (btnExec && btnTech) {
+                    btnExec.className = 'px-5 py-2 rounded-md text-sm font-bold bg-white text-blue-700 shadow-sm border border-slate-200 transition-all';
+                    btnTech.className = 'px-5 py-2 rounded-md text-sm font-bold text-slate-600 hover:text-slate-900 transition-all';
+                }
             } else {
                 execDash.classList.add('hidden');
                 execDash.classList.remove('flex');
                 techWork.classList.remove('hidden');
-                btnTech.classList.add('bg-white', 'text-blue-700', 'shadow-sm');
-                btnTech.classList.remove('text-slate-500');
-                btnExec.classList.remove('bg-white', 'text-blue-700', 'shadow-sm');
-                btnExec.classList.add('text-slate-500');
+                if (btnExec && btnTech) {
+                    btnTech.className = 'px-5 py-2 rounded-md text-sm font-bold bg-white text-blue-700 shadow-sm border border-slate-200 transition-all';
+                    btnExec.className = 'px-5 py-2 rounded-md text-sm font-bold text-slate-600 hover:text-slate-900 transition-all';
+                }
+            }
+
+            try {
+                window.dispatchEvent(new CustomEvent('calculator-mode-changed', { detail: { mode } }));
+            } catch (_) {}
+            
+            if (typeof window.updateFluvialCalculations === 'function') {
+                window.updateFluvialCalculations();
             }
         };
+
+        window.syncWaterLevelToConvoy = function(val) {
+            const num = parseFloat(val);
+            if (!isNaN(num) && window.activeConvoyData) {
+                window.activeConvoyData.min_water_level = num;
+            }
+        };
+
+        window.updateFluvialCalculations = function() {
+            const convoy = window.activeConvoyData;
+            let totalCapacity = convoy?.totalCapacityMt || 12000;
+            const inputCargoQty = parseFloat(document.getElementById('cargo-qty')?.value);
+            if (!convoy?.totalCapacityMt && !isNaN(inputCargoQty) && inputCargoQty > 0) {
+                totalCapacity = inputCargoQty;
+            }
+
+            const distLaden = parseFloat(document.getElementById('dist-laden')?.value) || 600;
+            const distBallast = parseFloat(document.getElementById('dist-ballast')?.value) || 0;
+            const totalDist = distLaden + distBallast;
+            const sailingSpeed = 8.0;
+            const sailingDays = totalDist > 0 ? (totalDist / (sailingSpeed * 24)) : 4.5;
+
+            const lockWaitDays = parseFloat(document.getElementById('fluvial-lock-wait-days')?.value) || 0;
+            const customsDelayDays = parseFloat(document.getElementById('fluvial-customs-delay-days')?.value) || 0;
+            const delayDays = lockWaitDays + customsDelayDays;
+            const totalDays = Math.max(0.5, sailingDays + delayDays);
+
+            const tugDailyOpex = parseFloat(document.getElementById('fluvial-opex-tugboat')?.value) || 3200;
+            const bargesDailyCapex = parseFloat(document.getElementById('fluvial-capex-barges')?.value) || 2400;
+
+            const tugTotalOpex = tugDailyOpex * totalDays;
+            const bargesTotalCapex = bargesDailyCapex * totalDays;
+
+            const fuelSailingRate = parseFloat(document.getElementById('fluvial-fuel-sailing-rate')?.value) || 6.5;
+            const fuelIdleRate = parseFloat(document.getElementById('fluvial-fuel-idle-rate')?.value) || 0.8;
+            const fuelPrice = parseFloat(document.getElementById('fluvial-fuel-price')?.value) || 780;
+
+            const fuelTons = (fuelSailingRate * sailingDays) + (fuelIdleRate * delayDays);
+            const totalBunkerCost = fuelTons * fuelPrice;
+
+            const pdaLocks = parseFloat(document.getElementById('fluvial-pda-locks')?.value) || 0;
+            const pdaTolls = parseFloat(document.getElementById('fluvial-pda-tolls')?.value) || 0;
+            const pdaPilotage = parseFloat(document.getElementById('fluvial-pda-pilotage')?.value) || 0;
+            const totalPda = pdaLocks + pdaTolls + pdaPilotage;
+
+            const totalConvoyCost = tugTotalOpex + bargesTotalCapex + totalBunkerCost + totalPda;
+
+            const sellingFreight = parseFloat(document.getElementById('freight-sell')?.value) || 35.0;
+            const grossRevenue = sellingFreight * totalCapacity;
+            const netProfit = grossRevenue - totalConvoyCost;
+            const dailyTce = totalDays > 0 ? (grossRevenue - totalBunkerCost - totalPda) / totalDays : 0;
+
+            const costPerTon = totalCapacity > 0 ? (totalConvoyCost / totalCapacity) : 0;
+            const costPerTonMotor = totalCapacity > 0 ? ((tugTotalOpex + totalBunkerCost) / totalCapacity) : 0;
+            const costPerTonBarges = totalCapacity > 0 ? (bargesTotalCapex / totalCapacity) : 0;
+
+            // Bloque 8 outputs
+            const elNetProfitCharterer = document.getElementById('res-net-profit-charterer');
+            if (elNetProfitCharterer) elNetProfitCharterer.textContent = '$' + Math.round(netProfit).toLocaleString() + ' USD';
+
+            const elTceLabel = document.getElementById('res-tce-label');
+            if (elTceLabel) elTceLabel.textContent = 'TCE Fluvial: $' + Math.round(dailyTce).toLocaleString() + ' / día (Total: $' + Math.round(grossRevenue - totalBunkerCost - totalPda).toLocaleString() + ')';
+
+            const elGrossRevenue = document.getElementById('res-owner-gross-revenue');
+            if (elGrossRevenue) elGrossRevenue.textContent = '$' + Math.round(grossRevenue).toLocaleString();
+
+            const elVoyageCosts = document.getElementById('res-owner-voyage-costs');
+            if (elVoyageCosts) elVoyageCosts.textContent = '$' + Math.round(totalConvoyCost).toLocaleString();
+
+            const elFinalNet = document.getElementById('res-owner-final-net');
+            if (elFinalNet) elFinalNet.textContent = '$' + Math.round(netProfit).toLocaleString();
+
+            // Dashboard Ejecutivo
+            const elExecNetProfit = document.getElementById('exec-fluvial-net-profit');
+            if (elExecNetProfit) elExecNetProfit.textContent = '$' + Math.round(netProfit).toLocaleString() + ' USD';
+
+            const elExecCostPerTon = document.getElementById('exec-fluvial-cost-per-ton');
+            if (elExecCostPerTon) elExecCostPerTon.innerHTML = '$' + costPerTon.toFixed(2) + ' <span class="text-xs font-normal text-slate-500">USD/MT</span>';
+
+            const elExecCostMotor = document.getElementById('exec-fluvial-cost-motor');
+            if (elExecCostMotor) elExecCostMotor.textContent = '$' + costPerTonMotor.toFixed(2);
+
+            const elExecCostBarges = document.getElementById('exec-fluvial-cost-barges');
+            if (elExecCostBarges) elExecCostBarges.textContent = '$' + costPerTonBarges.toFixed(2);
+
+            const elExecFluvialTce = document.getElementById('exec-fluvial-tce');
+            if (elExecFluvialTce) elExecFluvialTce.innerHTML = '$' + Math.round(dailyTce).toLocaleString() + ' <span class="text-xs font-normal text-slate-500">/ día</span>';
+
+            const elExecTce = document.getElementById('exec-tce');
+            if (elExecTce) elExecTce.textContent = '$' + Math.round(dailyTce).toLocaleString() + ' / día';
+
+            const elExecSellFreight = document.getElementById('exec-sell-freight');
+            if (elExecSellFreight) elExecSellFreight.textContent = '$' + sellingFreight.toFixed(2) + ' / MT';
+
+            const elExecChartererProfit = document.getElementById('exec-charterer-profit');
+            if (elExecChartererProfit) elExecChartererProfit.textContent = '$' + Math.round(netProfit).toLocaleString() + ' USD';
+
+            const elExecCargoQty = document.getElementById('exec-cargo-qty');
+            if (elExecCargoQty) elExecCargoQty.textContent = Math.round(totalCapacity).toLocaleString() + ' MT';
+        };
+
+        window.applyRiverCharterVisibility = function() {
+            document.querySelectorAll('[data-oceanic="true"]').forEach(el => {
+                el.style.setProperty('display', 'none', 'important');
+                el.classList.add('hidden');
+            });
+        };
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function() {
+                window.applyRiverCharterVisibility();
+                window.updateFluvialCalculations();
+            });
+        } else {
+            window.applyRiverCharterVisibility();
+            window.updateFluvialCalculations();
+        }
+
+        window.addEventListener('rivercharter:convoy-updated', function(e) {
+            window.updateFluvialCalculations();
+        });
     </script>
 
     <!-- ==========================================================================
