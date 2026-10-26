@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import ConvoyBuilder from './components/ConvoyBuilder';
+import './services/fluvialFixtureRecapService';
 
 interface ConvoyBuilderErrorBoundaryState {
   hasError: boolean;
