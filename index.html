@@ -10283,10 +10283,10 @@
             <div class="w-full max-w-6xl mx-auto mb-6 font-sans">
                 <div class="flex justify-end mb-4">
                     <div class="bg-slate-100 p-1 rounded-lg inline-flex items-center border border-slate-200">
-                        <button id="btn-mode-exec" onclick="setCalculatorMode('exec')" class="px-5 py-2 rounded-md text-sm font-bold bg-white text-blue-700 shadow-sm border border-slate-200 transition-all">
+                        <button id="btn-mode-exec" data-testid="btn-exec-view" onclick="setCalculatorMode('exec'); window.dispatchEvent(new CustomEvent('calculator-mode-changed', { detail: { mode: 'exec' } }));" class="btn-exec-view px-5 py-2 rounded-md text-sm font-bold bg-white text-blue-700 shadow-sm border border-slate-200 transition-all">
                             💼 Vista Ejecutiva
                         </button>
-                        <button id="btn-mode-tech" onclick="setCalculatorMode('tech')" class="px-5 py-2 rounded-md text-sm font-bold text-slate-600 hover:text-slate-900 transition-all">
+                        <button id="btn-mode-tech" data-testid="btn-tech-view" onclick="setCalculatorMode('tech'); window.dispatchEvent(new CustomEvent('calculator-mode-changed', { detail: { mode: 'tech' } }));" class="btn-tech-view px-5 py-2 rounded-md text-sm font-bold text-slate-600 hover:text-slate-900 bg-transparent border border-transparent transition-all">
                             ⚙️ Modo Técnico
                         </button>
                     </div>
@@ -75936,39 +75936,95 @@ window.actualizarGrabCapacityVisibility = function() {
 
     <script>
         window.setCalculatorMode = function(mode) {
+            const targetMode = mode === 'tech' ? 'tech' : 'exec';
             const execDash = document.getElementById('executive-dashboard');
             const techWork = document.getElementById('technical-workspace');
-            const btnExec = document.getElementById('btn-mode-exec');
-            const btnTech = document.getElementById('btn-mode-tech');
+            const btnExec = document.getElementById('btn-mode-exec') || document.getElementById('btn-exec-view') || document.querySelector('.btn-exec-view');
+            const btnTech = document.getElementById('btn-mode-tech') || document.getElementById('btn-tech-view') || document.querySelector('.btn-tech-view');
 
-            if (!execDash || !techWork) return;
+            const activeBtnClass = 'px-5 py-2 rounded-md text-sm font-bold bg-white text-blue-700 shadow-sm border border-slate-200 transition-all';
+            const inactiveBtnClass = 'px-5 py-2 rounded-md text-sm font-bold text-slate-600 hover:text-slate-900 bg-transparent border border-transparent transition-all';
 
-            if (mode === 'exec') {
-                execDash.classList.remove('hidden');
-                execDash.classList.add('flex');
-                techWork.classList.add('hidden');
-                if (btnExec && btnTech) {
-                    btnExec.className = 'px-5 py-2 rounded-md text-sm font-bold bg-white text-blue-700 shadow-sm border border-slate-200 transition-all';
-                    btnTech.className = 'px-5 py-2 rounded-md text-sm font-bold text-slate-600 hover:text-slate-900 transition-all';
+            if (targetMode === 'tech') {
+                if (techWork) {
+                    techWork.classList.remove('hidden');
+                }
+                if (execDash) {
+                    execDash.classList.add('hidden');
+                    execDash.classList.remove('flex');
+                }
+                if (btnTech) {
+                    btnTech.className = (btnTech.classList.contains('btn-tech-view') ? 'btn-tech-view ' : '') + activeBtnClass;
+                }
+                if (btnExec) {
+                    btnExec.className = (btnExec.classList.contains('btn-exec-view') ? 'btn-exec-view ' : '') + inactiveBtnClass;
                 }
             } else {
-                execDash.classList.add('hidden');
-                execDash.classList.remove('flex');
-                techWork.classList.remove('hidden');
-                if (btnExec && btnTech) {
-                    btnTech.className = 'px-5 py-2 rounded-md text-sm font-bold bg-white text-blue-700 shadow-sm border border-slate-200 transition-all';
-                    btnExec.className = 'px-5 py-2 rounded-md text-sm font-bold text-slate-600 hover:text-slate-900 transition-all';
+                if (execDash) {
+                    execDash.classList.remove('hidden');
+                    execDash.classList.add('flex');
+                }
+                if (techWork) {
+                    techWork.classList.add('hidden');
+                }
+                if (btnExec) {
+                    btnExec.className = (btnExec.classList.contains('btn-exec-view') ? 'btn-exec-view ' : '') + activeBtnClass;
+                }
+                if (btnTech) {
+                    btnTech.className = (btnTech.classList.contains('btn-tech-view') ? 'btn-tech-view ' : '') + inactiveBtnClass;
                 }
             }
 
             try {
-                window.dispatchEvent(new CustomEvent('calculator-mode-changed', { detail: { mode } }));
+                if (targetMode === 'tech') {
+                    window.dispatchEvent(new CustomEvent('calculator-mode-changed', { detail: { mode: 'tech' } }));
+                } else {
+                    window.dispatchEvent(new CustomEvent('calculator-mode-changed', { detail: { mode: 'exec' } }));
+                }
             } catch (_) {}
             
             if (typeof window.updateFluvialCalculations === 'function') {
-                window.updateFluvialCalculations();
+                try {
+                    window.updateFluvialCalculations();
+                } catch (e) {
+                    console.warn('updateFluvialCalculations warning:', e);
+                }
             }
         };
+
+        // DOM aliasing and listener backup for toggle buttons
+        (function() {
+            if (typeof document !== 'undefined') {
+                const origGetElementById = document.getElementById.bind(document);
+                document.getElementById = function(id) {
+                    let el = origGetElementById(id);
+                    if (!el) {
+                        if (id === 'btn-exec-view') el = origGetElementById('btn-mode-exec');
+                        else if (id === 'btn-tech-view') el = origGetElementById('btn-mode-tech');
+                    }
+                    return el;
+                };
+
+                const bindButtons = function() {
+                    const bExec = document.getElementById('btn-mode-exec') || document.getElementById('btn-exec-view');
+                    const bTech = document.getElementById('btn-mode-tech') || document.getElementById('btn-tech-view');
+                    if (bExec && !bExec._modeBound) {
+                        bExec._modeBound = true;
+                        bExec.addEventListener('click', function() { setCalculatorMode('exec'); });
+                    }
+                    if (bTech && !bTech._modeBound) {
+                        bTech._modeBound = true;
+                        bTech.addEventListener('click', function() { setCalculatorMode('tech'); });
+                    }
+                };
+
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', bindButtons);
+                } else {
+                    bindButtons();
+                }
+            }
+        })();
 
         window.syncWaterLevelToConvoy = function(val) {
             const num = parseFloat(val);
@@ -76363,41 +76419,6 @@ window.actualizarGrabCapacityVisibility = function() {
 
             const elChartererFinalNet = document.getElementById('res-charterer-final-net');
             if (elChartererFinalNet) elChartererFinalNet.textContent = '$' + Math.round(netProfit).toLocaleString();
-
-            // 9. Dashboard Ejecutivo (Kpis superiores)
-            const elExecNetProfit = document.getElementById('exec-fluvial-net-profit');
-            if (elExecNetProfit) elExecNetProfit.textContent = '$' + Math.round(netProfit).toLocaleString() + ' USD';
-
-            const elExecCostPerTon = document.getElementById('exec-fluvial-cost-per-ton');
-            if (elExecCostPerTon) elExecCostPerTon.innerHTML = '$' + costPerTon.toFixed(2) + ' <span class="text-xs font-normal text-slate-500">USD/MT</span>';
-
-            const elExecCostMotor = document.getElementById('exec-fluvial-cost-motor');
-            if (elExecCostMotor) elExecCostMotor.textContent = '$' + costPerTonMotor.toFixed(2);
-
-            const elExecCostBarges = document.getElementById('exec-fluvial-cost-barges');
-            if (elExecCostBarges) elExecCostBarges.textContent = '$' + costPerTonBarges.toFixed(2);
-
-            const elExecFluvialTce = document.getElementById('exec-fluvial-tce');
-            if (elExecFluvialTce) elExecFluvialTce.innerHTML = '$' + Math.round(dailyTce).toLocaleString() + ' <span class="text-xs font-normal text-slate-500">/ día</span>';
-
-            const elExecTce = document.getElementById('exec-tce');
-            if (elExecTce) elExecTce.textContent = '$' + Math.round(dailyTce).toLocaleString() + ' / día';
-
-            const elExecSellFreight = document.getElementById('exec-sell-freight');
-            if (elExecSellFreight) elExecSellFreight.textContent = '$' + sellingFreight.toFixed(2) + ' / MT';
-
-            const elExecChartererProfit = document.getElementById('exec-charterer-profit');
-            if (elExecChartererProfit) elExecChartererProfit.textContent = '$' + Math.round(netProfit).toLocaleString() + ' USD';
-
-            const elExecCargoQty = document.getElementById('exec-cargo-qty');
-            if (elExecCargoQty) {
-                if (isRoro) {
-                    elExecCargoQty.textContent = roroTruckCount + ' camiones (' + roroLinearMeters + ' m)';
-                } else {
-                    elExecCargoQty.textContent = Math.round(totalCapacity).toLocaleString() + ' MT';
-                }
-            }
-        };
 
             // 9. Dashboard Ejecutivo (Kpis superiores)
             const elExecNetProfit = document.getElementById('exec-fluvial-net-profit');
