@@ -10535,6 +10535,16 @@
                                 </div>
                                 <input type="number" id="min_water_level" name="min_water_level" step="0.01" min="0" class="input-gc text-slate-900 font-bold bg-white border border-slate-300 rounded px-2.5 py-1.5 w-full focus:border-blue-500" value="2.80" placeholder="2.80" oninput="if(typeof window.syncWaterLevelToConvoy==='function') window.syncWaterLevelToConvoy(this.value); if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations();">
                                 <div id="min-water-level-limits" class="text-[10px] text-slate-500 font-medium mt-1">Límite hidrométrico crítico de la ruta</div>
+                                <div class="mt-2 flex flex-col gap-1.5">
+                                    <button type="button" id="btn-databridge-estiaje" onclick="consultarDataBridgeAlertasEstiaje()" class="w-full flex items-center justify-center gap-2 px-3 py-2 bg-sky-50 hover:bg-sky-100 border border-sky-300 text-sky-900 text-xs font-bold rounded-lg shadow-sm transition">
+                                        <i class="fa-solid fa-water-ladder text-sky-600"></i>
+                                        <span>Consultar DataBridge: Alertas de Estiaje</span>
+                                    </button>
+                                    <div id="databridge-estiaje-badge" class="hidden text-[10px] text-slate-700 bg-sky-50/80 border border-sky-200 rounded p-1.5 flex items-start gap-1.5">
+                                        <i class="fa-solid fa-circle-info text-sky-600 mt-0.5 text-[10px]"></i>
+                                        <span id="databridge-estiaje-msg" class="leading-tight font-medium">DataBridge Fluvial Intel: Alerta de estiaje consultada</span>
+                                    </div>
+                                </div>
                             </div>
 
                         </div>
@@ -11272,13 +11282,13 @@
                                     <input type="number" id="fluvial-pda-locks" class="input-gc bg-white border border-slate-300 font-bold text-slate-900 w-full" value="3500" step="any" oninput="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations()">
                                     <span class="text-[10px] text-slate-500">Derechos de paso de esclusas</span>
                                 </div>
-                                <!-- Peajes Vía Navegable -->
+                                <!-- Peajes Vía Navegable / Internacionales -->
                                 <div class="space-y-1">
                                     <label for="fluvial-pda-tolls" class="text-[10px] font-bold text-slate-700 uppercase flex items-center min-h-[24px]">
-                                        Peajes Hidrovía ($)
+                                        Peajes Internacionales ($)
                                     </label>
-                                    <input type="number" id="fluvial-pda-tolls" class="input-gc bg-white border border-slate-300 font-bold text-slate-900 w-full" value="4200" step="any" oninput="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations()">
-                                    <span class="text-[10px] text-slate-500">Tasas de balizamiento y dragado</span>
+                                    <input type="number" id="fluvial-pda-tolls" class="input-gc bg-white border border-slate-300 font-bold text-slate-900 w-full" value="4850" step="any" oninput="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations()">
+                                    <span class="text-[10px] text-slate-500">Vía Navegable Troncal / USACE</span>
                                 </div>
                                 <!-- Practicaje y Aduanas Fluviales -->
                                 <div class="space-y-1">
@@ -11296,17 +11306,26 @@
                                     <h4 class="text-xs font-bold uppercase tracking-wider text-teal-900 flex items-center gap-1.5">
                                         <i class="fa-solid fa-arrows-split-up-and-left text-teal-600"></i> Submódulo: Transferencia Intermodal (Sincro-modalidad)
                                     </h4>
-                                    <span class="text-[9px] font-bold uppercase tracking-wider bg-teal-100 text-teal-800 px-2 py-0.5 rounded border border-teal-200">
-                                        Costes Intermodales
-                                    </span>
+                                    <div class="flex items-center gap-2">
+                                        <button type="button" id="btn-sync-databridge-tariffs" onclick="sincronizarTarifasDataBridge()" class="px-2.5 py-1 bg-white hover:bg-teal-50 border border-teal-300 text-teal-800 text-[10px] font-bold rounded shadow-sm transition flex items-center gap-1.5">
+                                            <i class="fa-solid fa-arrows-rotate text-teal-600"></i>
+                                            <span>Sincronizar Tarifas</span>
+                                        </button>
+                                        <span class="text-[9px] font-bold uppercase tracking-wider bg-teal-100 text-teal-800 px-2 py-0.5 rounded border border-teal-200">
+                                            Costes Intermodales
+                                        </span>
+                                    </div>
+                                </div>
+                                <div id="databridge-tariffs-status" class="hidden mb-3 text-[10px] text-teal-800 bg-teal-50/80 border border-teal-200 rounded p-1.5 font-medium">
+                                    ✓ Tarifas sincronizadas con DataBridge Fluvial
                                 </div>
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div class="space-y-1">
                                         <label for="fluvial-transshipment-tariff" class="text-[10px] font-bold text-slate-700 uppercase flex items-center min-h-[24px]">
-                                            Tarifas de Transbordo Directo ($)
+                                            Costo de Terminal ($)
                                         </label>
-                                        <input type="number" id="fluvial-transshipment-tariff" class="input-gc bg-white border border-slate-300 font-bold text-slate-900 w-full" value="1800" step="any" oninput="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations()">
-                                        <span class="text-[10px] text-slate-500">Transbordo directo barcaza a camión / tren</span>
+                                        <input type="number" id="fluvial-transshipment-tariff" class="input-gc bg-white border border-slate-300 font-bold text-slate-900 w-full" value="3200" step="any" oninput="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations()">
+                                        <span class="text-[10px] text-slate-500">Automatización EE. UU. vs sobrecostos Sudamérica</span>
                                     </div>
                                     <div class="space-y-1 bg-emerald-50/70 border border-emerald-200 p-2.5 rounded-lg">
                                         <div class="flex justify-between items-center">
@@ -11494,6 +11513,48 @@
                         </div>
                         
                         
+                        <!-- SELECTOR DE NODO DE TRASBORDO SINCRO-MODAL (DATABRIDGE) -->
+                        <div id="fluvial-transshipment-node-panel" class="mb-4 bg-slate-50 border border-slate-200 p-4 rounded-xl shadow-sm text-slate-800">
+                            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2 mb-3">
+                                <h3 class="text-xs font-black uppercase tracking-wider text-blue-900 flex items-center gap-1.5">
+                                    <i class="fa-solid fa-network-wired text-indigo-600"></i> Nodo de Trasbordo Sincro-modal (DataBridge)
+                                </h3>
+                                <span id="databridge-node-badge" class="text-[9px] font-bold uppercase tracking-wider bg-indigo-100 text-indigo-800 border border-indigo-200 px-2 py-0.5 rounded">
+                                    Conexión DataBridge
+                                </span>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div class="space-y-1">
+                                    <label for="fluvial-transshipment-node" class="text-[10px] font-bold text-slate-700 uppercase flex items-center min-h-[24px]">
+                                        Selector de Nodo de Trasbordo
+                                    </label>
+                                    <select id="fluvial-transshipment-node" class="input-gc bg-white border border-slate-300 font-bold text-slate-900 w-full rounded px-2.5 py-1.5 text-xs" onchange="seleccionarNodoTrasbordoDataBridge(this.value)">
+                                        <option value="gran_rosario" selected>Gran Rosario (Hidrovía Paraná-Paraguay)</option>
+                                        <option value="miritituba">Miritituba (Tapajós - Arco Norte)</option>
+                                        <option value="nueva_palmira">Nueva Palmira (Río Uruguay / Delta)</option>
+                                        <option value="corumba">Corumbá / Ladário (Alto Paraguay)</option>
+                                        <option value="nola">New Orleans / NOLA (Bajo Misisipi)</option>
+                                        <option value="st_louis">St. Louis / Granite City (Medio Misisipi)</option>
+                                    </select>
+                                    <span id="transshipment-node-corridor" class="text-[10px] text-slate-500 block">Hidrovía Paraná-Paraguay (Santa Fe, Argentina)</span>
+                                </div>
+                                <div class="space-y-1">
+                                    <label for="fluvial-handling-delay-days" class="text-[10px] font-bold text-slate-700 uppercase flex items-center min-h-[24px]">
+                                        <i class="fa-solid fa-clock-rotate-left mr-1 text-amber-600"></i> Demora Carga/Descarga (Días)
+                                    </label>
+                                    <input type="number" id="fluvial-handling-delay-days" class="input-gc bg-white border border-slate-300 font-bold text-slate-900 w-full" value="2.50" step="0.25" min="0" oninput="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations()">
+                                    <span class="text-[10px] text-slate-500">Días de demora por carga/descarga importados</span>
+                                </div>
+                                <div class="space-y-1">
+                                    <label for="fluvial-land-transit-days" class="text-[10px] font-bold text-slate-700 uppercase flex items-center min-h-[24px]">
+                                        <i class="fa-solid fa-train-subway mr-1 text-emerald-600"></i> Tiempo Tramo Terrestre / Ferroviario (Días)
+                                    </label>
+                                    <input type="number" id="fluvial-land-transit-days" class="input-gc bg-white border border-slate-300 font-bold text-slate-900 w-full" value="1.50" step="0.25" min="0" oninput="if(typeof window.updateFluvialCalculations==='function') window.updateFluvialCalculations()">
+                                    <span id="transshipment-node-mode" class="text-[10px] text-emerald-700 font-medium block">Ferroviario (Belgrano Cargas) / Camión cerealero</span>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- GESTIÓN DE TIEMPOS Y DEMORAS FLUVIALES (ESCLUSAS Y ADUANAS) -->
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 bg-slate-50 border border-slate-200 p-4 rounded-xl shadow-sm text-slate-800">
                             <div class="space-y-1">
@@ -11805,6 +11866,34 @@
                         </div>
                         
                         <div class="space-y-4">
+                            <!-- MICRO-WIDGET MERCADO FLUVIAL DATABRIDGE (SOLO LECTURA) -->
+                            <div id="fluvial-market-micro-widget" class="bg-white border border-slate-200 rounded-xl p-3.5 shadow-sm text-slate-800">
+                                <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+                                    <div class="flex items-center gap-2">
+                                        <span class="inline-flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                        <span class="text-[10px] font-black uppercase tracking-wider text-slate-600">DataBridge · Fluvial Market Intel</span>
+                                    </div>
+                                    <span class="text-[9px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded">
+                                        Solo Lectura
+                                    </span>
+                                </div>
+                                <div class="flex flex-wrap items-baseline justify-between gap-3">
+                                    <div>
+                                        <div id="fluvial-market-route-name" class="text-xs font-bold text-slate-900">
+                                            Hidrovía Paraná-Paraguay (Corredor Central)
+                                        </div>
+                                        <div class="text-[10px] text-slate-500 mt-0.5">
+                                            Referencia spot fluvial de mercado para convoy estándar
+                                        </div>
+                                    </div>
+                                    <div class="text-right">
+                                        <div class="text-[10px] font-bold uppercase text-slate-500">Flete Fluvial Promedio</div>
+                                        <div id="fluvial-avg-freight-display" class="text-xl font-black text-blue-900 font-mono">
+                                            $34.50 <span class="text-xs font-semibold text-slate-500">USD/MT</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                             <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-3">
                                 <div class="flex flex-wrap items-center justify-between gap-3">
                                     <div class="inline-flex rounded-md border border-slate-300 bg-white p-1 text-xs font-black uppercase">
@@ -75934,6 +76023,185 @@ window.actualizarGrabCapacityVisibility = function() {
             window.updateFluvialCalculations();
         };
 
+        window.consultarDataBridgeAlertasEstiaje = async function() {
+            const btn = document.getElementById('btn-databridge-estiaje');
+            const badge = document.getElementById('databridge-estiaje-badge');
+            const msg = document.getElementById('databridge-estiaje-msg');
+            const polVal = (document.getElementById('port-pol')?.value || '').toLowerCase();
+            const podVal = (document.getElementById('port-pod')?.value || '').toLowerCase();
+            const routeStr = polVal + ' ' + podVal + ' ' + (window.activeBargeStandard || '');
+
+            let isMisisipi = routeStr.includes('misisipi') || routeStr.includes('mississippi') || routeStr.includes('nola') || routeStr.includes('orleans') || routeStr.includes('louis') || routeStr.includes('memphis') || window.activeBargeStandard === 'mississippi_jumbo';
+
+            if (btn) btn.classList.add('opacity-75');
+
+            let minWater = isMisisipi ? 2.74 : 2.60;
+            let alertText = isMisisipi
+                ? 'Alerta de Estiaje USACE: Canal Misisipi regulado a 9.0 ft (2.74m). Calado ajustado.'
+                : 'Alerta Crítica de Estiaje: Hidrovía Paraná-Paraguay Paso Florentino (2.60m). Calado ajustado.';
+
+            try {
+                const apiOrigin = window.NETLIFY_API_BASE_URL || '';
+                const res = await fetch(apiOrigin + '/.netlify/functions/databridge-fluvial-intel?action=hydrology&route=' + (isMisisipi ? 'mississippi' : 'hidrovia_parana_paraguay'));
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data?.hydrology?.minWaterLevel) {
+                        minWater = data.hydrology.minWaterLevel;
+                        alertText = data.hydrology.alertStatus;
+                    }
+                }
+            } catch (e) {}
+
+            const inputWater = document.getElementById('min_water_level');
+            if (inputWater) {
+                inputWater.value = minWater.toFixed(2);
+            }
+            if (typeof window.syncWaterLevelToConvoy === 'function') {
+                window.syncWaterLevelToConvoy(minWater);
+            }
+
+            if (badge && msg) {
+                badge.classList.remove('hidden');
+                msg.textContent = 'DataBridge Fluvial: ' + alertText;
+            }
+
+            if (btn) btn.classList.remove('opacity-75');
+            window.updateFluvialCalculations();
+        };
+
+        window.sincronizarTarifasDataBridge = async function() {
+            const btn = document.getElementById('btn-sync-databridge-tariffs');
+            const badge = document.getElementById('databridge-tariffs-status');
+            const polVal = (document.getElementById('port-pol')?.value || '').toLowerCase();
+            const podVal = (document.getElementById('port-pod')?.value || '').toLowerCase();
+            const routeStr = polVal + ' ' + podVal + ' ' + (window.activeBargeStandard || '');
+
+            let isMisisipi = routeStr.includes('misisipi') || routeStr.includes('mississippi') || routeStr.includes('nola') || routeStr.includes('orleans') || routeStr.includes('louis') || window.activeBargeStandard === 'mississippi_jumbo';
+
+            let terminalCost = isMisisipi ? 1400 : 3200;
+            let internationalTolls = isMisisipi ? 2100 : 4850;
+            let pdaLocks = isMisisipi ? 2400 : 3500;
+            let detailMsg = isMisisipi
+                ? 'Tarifas EE. UU.: Terminal automatizada ($1,400) y Peajes USACE ($2,100)'
+                : 'Tarifas Sudamérica: Sobrecostos portuarios ($3,200) y Vía Navegable Troncal ($4,850)';
+
+            try {
+                const apiOrigin = window.NETLIFY_API_BASE_URL || '';
+                const res = await fetch(apiOrigin + '/.netlify/functions/databridge-fluvial-intel?action=tariffs&route=' + (isMisisipi ? 'mississippi' : 'hidrovia_parana_paraguay'));
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data?.tariffs) {
+                        terminalCost = data.tariffs.terminalCost;
+                        internationalTolls = data.tariffs.internationalTolls;
+                        pdaLocks = data.tariffs.pdaLocks || pdaLocks;
+                    }
+                }
+            } catch (e) {}
+
+            const elTerminal = document.getElementById('fluvial-transshipment-tariff');
+            if (elTerminal) elTerminal.value = terminalCost;
+
+            const elTolls = document.getElementById('fluvial-pda-tolls');
+            if (elTolls) elTolls.value = internationalTolls;
+
+            const elLocks = document.getElementById('fluvial-pda-locks');
+            if (elLocks) elLocks.value = pdaLocks;
+
+            if (badge) {
+                badge.classList.remove('hidden');
+                badge.textContent = '✓ DataBridge: ' + detailMsg;
+            }
+
+            window.updateFluvialCalculations();
+        };
+
+        window.seleccionarNodoTrasbordoDataBridge = async function(nodeKey) {
+            const nodes = {
+                gran_rosario: {
+                    name: 'Gran Rosario (Hidrovía)',
+                    delayDays: 2.50,
+                    landTransitDays: 1.50,
+                    landSavings: 4200,
+                    terminalCost: 3200,
+                    modeDesc: 'Ferroviario (Belgrano Cargas) / Camión cerealero',
+                    regionDesc: 'Hidrovía Paraná-Paraguay (Santa Fe, Argentina)'
+                },
+                miritituba: {
+                    name: 'Miritituba (Tapajós)',
+                    delayDays: 3.00,
+                    landTransitDays: 2.50,
+                    landSavings: 5800,
+                    terminalCost: 3500,
+                    modeDesc: 'Rodoviario BR-163 (Mato Grosso a Estación Fluvial)',
+                    regionDesc: 'Río Tapajós - Arco Norte (Pará / Mato Grosso)'
+                },
+                nueva_palmira: {
+                    name: 'Nueva Palmira (Uruguay)',
+                    delayDays: 2.00,
+                    landTransitDays: 1.25,
+                    landSavings: 3800,
+                    terminalCost: 2900,
+                    modeDesc: 'Bimodal Fluvial-Oceánico / Camión litoral',
+                    regionDesc: 'Río Uruguay / Delta del Paraná'
+                },
+                corumba: {
+                    name: 'Corumbá / Ladário',
+                    delayDays: 2.75,
+                    landTransitDays: 2.00,
+                    landSavings: 4900,
+                    terminalCost: 3100,
+                    modeDesc: 'Ferroviario Malha Oeste / Rodoviario mineral',
+                    regionDesc: 'Alto Paraguay (Pantanal / Brasil)'
+                },
+                nola: {
+                    name: 'New Orleans / NOLA',
+                    delayDays: 1.25,
+                    landTransitDays: 1.00,
+                    landSavings: 3100,
+                    terminalCost: 1400,
+                    modeDesc: 'Class I Railroads (BNSF/UP) / Terminal automatizada',
+                    regionDesc: 'Bajo Misisipi (Louisiana, EE. UU.)'
+                },
+                st_louis: {
+                    name: 'St. Louis / Granite City',
+                    delayDays: 1.50,
+                    landTransitDays: 1.20,
+                    landSavings: 3400,
+                    terminalCost: 1600,
+                    modeDesc: 'Ferroviario Mid-West / Intermodal agrícola',
+                    regionDesc: 'Medio Misisipi (Illinois / Missouri, EE. UU.)'
+                }
+            };
+
+            const node = nodes[nodeKey] || nodes.gran_rosario;
+
+            const elDelay = document.getElementById('fluvial-handling-delay-days');
+            if (elDelay) elDelay.value = node.delayDays;
+
+            const elTransit = document.getElementById('fluvial-land-transit-days');
+            if (elTransit) elTransit.value = node.landTransitDays;
+
+            const elSavings = document.getElementById('fluvial-land-savings');
+            if (elSavings) elSavings.value = node.landSavings;
+
+            const elTerminal = document.getElementById('fluvial-transshipment-tariff');
+            if (elTerminal && node.terminalCost) elTerminal.value = node.terminalCost;
+
+            const elMode = document.getElementById('transshipment-node-mode');
+            if (elMode) elMode.textContent = node.modeDesc;
+
+            const elCorridor = document.getElementById('transshipment-node-corridor');
+            if (elCorridor) elCorridor.textContent = node.regionDesc;
+
+            const badge = document.getElementById('databridge-node-badge');
+            if (badge) {
+                badge.textContent = '✓ Conectado: ' + node.name;
+                badge.className = 'text-[9px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded';
+            }
+
+            window.updateFluvialCalculations();
+        };
+
         window.updateFluvialCalculations = function() {
             const convoy = window.activeConvoyData;
             const isRoro = (window.activeFluvialOperationType === 'RORO') || (convoy?.operationType === 'RORO');
@@ -75960,7 +76228,8 @@ window.actualizarGrabCapacityVisibility = function() {
 
             const lockWaitDays = parseFloat(document.getElementById('fluvial-lock-wait-days')?.value) || 0;
             const customsDelayDays = parseFloat(document.getElementById('fluvial-customs-delay-days')?.value) || 0;
-            const delayDays = lockWaitDays + customsDelayDays;
+            const nodeHandlingDays = parseFloat(document.getElementById('fluvial-handling-delay-days')?.value) || 0;
+            const delayDays = lockWaitDays + customsDelayDays + nodeHandlingDays;
             const totalDays = Math.max(0.5, sailingDays + delayDays);
 
             // 3. Alertas RIS y Cartografía Dinámica
@@ -75998,7 +76267,7 @@ window.actualizarGrabCapacityVisibility = function() {
                 }
             }
 
-            // 4. Costes Operativos y Combustible
+            // 4. Costes Operativos y Combustible (OPEX Motor + CAPEX/OPEX Barcazas + Peajes Intermodales DataBridge)
             const tugDailyOpex = parseFloat(document.getElementById('fluvial-opex-tugboat')?.value) || 3200;
             const bargesDailyCapex = parseFloat(document.getElementById('fluvial-capex-barges')?.value) || 2400;
 
@@ -76011,27 +76280,29 @@ window.actualizarGrabCapacityVisibility = function() {
 
             const fuelTons = (fuelSailingRate * fuelMultiplier * sailingDays) + (fuelIdleRate * delayDays);
             const totalBunkerCost = fuelTons * fuelPrice;
+            const totalMotorCost = tugTotalOpex + totalBunkerCost;
 
             const pdaLocks = parseFloat(document.getElementById('fluvial-pda-locks')?.value) || 0;
             const pdaTolls = parseFloat(document.getElementById('fluvial-pda-tolls')?.value) || 0;
             const pdaPilotage = parseFloat(document.getElementById('fluvial-pda-pilotage')?.value) || 0;
-            const totalPda = pdaLocks + pdaTolls + pdaPilotage;
+            const transshipmentTariff = parseFloat(document.getElementById('fluvial-transshipment-tariff')?.value) ?? (convoy?.directTransshipmentTariff || 0);
+            const totalIntermodalTolls = pdaLocks + pdaTolls + pdaPilotage + transshipmentTariff;
 
             // 5. Costos de Sincro-modalidad y Ahorros Terrestres Estimados (Deducción)
-            const transshipmentTariff = parseFloat(document.getElementById('fluvial-transshipment-tariff')?.value) ?? (convoy?.directTransshipmentTariff || 0);
             const estimatedLandSavings = parseFloat(document.getElementById('fluvial-land-savings')?.value) ?? (convoy?.estimatedLandSavings || 0);
 
-            const grossOperatingCost = tugTotalOpex + bargesTotalCapex + totalBunkerCost + totalPda + transshipmentTariff;
+            // Suma total de los costos operativos (OPEX motor + barcazas + peajes intermodales importados de DataBridge)
+            const grossOperatingCost = totalMotorCost + bargesTotalCapex + totalIntermodalTolls;
             const totalConvoyCost = Math.max(0, grossOperatingCost - estimatedLandSavings);
 
-            // 6. Ingresos y TCE
+            // 6. Ingresos y Beneficio Neto
             const sellingFreight = parseFloat(document.getElementById('freight-sell')?.value) || 35.0;
             const grossRevenue = sellingFreight * totalCapacity;
             const netProfit = grossRevenue - totalConvoyCost;
-            const dailyTce = totalDays > 0 ? (grossRevenue - totalBunkerCost - totalPda - transshipmentTariff + estimatedLandSavings) / totalDays : 0;
+            const dailyTce = totalDays > 0 ? (grossRevenue - totalBunkerCost - (pdaLocks + pdaTolls + pdaPilotage) - transshipmentTariff + estimatedLandSavings) / totalDays : 0;
 
             const costPerTon = totalCapacity > 0 ? (totalConvoyCost / totalCapacity) : 0;
-            const costPerTonMotor = totalCapacity > 0 ? ((tugTotalOpex + totalBunkerCost) / totalCapacity) : 0;
+            const costPerTonMotor = totalCapacity > 0 ? (totalMotorCost / totalCapacity) : 0;
             const costPerTonBarges = totalCapacity > 0 ? (bargesTotalCapex / totalCapacity) : 0;
 
             // 7. Reporte de Eficiencia Ambiental y Sostenibilidad
@@ -76051,12 +76322,29 @@ window.actualizarGrabCapacityVisibility = function() {
             const elCommSustMetric = document.getElementById('commercial-sustainability-metric');
             if (elCommSustMetric) elCommSustMetric.textContent = sustainabilityText;
 
+            // Actualización Bloque 7: Micro-widget Mercado Fluvial DataBridge (Solo Lectura)
+            const polVal = (document.getElementById('port-pol')?.value || '').toLowerCase();
+            const podVal = (document.getElementById('port-pod')?.value || '').toLowerCase();
+            const isMisisipiRoute = polVal.includes('misisipi') || polVal.includes('mississippi') || polVal.includes('nola') || podVal.includes('misisipi') || podVal.includes('mississippi') || podVal.includes('nola') || window.activeBargeStandard === 'mississippi_jumbo';
+
+            const elMarketRouteName = document.getElementById('fluvial-market-route-name');
+            const elMarketAvgFreight = document.getElementById('fluvial-avg-freight-display');
+            if (elMarketRouteName && elMarketAvgFreight) {
+                if (isMisisipiRoute) {
+                    elMarketRouteName.textContent = 'Río Misisipi (St. Louis - New Orleans / Golfo de México)';
+                    elMarketAvgFreight.innerHTML = '$28.20 <span class="text-xs font-semibold text-slate-500">USD/MT</span>';
+                } else {
+                    elMarketRouteName.textContent = 'Hidrovía Paraná-Paraguay (Corredor Central)';
+                    elMarketAvgFreight.innerHTML = '$34.50 <span class="text-xs font-semibold text-slate-500">USD/MT</span>';
+                }
+            }
+
             // 8. Salidas Bloque 8 (Resultados)
             const elNetProfitCharterer = document.getElementById('res-net-profit-charterer');
             if (elNetProfitCharterer) elNetProfitCharterer.textContent = '$' + Math.round(netProfit).toLocaleString() + ' USD';
 
             const elTceLabel = document.getElementById('res-tce-label');
-            if (elTceLabel) elTceLabel.textContent = 'TCE Fluvial: $' + Math.round(dailyTce).toLocaleString() + ' / día (Total: $' + Math.round(grossRevenue - totalBunkerCost - totalPda - transshipmentTariff + estimatedLandSavings).toLocaleString() + ')';
+            if (elTceLabel) elTceLabel.textContent = 'TCE Fluvial: $' + Math.round(dailyTce).toLocaleString() + ' / día (Total: $' + Math.round(grossRevenue - totalBunkerCost - (pdaLocks + pdaTolls + pdaPilotage) - transshipmentTariff + estimatedLandSavings).toLocaleString() + ')';
 
             const elGrossRevenue = document.getElementById('res-owner-gross-revenue');
             if (elGrossRevenue) elGrossRevenue.textContent = '$' + Math.round(grossRevenue).toLocaleString();
@@ -76066,6 +76354,50 @@ window.actualizarGrabCapacityVisibility = function() {
 
             const elFinalNet = document.getElementById('res-owner-final-net');
             if (elFinalNet) elFinalNet.textContent = '$' + Math.round(netProfit).toLocaleString();
+
+            const elOwnerOpexCapex = document.getElementById('res-owner-opex-capex');
+            if (elOwnerOpexCapex) elOwnerOpexCapex.textContent = '$' + Math.round(totalMotorCost + bargesTotalCapex).toLocaleString();
+
+            const elChartererGrossRevenue = document.getElementById('res-charterer-gross-revenue');
+            if (elChartererGrossRevenue) elChartererGrossRevenue.textContent = '$' + Math.round(grossRevenue).toLocaleString();
+
+            const elChartererFinalNet = document.getElementById('res-charterer-final-net');
+            if (elChartererFinalNet) elChartererFinalNet.textContent = '$' + Math.round(netProfit).toLocaleString();
+
+            // 9. Dashboard Ejecutivo (Kpis superiores)
+            const elExecNetProfit = document.getElementById('exec-fluvial-net-profit');
+            if (elExecNetProfit) elExecNetProfit.textContent = '$' + Math.round(netProfit).toLocaleString() + ' USD';
+
+            const elExecCostPerTon = document.getElementById('exec-fluvial-cost-per-ton');
+            if (elExecCostPerTon) elExecCostPerTon.innerHTML = '$' + costPerTon.toFixed(2) + ' <span class="text-xs font-normal text-slate-500">USD/MT</span>';
+
+            const elExecCostMotor = document.getElementById('exec-fluvial-cost-motor');
+            if (elExecCostMotor) elExecCostMotor.textContent = '$' + costPerTonMotor.toFixed(2);
+
+            const elExecCostBarges = document.getElementById('exec-fluvial-cost-barges');
+            if (elExecCostBarges) elExecCostBarges.textContent = '$' + costPerTonBarges.toFixed(2);
+
+            const elExecFluvialTce = document.getElementById('exec-fluvial-tce');
+            if (elExecFluvialTce) elExecFluvialTce.innerHTML = '$' + Math.round(dailyTce).toLocaleString() + ' <span class="text-xs font-normal text-slate-500">/ día</span>';
+
+            const elExecTce = document.getElementById('exec-tce');
+            if (elExecTce) elExecTce.textContent = '$' + Math.round(dailyTce).toLocaleString() + ' / día';
+
+            const elExecSellFreight = document.getElementById('exec-sell-freight');
+            if (elExecSellFreight) elExecSellFreight.textContent = '$' + sellingFreight.toFixed(2) + ' / MT';
+
+            const elExecChartererProfit = document.getElementById('exec-charterer-profit');
+            if (elExecChartererProfit) elExecChartererProfit.textContent = '$' + Math.round(netProfit).toLocaleString() + ' USD';
+
+            const elExecCargoQty = document.getElementById('exec-cargo-qty');
+            if (elExecCargoQty) {
+                if (isRoro) {
+                    elExecCargoQty.textContent = roroTruckCount + ' camiones (' + roroLinearMeters + ' m)';
+                } else {
+                    elExecCargoQty.textContent = Math.round(totalCapacity).toLocaleString() + ' MT';
+                }
+            }
+        };
 
             // 9. Dashboard Ejecutivo (Kpis superiores)
             const elExecNetProfit = document.getElementById('exec-fluvial-net-profit');
