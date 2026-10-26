@@ -1,13 +1,16 @@
 import type { Config, Context } from "@netlify/functions";
 import { netlifyDb } from "../../db/netlify.js";
 import { riverVoyages, voyageBarges, tugboats, barges } from "../../db/schema.js";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
+import { validateConvoyDynamicDraft, type FluvialBargeDraftInfo } from "./_shared/draft-validation.js";
 
 interface SaveVoyageBody {
   tugboat_id?: number | string;
   tugboatId?: number | string;
   barge_ids?: Array<number | string>;
   bargeIds?: Array<number | string>;
+  barges?: Array<FluvialBargeDraftInfo>;
+  barge_details?: Array<FluvialBargeDraftInfo>;
   voyage_number?: string;
   voyageNumber?: string;
   river_name?: string;
@@ -21,6 +24,9 @@ interface SaveVoyageBody {
   current_water_level?: number | string;
   departure_date?: string;
   estimated_arrival_date?: string;
+  max_dynamic_draft?: number | string;
+  waiting_hours?: number;
+  demurrage_cost?: number;
   metadata?: Record<string, unknown>;
 }
 
@@ -82,6 +88,77 @@ export default async (request: Request, context: Context) => {
       const destination = String(body.destination_terminal || body.destinationTerminal || "Terminal Nueva Palmira").trim();
       const minWater = String(body.min_water_level ?? body.minWaterLevel ?? 2.6);
 
+      // Recopilar información de barcazas para el Validador de Calado Dinámico (Draft Constraint)
+      let convoyBarges: FluvialBargeDraftInfo[] = [];
+
+      if (Array.isArray(body.barges) && body.barges.length > 0) {
+        convoyBarges = [...body.barges];
+      } else if (Array.isArray(body.barge_details) && body.barge_details.length > 0) {
+        convoyBarges = [...body.barge_details];
+      }
+
+      // Si tenemos IDs de barcazas, consultar la base de datos para obtener calados y capacidades reales
+      if (bargeIdsNum.length > 0) {
+        try {
+          const dbBarges = await netlifyDb
+            .select()
+            .from(barges)
+            .where(inArray(barges.id, bargeIdsNum));
+
+          for (const dbBarge of dbBarges) {
+            if (!convoyBarges.some((cb) => Number(cb.id) === dbBarge.id)) {
+              convoyBarges.push({
+                id: dbBarge.id,
+                name: dbBarge.name,
+                capacity: Number(dbBarge.capacity) || 0,
+                dynamicDraft: Number(dbBarge.dynamicDraft) || 0,
+              });
+            }
+          }
+        } catch (dbErr) {
+          console.warn("[river-voyages] No se pudieron consultar barcazas de DB:", dbErr);
+        }
+      }
+
+      // Soporte complementario para barcazas en metadata o calado dinámico explícito
+      if (convoyBarges.length === 0 && Array.isArray(body.metadata?.barges)) {
+        convoyBarges = body.metadata.barges as FluvialBargeDraftInfo[];
+      }
+      if (convoyBarges.length === 0 && (body.metadata?.maxDynamicDraft != null || body.max_dynamic_draft != null)) {
+        const explicitDraft = Number(body.metadata?.maxDynamicDraft ?? body.max_dynamic_draft);
+        convoyBarges.push({
+          id: 0,
+          name: "Barcaza Principal del Convoy",
+          capacity: Number(body.metadata?.totalCapacityMt) || 1500,
+          dynamicDraft: explicitDraft,
+        });
+      }
+
+      // Validador de Calado Dinámico (Draft Constraint):
+      // Antes de guardar un convoy, compara el dynamic_draft de la barcaza más pesada contra el min_water_level de la ruta.
+      const draftValidation = validateConvoyDynamicDraft({
+        barges: convoyBarges,
+        minWaterLevel: Number(minWater),
+        riverName: river,
+      });
+
+      if (draftValidation.isBlocked) {
+        return Response.json(
+          {
+            success: false,
+            error: draftValidation.error,
+            message: draftValidation.message,
+            code: "DRAFT_LIMIT_EXCEEDED",
+            blocking: true,
+            max_dynamic_draft: draftValidation.maxDynamicDraft,
+            min_water_level: draftValidation.minWaterLevel,
+            margin_meters: draftValidation.marginMeters,
+            heaviest_barge: draftValidation.heaviestBarge,
+          },
+          { status: 400, headers }
+        );
+      }
+
       // Upsert o inserción de riverVoyages
       const insertedVoyages = await netlifyDb
         .insert(riverVoyages)
@@ -133,6 +210,7 @@ export default async (request: Request, context: Context) => {
           voyage: voyageRecord || { voyageNumber: voyageNum, tugboatId: tugboatIdNum },
           tugboat_id: tugboatIdNum,
           barge_ids: bargeIdsNum,
+          draft_validation: draftValidation,
         },
         { status: 201, headers }
       );

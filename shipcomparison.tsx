@@ -311,6 +311,16 @@ export function ShipComparison() {
       return;
     }
 
+    // Validador de Calado Dinámico (Draft Constraint):
+    // Compara el dynamic_draft del convoy contra el min_water_level de la ruta antes de guardar.
+    if (maxDynamicDraft > Number(minWaterLevel)) {
+      showNotification(
+        'error',
+        `Restricción Crítica de Calado Dinámico (Draft Constraint): El calado dinámico (${maxDynamicDraft.toFixed(2)} m) supera el nivel mínimo de estiaje (${Number(minWaterLevel).toFixed(2)} m) en ${riverName}. Guardado bloqueado por seguridad fluvial.`
+      );
+      return;
+    }
+
     setIsLoading(true);
 
     // Payload requerido por la especificación de Fase 2
@@ -482,6 +492,25 @@ export function ShipComparison() {
           </button>
         </div>
       </div>
+
+      {/* ALERTA CRÍTICA: RESTRICCIÓN DE CALADO DINÁMICO (DRAFT CONSTRAINT) */}
+      {maxDynamicDraft > Number(minWaterLevel) && (
+        <div
+          role="alert"
+          className="p-4 rounded-xl border-2 border-rose-500 bg-rose-950/90 text-rose-200 shadow-2xl flex items-start gap-3.5 animate-pulse"
+        >
+          <span className="text-2xl shrink-0">🚨</span>
+          <div className="space-y-1">
+            <h4 className="font-black text-rose-400 text-xs sm:text-sm uppercase tracking-wider">
+              ALERTA CRÍTICA: Restricción de Calado Dinámico (Draft Constraint)
+            </h4>
+            <p className="text-xs text-rose-200">
+              El calado dinámico del convoy (<b>{maxDynamicDraft.toFixed(2)} m</b>) supera el nivel mínimo de estiaje disponible (<b>{Number(minWaterLevel).toFixed(2)} m</b>) en <b>{riverName}</b>.
+              Operación fluvial bloqueada por riesgo inminente de varadura.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Notificación de feedback */}
       {message && (

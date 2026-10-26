@@ -113,3 +113,119 @@ export function validatePortDraft(input: {
     riskAccepted,
   };
 }
+
+// ============================================================================
+// RIVERCHARTER - DRAFT CONSTRAINT VALIDATOR FOR FLUVIAL CONVOYS
+// ============================================================================
+
+export interface FluvialBargeDraftInfo {
+  id?: number | string;
+  name?: string;
+  capacity?: number;
+  dynamicDraft?: number;
+  dynamic_draft?: number;
+  weightTons?: number;
+}
+
+export interface FluvialDraftValidationResult {
+  isValid: boolean;
+  isBlocked: boolean;
+  error?: string;
+  message: string;
+  heaviestBarge?: {
+    id?: number | string;
+    name: string;
+    capacity: number;
+    dynamicDraft: number;
+  };
+  maxDynamicDraft: number;
+  minWaterLevel: number;
+  marginMeters: number;
+}
+
+/**
+ * Validador de Calado Dinámico (Draft Constraint) para convoyes fluviales.
+ * Compara el calado dinámico de la barcaza más pesada (o con mayor calado)
+ * del convoy contra el min_water_level (estiaje de la ruta).
+ * Si el calado supera el nivel de agua disponible, genera un resultado bloqueante.
+ */
+export function validateConvoyDynamicDraft(input: {
+  barges: FluvialBargeDraftInfo[];
+  minWaterLevel: number;
+  riverName?: string;
+}): FluvialDraftValidationResult {
+  const { barges, minWaterLevel, riverName } = input;
+  const safeMinWater = Number(minWaterLevel) || 0;
+
+  if (!barges || barges.length === 0) {
+    return {
+      isValid: true,
+      isBlocked: false,
+      message: "Sin barcazas acopladas para validar calado dinámico.",
+      maxDynamicDraft: 0,
+      minWaterLevel: safeMinWater,
+      marginMeters: safeMinWater,
+    };
+  }
+
+  // Identificar la barcaza más pesada (por capacidad/peso) y la barcaza con calado dinámico máximo
+  let maxDraft = 0;
+  let heaviestBargeItem: FluvialBargeDraftInfo = barges[0];
+  let maxCapacity = -1;
+
+  for (const b of barges) {
+    const draft = Number(b.dynamicDraft ?? b.dynamic_draft ?? 0);
+    const capacity = Number(b.capacity ?? b.weightTons ?? 0);
+
+    if (draft > maxDraft) {
+      maxDraft = draft;
+    }
+    if (capacity > maxCapacity) {
+      maxCapacity = capacity;
+      heaviestBargeItem = b;
+    }
+  }
+
+  const heaviestDraft = Number(heaviestBargeItem.dynamicDraft ?? heaviestBargeItem.dynamic_draft ?? 0);
+  // El calado crítico a evaluar es el mayor calado del convoy (o el de la barcaza más pesada)
+  const criticalDraft = Math.max(maxDraft, heaviestDraft);
+  const marginMeters = Number((safeMinWater - criticalDraft).toFixed(2));
+  const isBlocked = criticalDraft > safeMinWater;
+  const bargeName = heaviestBargeItem.name || `Barcaza #${heaviestBargeItem.id || 'N/D'}`;
+  const corridorText = riverName ? ` en la ruta "${riverName}"` : "";
+
+  if (isBlocked) {
+    const errorMsg = `Restricción Crítica de Calado Dinámico (Draft Constraint): El calado dinámico (${criticalDraft.toFixed(2)} m) de la barcaza más pesada (${bargeName}) supera el nivel mínimo de estiaje disponible (${safeMinWater.toFixed(2)} m)${corridorText}. Operación fluvial bloqueada por riesgo inminente de varadura.`;
+    return {
+      isValid: false,
+      isBlocked: true,
+      error: errorMsg,
+      message: errorMsg,
+      heaviestBarge: {
+        id: heaviestBargeItem.id,
+        name: bargeName,
+        capacity: maxCapacity > 0 ? maxCapacity : Number(heaviestBargeItem.capacity || 0),
+        dynamicDraft: criticalDraft,
+      },
+      maxDynamicDraft: criticalDraft,
+      minWaterLevel: safeMinWater,
+      marginMeters,
+    };
+  }
+
+  const successMsg = `Calado Aprobado: El calado dinámico (${criticalDraft.toFixed(2)} m) de la barcaza ${bargeName} es seguro para el nivel de estiaje (${safeMinWater.toFixed(2)} m)${corridorText}. Margen de seguridad bajo quilla: ${marginMeters.toFixed(2)} m.`;
+  return {
+    isValid: true,
+    isBlocked: false,
+    message: successMsg,
+    heaviestBarge: {
+      id: heaviestBargeItem.id,
+      name: bargeName,
+      capacity: maxCapacity > 0 ? maxCapacity : Number(heaviestBargeItem.capacity || 0),
+      dynamicDraft: criticalDraft,
+    },
+    maxDynamicDraft: criticalDraft,
+    minWaterLevel: safeMinWater,
+    marginMeters,
+  };
+}
