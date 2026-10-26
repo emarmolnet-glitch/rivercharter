@@ -135,7 +135,7 @@ test('3. Integración Financiera (updateFluvialCalculations): Terminal Cost a Pe
     'netProfit debe descontar el costo total consolidado'
   );
   assert.ok(
-    indexHtml.includes('dailyTce = totalDays > 0 ? (grossRevenue - totalBunkerCost - (pdaLocks + pdaTolls + pdaPilotage) - transshipmentTariff + estimatedLandSavings) / totalDays : 0'),
+    indexHtml.includes('dailyTce = totalDays > 0 ? (grossRevenue - totalBunkerCost - (pdaLocks + pdaTolls + pdaPilotage) - transshipmentTariff) / totalDays : 0'),
     'dailyTce debe deducir la tarifa de trasbordo y prorratear entre totalDays'
   );
 });

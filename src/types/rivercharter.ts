@@ -214,6 +214,10 @@ export interface FluvialDelays {
   customsDelayDays: number; // Demoras aduaneras (días)
   totalDelayDays: number; // Total días extra (esclusas + aduanas)
   totalOperationalDays: number; // Días totales de la operación
+  riverCurrentKnots?: number; // Corriente media del río
+  vConvoyWaterKnots?: number; // Velocidad del convoy en agua calma
+  speedDownstreamKnots?: number; // SOG bajada
+  speedUpstreamKnots?: number; // SOG subida
 }
 
 /**
@@ -234,10 +238,11 @@ export interface FluvialExecutiveMetrics {
   truckEquivalent?: number; // Equivalencia en camiones terrestres evitados
   co2ReductionPercent?: number; // Porcentaje de reducción de emisiones CO2 (%)
   co2SavedTons?: number; // Toneladas de CO2 evitadas
-  intermodalSavings?: number; // Ahorros terrestres estimados descontados ($)
+  intermodalSavings?: number; // Ahorros terrestres estimados para el cliente ($)
   operationType?: OperationType;
   linearMeters?: number;
   truckCount?: number;
+  bidirectionalSailing?: unknown;
 }
 
 /**

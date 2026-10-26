@@ -12,6 +12,75 @@ export const DEFAULT_BUNKER_PRICE_USD_TON = 680;
 export const DEFAULT_BARGE_DAILY_RATE_USD = 250;
 export const DEFAULT_IDLE_FUEL_TONS_PER_HOUR = 0.05;
 export const DEFAULT_NAVIGATION_DAYS = 7;
+export const DEFAULT_CONVOY_SPEED_WATER_KNOTS = 8.0; // Velocidad del convoy en agua (STW - Speed Through Water)
+export const DEFAULT_RIVER_CURRENT_KNOTS = 2.5; // Corriente media del río (Misisipi / Paraná)
+
+export interface BidirectionalSailingCalculationParams {
+  distLadenNm?: number; // Distancia navegando con carga (NM)
+  distBallastNm?: number; // Distancia navegando en lastre / vacío (NM)
+  convoySpeedWaterKnots?: number; // Velocidad del convoy en agua calma (v_convoy, ej. 8.0 nudos)
+  riverCurrentKnots?: number; // Velocidad de la corriente del río (ej. 2.5 nudos)
+  ladenDirection?: 'DOWNSTREAM' | 'UPSTREAM'; // Sentido con carga ('DOWNSTREAM' por defecto)
+  ballastDirection?: 'DOWNSTREAM' | 'UPSTREAM'; // Sentido en lastre ('UPSTREAM' por defecto)
+}
+
+export interface BidirectionalSailingResult {
+  vConvoy: number;
+  riverCurrentKnots: number;
+  speedDownstreamKnots: number; // Velocidad de bajada (Downstream): v_convoy + riverCurrentKnots
+  speedUpstreamKnots: number; // Velocidad de subida (Upstream): v_convoy - riverCurrentKnots
+  speedLadenKnots: number;
+  speedBallastKnots: number;
+  sailingDaysLaden: number;
+  sailingDaysBallast: number;
+  totalNavigationDays: number;
+  ladenDirection: 'DOWNSTREAM' | 'UPSTREAM';
+  ballastDirection: 'DOWNSTREAM' | 'UPSTREAM';
+  formula: string;
+}
+
+/**
+ * Calcula la velocidad sobre fondo (SOG) y los días de navegación bidireccionales
+ * según el sentido de la corriente del río.
+ */
+export function calculateBidirectionalSailing(params: BidirectionalSailingCalculationParams): BidirectionalSailingResult {
+  const vConvoy = Math.max(1.0, Number(params.convoySpeedWaterKnots) || DEFAULT_CONVOY_SPEED_WATER_KNOTS);
+  const riverCurrentKnots = Math.max(0, Number(params.riverCurrentKnots !== undefined ? params.riverCurrentKnots : DEFAULT_RIVER_CURRENT_KNOTS));
+
+  // Velocidades SOG diferenciadas
+  const speedDownstreamKnots = Number((vConvoy + riverCurrentKnots).toFixed(2));
+  const speedUpstreamKnots = Number(Math.max(1.0, vConvoy - riverCurrentKnots).toFixed(2));
+
+  const ladenDirection = params.ladenDirection || 'DOWNSTREAM';
+  const ballastDirection = params.ballastDirection || (ladenDirection === 'DOWNSTREAM' ? 'UPSTREAM' : 'DOWNSTREAM');
+
+  const speedLadenKnots = ladenDirection === 'DOWNSTREAM' ? speedDownstreamKnots : speedUpstreamKnots;
+  const speedBallastKnots = ballastDirection === 'DOWNSTREAM' ? speedDownstreamKnots : speedUpstreamKnots;
+
+  const distLaden = Math.max(0, Number(params.distLadenNm) || 0);
+  const distBallast = Math.max(0, Number(params.distBallastNm) || 0);
+
+  const sailingDaysLaden = distLaden > 0 ? Number((distLaden / (speedLadenKnots * 24)).toFixed(2)) : 0;
+  const sailingDaysBallast = distBallast > 0 ? Number((distBallast / (speedBallastKnots * 24)).toFixed(2)) : 0;
+  const totalNavigationDays = Number((sailingDaysLaden + sailingDaysBallast).toFixed(2));
+
+  const formula = `Bajada (Downstream ${speedDownstreamKnots} kn): ${sailingDaysLaden} d (${distLaden} NM) | Subida (Upstream ${speedUpstreamKnots} kn): ${sailingDaysBallast} d (${distBallast} NM) = ${totalNavigationDays} días navegación`;
+
+  return {
+    vConvoy,
+    riverCurrentKnots,
+    speedDownstreamKnots,
+    speedUpstreamKnots,
+    speedLadenKnots,
+    speedBallastKnots,
+    sailingDaysLaden,
+    sailingDaysBallast,
+    totalNavigationDays,
+    ladenDirection,
+    ballastDirection,
+    formula,
+  };
+}
 
 export interface MotorCostParams {
   navigationDays: number;
@@ -163,6 +232,7 @@ export interface FluvialExecutiveMetrics {
   sustainability?: FluvialSustainabilityMetrics;
   intermodal?: IntermodalTransferBreakdown;
   risGroundingRisk?: 'SAFE' | 'WARNING' | 'CRITICAL';
+  bidirectionalSailing?: BidirectionalSailingResult;
 }
 
 export interface FluvialVoyageEstimateParams {
@@ -170,14 +240,22 @@ export interface FluvialVoyageEstimateParams {
     id?: number | string;
     name?: string;
     motor?: string;
-    dailyOpex: number;
+    dailyOpex?: number;
+    dailyOpexUsd?: number;
     enginePowerHp?: number | null;
   };
-  navigationDays: number;
+  navigationDays?: number;
+  distLadenNm?: number; // Distancia con carga (NM)
+  distBallastNm?: number; // Distancia en lastre (NM)
+  convoySpeedWaterKnots?: number; // Velocidad del convoy en agua calma (v_convoy, ej. 8.0 nudos)
+  riverCurrentKnots?: number; // Velocidad corriente del río (ej. 2.5 nudos)
+  ladenDirection?: 'DOWNSTREAM' | 'UPSTREAM'; // Dirección con carga ('DOWNSTREAM' por defecto)
+  ballastDirection?: 'DOWNSTREAM' | 'UPSTREAM'; // Dirección en lastre ('UPSTREAM' por defecto)
   fuelConsumptionTonsPerDay?: number;
   sailingFuelTonsPerDay?: number;
   idleFuelTonsPerDay?: number;
   fuelPricePerTon?: number;
+  bunkerPriceUsdPerTon?: number;
   barges: CargoBargeInput[];
   defaultCouplingDays?: number;
   defaultDailyRatePerBarge?: number;
@@ -195,7 +273,7 @@ export interface FluvialVoyageEstimateParams {
   totalLinearMeters?: number;
   totalTruckCount?: number;
   directTransshipmentTariff?: number; // Tarifa transbordo directo
-  estimatedLandSavings?: number; // Ahorros Terrestres Estimados (deducción)
+  estimatedLandSavings?: number; // Ahorros Terrestres Estimados (argumento comercial para el cliente, NUNCA deducible de OPEX)
   risAlerts?: RisAlertsParams;
   risSandbarsActive?: boolean;
   risStrongCurrentsActive?: boolean;
@@ -489,13 +567,20 @@ export function calculateDemurrageCost(params: DemurrageCostParams): DemurrageCo
 export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): FluvialEstimateResult {
   const {
     tugboat,
-    navigationDays,
+    navigationDays: explicitNavigationDays,
+    distLadenNm,
+    distBallastNm,
+    convoySpeedWaterKnots,
+    riverCurrentKnots,
+    ladenDirection = 'DOWNSTREAM',
+    ballastDirection = 'UPSTREAM',
     fuelConsumptionTonsPerDay,
     sailingFuelTonsPerDay,
     idleFuelTonsPerDay,
-    fuelPricePerTon = DEFAULT_BUNKER_PRICE_USD_TON,
+    fuelPricePerTon,
+    bunkerPriceUsdPerTon,
     barges,
-    defaultCouplingDays = navigationDays,
+    defaultCouplingDays,
     defaultDailyRatePerBarge = DEFAULT_BARGE_DAILY_RATE_USD,
     waitingHours = 0,
     lockWaitHours,
@@ -518,6 +603,35 @@ export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): Fluv
     minWaterLevel = 2.8,
   } = params;
 
+  // 0. Navegación Bidireccional (Vector de Corriente del Río)
+  const resolvedDistLaden = Number(distLadenNm) || 0;
+  const resolvedDistBallast = Number(distBallastNm) || 0;
+  let bidirectionalSailing: BidirectionalSailingResult | undefined;
+
+  let effectiveNavigationDays = Number(explicitNavigationDays) || 0;
+
+  if (resolvedDistLaden > 0 || resolvedDistBallast > 0 || convoySpeedWaterKnots !== undefined || riverCurrentKnots !== undefined) {
+    bidirectionalSailing = calculateBidirectionalSailing({
+      distLadenNm: resolvedDistLaden,
+      distBallastNm: resolvedDistBallast,
+      convoySpeedWaterKnots,
+      riverCurrentKnots,
+      ladenDirection,
+      ballastDirection,
+    });
+
+    if (bidirectionalSailing.totalNavigationDays > 0) {
+      effectiveNavigationDays = bidirectionalSailing.totalNavigationDays;
+    }
+  }
+
+  if (effectiveNavigationDays <= 0) {
+    effectiveNavigationDays = DEFAULT_NAVIGATION_DAYS;
+  }
+
+  const tugDailyOpex = Number(tugboat.dailyOpex ?? (tugboat as any).dailyOpexUsd) || 0;
+  const resolvedFuelPrice = Number(fuelPricePerTon ?? bunkerPriceUsdPerTon ?? DEFAULT_BUNKER_PRICE_USD_TON);
+
   // Ajustes de Alertas RIS (Servicios de Información Fluvial)
   const isSandbarsActive = Boolean(risAlerts?.sandbarsActive ?? risSandbarsActive);
   const isStrongCurrentsActive = Boolean(risAlerts?.strongCurrents ?? risStrongCurrentsActive);
@@ -531,7 +645,7 @@ export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): Fluv
     ? (maxBargeDraft >= (minWaterLevel - 0.4) ? 'CRITICAL' : 'WARNING')
     : (maxBargeDraft > minWaterLevel ? 'CRITICAL' : 'SAFE');
 
-  // 1. Vector Motor (Consumo Navegando / Empujando la carga ajustado por corrientes RIS)
+  // 1. Vector Motor (Consumo Navegando / Empujando la carga ajustado por corrientes RIS y días calculados)
   const baseSailingConsumption = sailingFuelTonsPerDay !== undefined
     ? sailingFuelTonsPerDay
     : (fuelConsumptionTonsPerDay !== undefined
@@ -540,17 +654,17 @@ export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): Fluv
   const effectiveSailingConsumption = Number((baseSailingConsumption * currentMultiplier).toFixed(2));
 
   const motorCost = calculateMotorCost({
-    navigationDays,
-    dailyOpex: tugboat.dailyOpex,
+    navigationDays: effectiveNavigationDays,
+    dailyOpex: tugDailyOpex,
     enginePowerHp: tugboat.enginePowerHp,
     fuelConsumptionTonsPerDay: effectiveSailingConsumption,
-    fuelPricePerTon,
+    fuelPricePerTon: resolvedFuelPrice,
   });
 
   // 2. Vector Carga (CAPEX / Alquiler / Amortización diaria de Barcazas acopladas)
   const cargoCost = calculateCargoCost({
     barges,
-    defaultCouplingDays,
+    defaultCouplingDays: defaultCouplingDays ?? effectiveNavigationDays,
     defaultDailyRatePerBarge,
   });
 
@@ -561,16 +675,16 @@ export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): Fluv
     lockWaitDays,
     customsDelayHours,
     customsDelayDays,
-    dailyOpex: tugboat.dailyOpex,
+    dailyOpex: tugDailyOpex,
     idleFuelTonsPerHour,
     idleFuelTonsPerDay,
-    fuelPricePerTon,
+    fuelPricePerTon: resolvedFuelPrice,
   });
 
   // 4. Gastos Portuarios y Fluviales (PDAs de Hidrovía)
   const pdaCost = calculateFluvialPda(pda || {});
 
-  // 5. Transferencia Intermodal y Ahorros Sincro-modales Terrestres
+  // 5. Transferencia Intermodal y Ahorros Sincro-modales Terrestres (Aislamiento Contable Puro)
   const safeTransshipment = Math.max(0, Number(directTransshipmentTariff) || 0);
   const safeLandSavings = Math.max(0, Number(estimatedLandSavings) || 0);
   const netIntermodalImpact = Number((safeTransshipment - safeLandSavings).toFixed(2));
@@ -578,13 +692,13 @@ export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): Fluv
     directTransshipmentTariff: safeTransshipment,
     estimatedLandSavings: safeLandSavings,
     netIntermodalImpact,
-    formula: `Transbordo ($${safeTransshipment.toLocaleString()}) - Ahorros Terrestres Evitados ($${safeLandSavings.toLocaleString()}) = ${netIntermodalImpact >= 0 ? '+' : ''}$${netIntermodalImpact.toLocaleString()} USD`,
+    formula: `Transbordo ($${safeTransshipment.toLocaleString()}) vs. Ahorro Terrestre Cliente ($${safeLandSavings.toLocaleString()}) = Impacto Neto Cliente: ${netIntermodalImpact >= 0 ? '+' : ''}$${netIntermodalImpact.toLocaleString()} USD (Valor Comercial)`,
   };
 
-  // Totales (Los ahorros terrestres se restan al costo operativo del viaje)
+  // Totales (OPEX Puro del Armador: NUNCA restar estimatedLandSavings de la operación)
   const baseVoyageCost = Number((motorCost.totalMotorCost + cargoCost.totalCargoCost).toFixed(2));
   const totalVoyageCost = Number(
-    Math.max(0, baseVoyageCost + demurrageCost.totalDemurrageCost + pdaCost.totalPdaCost + safeTransshipment - safeLandSavings).toFixed(2)
+    Math.max(0, baseVoyageCost + demurrageCost.totalDemurrageCost + pdaCost.totalPdaCost + safeTransshipment).toFixed(2)
   );
 
   const calculatedCargoTons = barges.reduce((acc, b) => acc + (Number(b.capacity) || 0), 0);
@@ -592,10 +706,10 @@ export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): Fluv
     ? explicitCargoTons
     : calculatedCargoTons;
 
-  const totalEffectiveDays = Number((navigationDays + (demurrageCost.waitingHours / 24)).toFixed(2));
+  const totalEffectiveDays = Number((effectiveNavigationDays + (demurrageCost.waitingHours / 24)).toFixed(2));
   const costPerDay = totalEffectiveDays > 0 ? Number((totalVoyageCost / totalEffectiveDays).toFixed(2)) : 0;
 
-  // Desglose del costo por tonelada: Motor vs Barcazas
+  // Desglose del costo por tonelada: Motor vs Barcazas (Break-Even Puro)
   const costPerTonMotor = totalCargoTons > 0
     ? Number(((motorCost.totalMotorCost + demurrageCost.totalDemurrageCost) / totalCargoTons).toFixed(2))
     : 0;
@@ -614,12 +728,13 @@ export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): Fluv
     ? Number(freightLumpsum)
     : Number((totalCargoTons * Number(freightRatePerTon)).toFixed(2));
 
+  // Beneficio Neto Puro del Armador
   const netProfit = Number((grossFreightRevenue - totalVoyageCost).toFixed(2));
   const dailyNetProfit = totalEffectiveDays > 0 ? Number((netProfit / totalEffectiveDays).toFixed(2)) : 0;
 
-  // Time Charter Equivalent (TCE) diario:
+  // Time Charter Equivalent (TCE) diario (Sin estimatedLandSavings en la cuenta del buque):
   const totalFuelCost = Number((motorCost.estimatedFuelCost + demurrageCost.idleFuelCost).toFixed(2));
-  const voyageExpenses = Number((totalFuelCost + pdaCost.totalPdaCost + cargoCost.totalCargoCost + safeTransshipment - safeLandSavings).toFixed(2));
+  const voyageExpenses = Number((totalFuelCost + pdaCost.totalPdaCost + cargoCost.totalCargoCost + safeTransshipment).toFixed(2));
   const dailyTce = totalEffectiveDays > 0
     ? Number(((grossFreightRevenue - voyageExpenses) / totalEffectiveDays).toFixed(2))
     : 0;
@@ -652,10 +767,11 @@ export function estimateFluvialVoyage(params: FluvialVoyageEstimateParams): Fluv
     sustainability,
     intermodal: intermodalCost,
     risGroundingRisk,
+    bidirectionalSailing,
     summary: `Beneficio Neto: $${netProfit.toLocaleString()} USD | Sostenibilidad: ${sustainability.formattedMetric} | Costo/TM: $${costPerCargoTon} | TCE: $${dailyTce.toLocaleString()}/d`,
   };
 
-  const summary = `Costo Total Viaje: $${totalVoyageCost.toLocaleString()} USD (Ahorros Terrestres: -$${safeLandSavings.toLocaleString()}) | Motor: $${(motorCost.totalMotorCost + demurrageCost.totalDemurrageCost).toLocaleString()} | Carga: $${cargoCost.totalCargoCost.toLocaleString()} | Transbordo: $${safeTransshipment.toLocaleString()} | Beneficio: $${netProfit.toLocaleString()} | ${sustainability.formattedMetric}`;
+  const summary = `Costo Total Viaje (OPEX Puro): $${totalVoyageCost.toLocaleString()} USD | Motor: $${(motorCost.totalMotorCost + demurrageCost.totalDemurrageCost).toLocaleString()} | Carga: $${cargoCost.totalCargoCost.toLocaleString()} | Transbordo: $${safeTransshipment.toLocaleString()} | Beneficio Neto: $${netProfit.toLocaleString()} | Valor Comercial Cliente (Ahorro Terrestre): $${safeLandSavings.toLocaleString()} | ${sustainability.formattedMetric}`;
 
   return {
     motorCost,

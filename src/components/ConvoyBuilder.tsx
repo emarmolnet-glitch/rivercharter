@@ -15,6 +15,9 @@ import {
   estimateFluvialVoyage,
   calculateFluvialPda,
   calculateDefaultBargeRate,
+  calculateBidirectionalSailing,
+  DEFAULT_CONVOY_SPEED_WATER_KNOTS,
+  DEFAULT_RIVER_CURRENT_KNOTS,
   type FluvialEstimateResult,
 } from '../services/fluvialEstimator.js';
 import {
@@ -510,11 +513,35 @@ export function ConvoyBuilder({
   }, [fluvialPdaExpenses]);
 
   // --------------------------------------------------------------------------
-  // 5. GESTIÓN DE TIEMPOS Y DEMORAS
+  // 5. GESTIÓN DE TIEMPOS, NAVEGACIÓN BIDIRECCIONAL Y DEMORAS
   // --------------------------------------------------------------------------
-  const [navigationDays, setNavigationDays] = useState<number>(7);
+  const [convoySpeedWaterKnots, setConvoySpeedWaterKnots] = useState<number>(DEFAULT_CONVOY_SPEED_WATER_KNOTS);
+  const [riverCurrentKnots, setRiverCurrentKnots] = useState<number>(DEFAULT_RIVER_CURRENT_KNOTS);
+  const [ladenDirection, setLadenDirection] = useState<'DOWNSTREAM' | 'UPSTREAM'>('DOWNSTREAM');
+  const [distLadenNm, setDistLadenNm] = useState<number>(600);
+  const [distBallastNm, setDistBallastNm] = useState<number>(0);
+
+  // Cálculo de velocidad sobre fondo (SOG) y tiempos por sentido
+  const bidirectionalResult = useMemo(() => {
+    return calculateBidirectionalSailing({
+      distLadenNm,
+      distBallastNm,
+      convoySpeedWaterKnots,
+      riverCurrentKnots,
+      ladenDirection,
+    });
+  }, [distLadenNm, distBallastNm, convoySpeedWaterKnots, riverCurrentKnots, ladenDirection]);
+
+  const [navigationDays, setNavigationDays] = useState<number>(() => bidirectionalResult.totalNavigationDays || 7);
   const [lockWaitDays, setLockWaitDays] = useState<number>(1.5); // Tiempos de espera en esclusas
   const [customsDelayDays, setCustomsDelayDays] = useState<number>(1.0); // Demoras aduaneras
+
+  // Sincronizar automáticamente días calculados por hidrodinámica bidireccional si las distancias cambian
+  useEffect(() => {
+    if (bidirectionalResult.totalNavigationDays > 0) {
+      setNavigationDays(bidirectionalResult.totalNavigationDays);
+    }
+  }, [bidirectionalResult.totalNavigationDays]);
 
   // Días extra totales por demoras
   const totalDelayDays = useMemo(() => {
@@ -559,7 +586,12 @@ export function ConvoyBuilder({
         dailyOpex: calculatedDailyOpex,
         enginePowerHp: selectedTugboat.enginePowerHp,
       },
-      navigationDays: Number(navigationDays) || 1,
+      navigationDays: Number(navigationDays) || bidirectionalResult.totalNavigationDays || 1,
+      distLadenNm,
+      distBallastNm,
+      convoySpeedWaterKnots,
+      riverCurrentKnots,
+      ladenDirection,
       sailingFuelTonsPerDay: Number(sailingFuelTonsPerDay) || 0,
       idleFuelTonsPerDay: Number(idleFuelTonsPerDay) || 0,
       fuelPricePerTon: Number(fuelPricePerTon) || 680,
@@ -585,6 +617,12 @@ export function ConvoyBuilder({
     selectedTugboat,
     calculatedDailyOpex,
     navigationDays,
+    bidirectionalResult,
+    distLadenNm,
+    distBallastNm,
+    convoySpeedWaterKnots,
+    riverCurrentKnots,
+    ladenDirection,
     sailingFuelTonsPerDay,
     idleFuelTonsPerDay,
     fuelPricePerTon,
@@ -1871,6 +1909,106 @@ export function ConvoyBuilder({
               </span>
             </div>
 
+            {/* SUBMÓDULO: NAVEGACIÓN BIDIRECCIONAL & VECTOR DE CORRIENTE FLUVIAL */}
+            <div className="bg-sky-50/70 border border-sky-200 rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between border-b border-sky-200 pb-2">
+                <span className="text-xs font-bold text-sky-950 uppercase flex items-center gap-1.5">
+                  <span>🌊</span> Navegación Bidireccional y Vector de Corriente (SOG)
+                </span>
+                <span className="text-[10px] font-mono text-sky-800 bg-sky-100 border border-sky-300 px-2 py-0.5 rounded font-bold">
+                  Hidrodinámica Fluvial
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 text-xs">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">Distancia Carga (NM)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="10"
+                    value={distLadenNm}
+                    onChange={(e) => setDistLadenNm(Number(e.target.value))}
+                    className="w-full bg-white border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-900 font-mono font-bold"
+                  />
+                  <span className="text-[10px] text-slate-500">Tramo con carga</span>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">Distancia Lastre (NM)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="10"
+                    value={distBallastNm}
+                    onChange={(e) => setDistBallastNm(Number(e.target.value))}
+                    className="w-full bg-white border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-900 font-mono font-bold"
+                  />
+                  <span className="text-[10px] text-slate-500">Retorno en vacío</span>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">Velocidad Agua (kn)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="0.1"
+                    value={convoySpeedWaterKnots}
+                    onChange={(e) => setConvoySpeedWaterKnots(Number(e.target.value))}
+                    className="w-full bg-white border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-900 font-mono font-bold"
+                  />
+                  <span className="text-[10px] text-slate-500">v_convoy en agua calma</span>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">Corriente Río (kn)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value={riverCurrentKnots}
+                    onChange={(e) => setRiverCurrentKnots(Number(e.target.value))}
+                    className="w-full bg-white border border-slate-300 rounded px-2.5 py-1.5 text-xs text-sky-800 font-mono font-bold"
+                  />
+                  <span className="text-[10px] text-slate-500">riverCurrentKnots</span>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 uppercase mb-1">Sentido Tramo Carga</label>
+                  <select
+                    value={ladenDirection}
+                    onChange={(e) => setLadenDirection(e.target.value as 'DOWNSTREAM' | 'UPSTREAM')}
+                    className="w-full bg-white border border-slate-300 rounded px-2 py-1.5 text-xs text-slate-900 font-bold"
+                  >
+                    <option value="DOWNSTREAM">Aguas Abajo (Bajada)</option>
+                    <option value="UPSTREAM">Aguas Arriba (Subida)</option>
+                  </select>
+                  <span className="text-[10px] text-slate-500">Lastre en contraflujo</span>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-sky-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-600 font-medium">SOG Bajada:</span>
+                  <span className="font-mono font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 text-[11px]">
+                    {bidirectionalResult.speedDownstreamKnots} kn
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-600 font-medium">SOG Subida:</span>
+                  <span className="font-mono font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300 text-[11px]">
+                    {bidirectionalResult.speedUpstreamKnots} kn
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-600 font-medium">Días Navegación Netos:</span>
+                  <span className="font-mono font-bold px-2 py-0.5 rounded bg-sky-100 text-sky-900 border border-sky-300 text-[11px]">
+                    {bidirectionalResult.totalNavigationDays} d ({bidirectionalResult.sailingDaysLaden}d carga + {bidirectionalResult.sailingDaysBallast}d lastre)
+                  </span>
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
               <div className="bg-white border border-slate-200 rounded-lg p-3 space-y-1">
                 <label className="block text-[10px] font-bold text-slate-600 uppercase">Días Estimados de Navegación</label>
@@ -2192,11 +2330,11 @@ export function ConvoyBuilder({
                     <td className="py-2.5 px-3 text-right text-slate-800">${totalCapacityMt > 0 ? (directTransshipmentTariff / totalCapacityMt).toFixed(2) : '0.00'}</td>
                   </tr>
                   <tr className="bg-emerald-50/70">
-                    <td className="py-2.5 px-3 font-sans font-semibold text-emerald-800">Sincro-modal: Ahorros Terrestres Evitados</td>
-                    <td className="py-2.5 px-3 text-emerald-700 font-sans">Peajes, seguros y desgaste de flota deducidos (-)</td>
-                    <td className="py-2.5 px-3 text-right text-emerald-800">Deducción</td>
-                    <td className="py-2.5 px-3 text-right text-emerald-700 font-bold">-${estimatedLandSavings.toLocaleString()}</td>
-                    <td className="py-2.5 px-3 text-right text-emerald-700">-${totalCapacityMt > 0 ? (estimatedLandSavings / totalCapacityMt).toFixed(2) : '0.00'}</td>
+                    <td className="py-2.5 px-3 font-sans font-semibold text-emerald-800">Valor Comercial: Ahorros Terrestres Cliente</td>
+                    <td className="py-2.5 px-3 text-emerald-700 font-sans">Argumento de venta comercial para el cargador (no deducible de OPEX armador)</td>
+                    <td className="py-2.5 px-3 text-right text-emerald-800">Comercial</td>
+                    <td className="py-2.5 px-3 text-right text-emerald-700 font-bold">${estimatedLandSavings.toLocaleString()}</td>
+                    <td className="py-2.5 px-3 text-right text-emerald-700">${totalCapacityMt > 0 ? (estimatedLandSavings / totalCapacityMt).toFixed(2) : '0.00'}</td>
                   </tr>
                   <tr className="bg-slate-50 font-bold border-t-2 border-slate-200 text-slate-900">
                     <td className="py-3 px-3 font-sans text-slate-900 uppercase">Total Costos Operativos</td>
