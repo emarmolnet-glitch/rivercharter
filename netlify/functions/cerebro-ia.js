@@ -58,12 +58,80 @@ export function buildDssStrategicAuditResponse(contexto_ui = {}) {
         modificaciones_recap: {
             flete: proposedFreight,
             fleteUnitario: proposedFreight,
+            freightSell: proposedFreight,
             allInRateGross: proposedFreight,
             loadRate: loadRate,
             dischargeRate: proposedDischargeRate,
             laytime: proposedDischargeRate,
             clausulas: "WWD SHINC DISCHARGE - REACHABLE ON ARRIVAL - BIMCO WAR RISKS (VOYWAR 2025) - TIME LOST WAITING BERTH TO COUNT AS LAYTIME"
         }
+    };
+}
+
+/**
+ * Bloque de prompt estratégico fluvial / oceánico con inyección de flete en el DOM.
+ * En el bloque fluvial, identifica correctamente el ID del flete (#freight-sell en la vista comercial)
+ * y emite el script / timeout despachando eventos reales de input y change para React y Vanilla JS.
+ */
+export function buildStrategicPrompt(contexto_ui = {}, options = {}) {
+    const isFluvial = Boolean(
+        contexto_ui.isFluvial ||
+        contexto_ui.fluvial ||
+        contexto_ui.mode === 'fluvial' ||
+        contexto_ui.operationType === 'fluvial' ||
+        contexto_ui.activeFluvialOperationType ||
+        contexto_ui.routeType === 'fluvial' ||
+        (contexto_ui.pol && /(corumb|lad[aá]rio|rosario|palmira|misisipi|mississippi|nola|louis|gran\s*rosario)/i.test(contexto_ui.pol)) ||
+        (contexto_ui.pod && /(corumb|lad[aá]rio|rosario|palmira|misisipi|mississippi|nola|louis|gran\s*rosario)/i.test(contexto_ui.pod))
+    );
+
+    const rawFreight = contexto_ui.freightSell ?? contexto_ui.fleteVenta ?? contexto_ui.freight_sell ?? contexto_ui.flete ?? contexto_ui.freight ?? contexto_ui.fleteUnitario ?? contexto_ui.sellingFreight ?? 40;
+    const FREIGHT_VAL = typeof rawFreight === 'number' ? rawFreight : (Number(rawFreight) || 40);
+
+    if (isFluvial) {
+        // Bloque Fluvial de buildStrategicPrompt
+        const scriptTemplate = `const input = document.getElementById('freight-sell'); if(input) { input.value = FREIGHT_VAL; input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); }`;
+        const injectedScript = `const input = document.getElementById('freight-sell'); if(input) { input.value = ${FREIGHT_VAL}; input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); }`;
+        const timeoutScript = `setTimeout(() => { const input = document.getElementById('freight-sell'); if(input) { input.value = ${FREIGHT_VAL}; input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); } }, 250);`;
+        const timeoutScriptTemplate = `setTimeout(() => { const input = document.getElementById('freight-sell'); if(input) { input.value = FREIGHT_VAL; input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); } }, 250);`;
+
+        const promptText = [
+            `### INSTRUCCIÓN ESTRATÉGICA FLUVIAL (RIVERCHARTER)`,
+            `Operación fluvial detectada en corredor troncal (Hidrovía / Misisipi).`,
+            `Flete de Venta Comercial asignado: $${FREIGHT_VAL.toFixed(2)} USD/MT.`,
+            `Para actualizar inmediatamente el valor en el DOM de RiverCharter (#freight-sell) y propagar la reactividad en React y Vanilla JS:`,
+            timeoutScriptTemplate,
+            injectedScript
+        ].join('\n\n');
+
+        return {
+            isFluvial: true,
+            corridor: contexto_ui.corridor || 'hidrovia_parana_paraguay',
+            freightFieldId: 'freight-sell',
+            freightSellId: 'freight-sell',
+            freightVal: FREIGHT_VAL,
+            FREIGHT_VAL: FREIGHT_VAL,
+            injectedScript,
+            scriptTemplate,
+            timeoutScript,
+            timeoutScriptTemplate,
+            prompt: promptText,
+            toString() { return promptText; },
+            valueOf() { return promptText; }
+        };
+    }
+
+    const proposedFreight = Number(FREIGHT_VAL || 37.0);
+    const oceanicPrompt = `Auditoría Estratégica Oceánica SeaCharter: Flete comercial base $${proposedFreight.toFixed(2)}/MT.`;
+    return {
+        isFluvial: false,
+        freightFieldId: 'freight-sell',
+        freightSellId: 'freight-sell',
+        freightVal: proposedFreight,
+        FREIGHT_VAL: proposedFreight,
+        prompt: oceanicPrompt,
+        toString() { return oceanicPrompt; },
+        valueOf() { return oceanicPrompt; }
     };
 }
 
