@@ -381,6 +381,7 @@
         let effectiveVesselType = calcResults.vesselType;
         if (isFluvialContextActive) {
             const fluvialConvoyDesc = (typeof root !== 'undefined' && (root.convoyDesc || (root.activeConvoyData && (root.activeConvoyData.convoyDescription || root.activeConvoyData.description)))) ||
+                (typeof root !== 'undefined' && root.activeBargeStandard ? `Convoy ${root.activeBargeStandard === 'mississippi_jumbo' ? 'Jumbo Misisipi' : 'Súper Jumbo'} - ${root.activeBargeCount || 10} Barcazas` : null) ||
                 (typeof root !== 'undefined' && root.activeBargeCount ? `Convoy Súper Jumbo - ${root.activeBargeCount} Barcazas` : null);
             if (fluvialConvoyDesc) {
                 effectiveVesselType = fluvialConvoyDesc;
