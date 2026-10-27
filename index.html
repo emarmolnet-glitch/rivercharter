@@ -69970,7 +69970,7 @@ Compara el documento suministrado (que puede ser un contrato, carta de crédito 
             '/api/cerebro-ia'
         );
         window.SeaCharterDataBridgeAIEndpoint = DATA_BRIDGE_AI_ENDPOINT;
-        const DATA_BRIDGE_DEFAULT_API_URL = 'https://calm-shortbread-55bcfc.netlify.app';
+        const DATA_BRIDGE_DEFAULT_API_URL = '';
         const DATA_BRIDGE_API_URL = resolveViteEnvValue(VITE_ENV.VITE_DATA_BRIDGE_API_URL, DATA_BRIDGE_DEFAULT_API_URL);
         const DATA_BRIDGE_API_SECRET = resolveViteEnvValue(VITE_ENV.VITE_DATA_BRIDGE_API_SECRET, '');
 	        const HAS_VALID_DATA_BRIDGE_API_URL = isValidDataBridgeApiUrl(DATA_BRIDGE_API_URL);
@@ -70360,9 +70360,9 @@ Compara el documento suministrado (que puede ser un contrato, carta de crédito 
         function resolveDataBridgeApiEndpoint(endpoint) {
             if (!endpoint || typeof endpoint !== 'string') return endpoint;
             if (endpoint.startsWith('http://') || endpoint.startsWith('https://')) return endpoint;
-            const baseUrl = (DATA_BRIDGE_API_URL || DATA_BRIDGE_DEFAULT_API_URL).replace(/\/+$/, '');
+            const baseUrl = (DATA_BRIDGE_API_URL || (isLocal ? PRODUCTION_ORIGIN : '')).replace(/\/+$/, '');
             const cleanPath = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-            return `${baseUrl}${cleanPath}`;
+            return baseUrl ? `${baseUrl}${cleanPath}` : cleanPath;
         }
 
         async function restorePersistentDataBridgeConnection() {

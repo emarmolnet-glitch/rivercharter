@@ -154,9 +154,9 @@ test("Datalastic and Nominatim both normalize to the exact same {lat, lon, displ
   assert.equal(nominatimItem.countryCode, "CV");
 });
 
-test("Nominatim requests obligatorily include User-Agent: SeaCharterCorePRO/1.0 header", async (t) => {
+test("Nominatim requests obligatorily include User-Agent: RiverCharter-Bot/1.0 header", async (t) => {
   const { findNominatimLocations, NOMINATIM_USER_AGENT } = await loadPortClientModule();
-  assert.equal(NOMINATIM_USER_AGENT, "SeaCharterCorePRO/1.0");
+  assert.equal(NOMINATIM_USER_AGENT, "RiverCharter-Bot/1.0");
 
   const originalFetch = globalThis.fetch;
   let capturedHeaders = null;
@@ -182,7 +182,7 @@ test("Nominatim requests obligatorily include User-Agent: SeaCharterCorePRO/1.0 
   const results = await findNominatimLocations("Praia, Cabo Verde");
   assert.ok(results.length > 0);
   assert.equal(results[0].source, "NOMINATIM");
-  assert.equal(capturedHeaders?.["User-Agent"], "SeaCharterCorePRO/1.0");
+  assert.equal(capturedHeaders?.["User-Agent"], "RiverCharter-Bot/1.0");
 });
 
 test("resolvePortsWithFailover uses Datalastic as primary provider when available", async (t) => {
@@ -283,7 +283,7 @@ test("resolvePortsWithFailover automatically switches to Nominatim when Datalast
 
   assert.equal(datalasticCalled, true, "Datalastic must be primary provider");
   assert.equal(nominatimCalled, true, "System must switch to Nominatim on Datalastic credit error");
-  assert.equal(capturedNominatimUserAgent, "SeaCharterCorePRO/1.0");
+  assert.equal(capturedNominatimUserAgent, "RiverCharter-Bot/1.0");
   assert.equal(results.length, 1);
   assert.equal(results[0].source, "NOMINATIM");
   assert.equal(results[0].lat, 14.9315);
@@ -378,4 +378,47 @@ test("ports-search handler returns normalized {lat, lon, displayName, source} an
   assert.equal(firstPort.lat, 14.9315);
   assert.equal(firstPort.lon, -23.5125);
   assert.equal(firstPort.displayName, "Praia, Cabo Verde");
+});
+
+test("geocodePort wraps Datalastic in try-catch and immediately falls back to Nominatim on unconfigured API key or network error", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const originalEnv = process.env.DATALASTIC_API_KEY;
+  delete process.env.DATALASTIC_API_KEY;
+
+  let capturedNominatimUrl = "";
+  let capturedHeaders = null;
+
+  globalThis.fetch = async (url, options) => {
+    const urlString = String(url);
+    if (urlString.includes("nominatim")) {
+      capturedNominatimUrl = urlString;
+      capturedHeaders = options?.headers;
+      return new Response(JSON.stringify([
+        {
+          place_id: 4242,
+          lat: "-25.2968",
+          lon: "-57.6415",
+          display_name: "Asunción, Paraguay",
+        },
+      ]), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return new Response("[]", { status: 200 });
+  };
+
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    if (originalEnv !== undefined) process.env.DATALASTIC_API_KEY = originalEnv;
+  });
+
+  const { geocodePort } = await loadPortClientModule();
+  const result = await geocodePort("Asunción");
+
+  assert.ok(result);
+  assert.equal(result.source, "NOMINATIM");
+  assert.equal(result.lat, -25.2968);
+  assert.equal(result.lon, -57.6415);
+  assert.equal(result.displayName, "Asunción, Paraguay");
+  assert.match(capturedNominatimUrl, /format=json/);
+  assert.match(capturedNominatimUrl, /limit=1/);
+  assert.equal(capturedHeaders?.["User-Agent"], "RiverCharter-Bot/1.0");
 });
