@@ -240,7 +240,7 @@
 
         // Global State, Constants and Absolute API Shield for Electron & Netlify
         (function initGlobalSafetyAndApiBridge(global) {
-            const PRODUCTION_ORIGIN = 'https://neon-seachartercorepro-4ce09d.netlify.app';
+            const PRODUCTION_ORIGIN = 'https://calm-shortbread-55bcfc.netlify.app';
             const isLocal = typeof window !== 'undefined' && (
                 window.location.protocol === 'file:' ||
                 window.location.origin === 'file://' ||
@@ -69970,7 +69970,8 @@ Compara el documento suministrado (que puede ser un contrato, carta de crédito 
             '/api/cerebro-ia'
         );
         window.SeaCharterDataBridgeAIEndpoint = DATA_BRIDGE_AI_ENDPOINT;
-        const DATA_BRIDGE_API_URL = resolveViteEnvValue(VITE_ENV.VITE_DATA_BRIDGE_API_URL, '');
+        const DATA_BRIDGE_DEFAULT_API_URL = 'https://calm-shortbread-55bcfc.netlify.app';
+        const DATA_BRIDGE_API_URL = resolveViteEnvValue(VITE_ENV.VITE_DATA_BRIDGE_API_URL, DATA_BRIDGE_DEFAULT_API_URL);
         const DATA_BRIDGE_API_SECRET = resolveViteEnvValue(VITE_ENV.VITE_DATA_BRIDGE_API_SECRET, '');
 	        const HAS_VALID_DATA_BRIDGE_API_URL = isValidDataBridgeApiUrl(DATA_BRIDGE_API_URL);
         const DATA_BRIDGE_VERIFY_ENDPOINT = '/api/verify-connection';
@@ -70356,6 +70357,14 @@ Compara el documento suministrado (que puede ser un contrato, carta de crédito 
             return isVerified;
         }
 
+        function resolveDataBridgeApiEndpoint(endpoint) {
+            if (!endpoint || typeof endpoint !== 'string') return endpoint;
+            if (endpoint.startsWith('http://') || endpoint.startsWith('https://')) return endpoint;
+            const baseUrl = (DATA_BRIDGE_API_URL || DATA_BRIDGE_DEFAULT_API_URL).replace(/\/+$/, '');
+            const cleanPath = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+            return `${baseUrl}${cleanPath}`;
+        }
+
         async function restorePersistentDataBridgeConnection() {
             try {
                 const dataBridgeFetch = window.__coreProNativeFetch || window.fetch;
@@ -70363,9 +70372,9 @@ Compara el documento suministrado (que puede ser un contrato, carta de crédito 
                     method: 'GET',
                     headers: { Accept: 'application/json' }
                 };
-                let response = await dataBridgeFetch(DATA_BRIDGE_CONNECTION_STATE_ENDPOINT, requestOptions);
+                let response = await dataBridgeFetch(resolveDataBridgeApiEndpoint(DATA_BRIDGE_CONNECTION_STATE_ENDPOINT), requestOptions);
                 if (response.status === 404) {
-                    response = await dataBridgeFetch(DATA_BRIDGE_CONNECTION_STATE_FUNCTION_ENDPOINT, requestOptions);
+                    response = await dataBridgeFetch(resolveDataBridgeApiEndpoint(DATA_BRIDGE_CONNECTION_STATE_FUNCTION_ENDPOINT), requestOptions);
                 }
                 const payload = await response.json().catch(() => ({}));
                 const connection = payload?.connection || {};

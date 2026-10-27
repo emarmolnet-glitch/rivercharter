@@ -1,10 +1,32 @@
 /**
- * Absolute API and Environment Configuration for SeaCharter Core PRO.
+ * Absolute API and Environment Configuration for RiverCharter / DataBridge.
  * Resolves local file:// and Electron calls to the absolute Netlify production endpoint
  * while preserving relative paths for web browser deployments on Netlify.
  */
 
-export const NETLIFY_PRODUCTION_ORIGIN = 'https://neon-seachartercorepro-4ce09d.netlify.app';
+const getEnvDataBridgeUrl = () => {
+  if (typeof process !== 'undefined' && process.env) {
+    if (process.env.VITE_DATA_BRIDGE_API_URL) return process.env.VITE_DATA_BRIDGE_API_URL;
+    if (process.env.VITE_DATA_BRIDGE_URL) return process.env.VITE_DATA_BRIDGE_URL;
+    if (process.env.DATA_BRIDGE_API_URL) return process.env.DATA_BRIDGE_API_URL;
+  }
+  if (typeof import.meta !== 'undefined' && import.meta?.env) {
+    if (import.meta.env.VITE_DATA_BRIDGE_API_URL) return import.meta.env.VITE_DATA_BRIDGE_API_URL;
+    if (import.meta.env.VITE_DATA_BRIDGE_URL) return import.meta.env.VITE_DATA_BRIDGE_URL;
+  }
+  if (typeof window !== 'undefined') {
+    if (window.DATA_BRIDGE_API_URL) return window.DATA_BRIDGE_API_URL;
+    if (window.CORE_PRO_API_ORIGIN) return window.CORE_PRO_API_ORIGIN;
+  }
+  return '';
+};
+
+export const DATA_BRIDGE_DEFAULT_ORIGIN = 'https://calm-shortbread-55bcfc.netlify.app';
+export const DATA_BRIDGE_BASE_URL = (getEnvDataBridgeUrl() || DATA_BRIDGE_DEFAULT_ORIGIN).replace(/\/+$/, '');
+export const DATABRIDGE_API_URL = DATA_BRIDGE_BASE_URL;
+export const DATABRIDGE_BASE_URL = DATA_BRIDGE_BASE_URL;
+
+export const NETLIFY_PRODUCTION_ORIGIN = DATA_BRIDGE_BASE_URL;
 
 export function isLocalOrFileProtocol() {
   if (typeof window === 'undefined') return false;
@@ -41,6 +63,8 @@ export function installFetchInterceptor() {
   const base = getApiBaseUrl();
   window.NETLIFY_PRODUCTION_ORIGIN = NETLIFY_PRODUCTION_ORIGIN;
   window.NETLIFY_API_BASE_URL = base;
+  window.DATA_BRIDGE_API_URL = DATA_BRIDGE_BASE_URL;
+  window.DATA_BRIDGE_BASE_URL = DATA_BRIDGE_BASE_URL;
   window.getAbsoluteApiUrl = resolveApiUrl;
   window.getApiUrl = getApiUrl;
 
