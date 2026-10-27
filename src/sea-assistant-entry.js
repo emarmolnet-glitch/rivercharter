@@ -1084,6 +1084,58 @@ async function executeActionableAiUpdateFields(actionObj) {
         updateInputs(["rate-load", "loading-rate", "gc-laytime-load-val", "load-rate"], p.loadingRate);
         updateInputs(["rate-disch", "discharge-rate", "gc-laytime-disch-val"], p.dischargeRate);
 
+        // Inyección de convoy de barcazas Jumbo y ritmos para Cerebro IA en modo fluvial
+        const tonnage = Number(p.tonnage || p.cargo_qty || p.cargoQty || 0);
+        if (Number.isFinite(tonnage) && tonnage > 0) {
+            const neededBarges = Math.ceil(tonnage / 1500);
+            const jumboBarges = Array.from({ length: neededBarges }, (_, i) => ({
+                id: 100 + i + 1,
+                name: `Barcaza Jumbo JB-${String(i + 1).padStart(2, '0')}`,
+                bargeType: 'JUMBO',
+                type: 'JUMBO',
+                capacity: 1500,
+                capacityMt: 1500,
+                dynamicDraft: 2.74,
+                lengthM: 60,
+                beamM: 10.67,
+                linearMeters: 60,
+                truckCount: Math.round(1500 / 25),
+                status: 'COUPLED'
+            }));
+
+            const loadRateVal = Number(p.loadingRate ?? p.rateLoad ?? 5000);
+            const dischRateVal = Number(p.dischargeRate ?? p.rateDisch ?? 5000);
+
+            if (typeof window !== 'undefined') {
+                window.activeBargeCount = neededBarges;
+                window.activeConvoyData = {
+                    ...(window.activeConvoyData || {}),
+                    bargeCount: neededBarges,
+                    bargeIds: jumboBarges.map(b => b.id),
+                    coupledBarges: jumboBarges,
+                    barges: jumboBarges,
+                    totalCapacityMt: neededBarges * 1500,
+                    loadingRate: loadRateVal,
+                    dischargeRate: dischRateVal,
+                    loading_rate: loadRateVal,
+                    discharge_rate: dischRateVal
+                };
+                if (window.State) {
+                    window.State.bargeCount = neededBarges;
+                    window.State.coupledBarges = jumboBarges;
+                    window.State.loadingRate = loadRateVal;
+                    window.State.dischargeRate = dischRateVal;
+                    window.State.rateLoad = loadRateVal;
+                    window.State.rateDisch = dischRateVal;
+                }
+                window.dispatchEvent(new CustomEvent('rivercharter:convoy-updated', { detail: window.activeConvoyData }));
+                window.dispatchEvent(new CustomEvent('convoy:barges-updated', { detail: { bargeCount: neededBarges, coupledBarges: jumboBarges } }));
+                if (typeof window.updateFluvialCalculations === 'function') {
+                    window.updateFluvialCalculations();
+                }
+            }
+        }
+
         const freightVal = p.freightSell ?? p.fleteVenta ?? p.freight_sell ?? p.flete ?? p.freight ?? p.fleteUnitario ?? p.sellingFreight;
         if (freightVal !== undefined && freightVal !== null && freightVal !== "") {
             updateInputs(["freight-sell", "freight-rate", "input-fleteUnitario", "gc-freight-val", "asb-freight-val"], freightVal);
@@ -1276,11 +1328,11 @@ async function executeActionableAiUpdateFields(actionObj) {
                 isBigBags: true,
             } : {}),
         };
-        const tonnage = Number(p.tonnage);
+        const parsedTonnage = Number(p.tonnage);
         const loadingRate = Number(p.loadingRate);
         const dischargeRate = Number(p.dischargeRate);
-        if (Number.isFinite(tonnage) && tonnage > 0) {
-            Object.assign(routeState, { tonnage, cargo: tonnage, cargoQty: tonnage, cargoQuantity: tonnage });
+        if (Number.isFinite(parsedTonnage) && parsedTonnage > 0) {
+            Object.assign(routeState, { tonnage: parsedTonnage, cargo: parsedTonnage, cargoQty: parsedTonnage, cargoQuantity: parsedTonnage });
         }
         if (Number.isFinite(loadingRate) && loadingRate > 0) {
             Object.assign(routeState, { loadRate: loadingRate, ratePOL: loadingRate, ritmoRealPol: loadingRate, ritmoMode: "manual", ritmoMode_pol: "manual" });

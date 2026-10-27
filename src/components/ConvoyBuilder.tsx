@@ -296,6 +296,30 @@ export function ConvoyBuilder({
     }
   }, []);
 
+  // Sincronización reactiva de barcazas acopladas desde Cerebro IA u otros módulos
+  useEffect(() => {
+    const handleBargesSync = (e: any) => {
+      const detail = e.detail;
+      if (detail?.coupledBarges && Array.isArray(detail.coupledBarges) && detail.coupledBarges.length > 0) {
+        const newBarges: Barge[] = detail.coupledBarges;
+        setBargePool((prev) => {
+          const prevMap = new Map(prev.map((b) => [b.id, b]));
+          newBarges.forEach((b) => prevMap.set(b.id, b));
+          return Array.from(prevMap.values());
+        });
+        setBargeIds(newBarges.map((b) => b.id));
+      }
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('convoy:barges-updated', handleBargesSync);
+      window.addEventListener('rivercharter:convoy-updated', handleBargesSync);
+      return () => {
+        window.removeEventListener('convoy:barges-updated', handleBargesSync);
+        window.removeEventListener('rivercharter:convoy-updated', handleBargesSync);
+      };
+    }
+  }, []);
+
   const handleSwitchOperationType = (type: 'BULK' | 'RORO') => {
     setOperationType(type);
     if (typeof window !== 'undefined') {
