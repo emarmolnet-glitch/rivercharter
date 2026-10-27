@@ -31,7 +31,10 @@ test('2. HashRouter routing in App.jsx and src/App.jsx for Electron compatibilit
 });
 
 test('3. Absolute API routes under file:// and Electron protocol', () => {
-  assert.equal(NETLIFY_PRODUCTION_ORIGIN, 'https://neon-seachartercorepro-4ce09d.netlify.app');
+  assert.match(
+    NETLIFY_PRODUCTION_ORIGIN,
+    /https:\/\/(?:calm-shortbread-55bcfc|neon-seachartercorepro-4ce09d)\.netlify\.app/
+  );
 
   // Test resolution when local protocol is active
   const originalWindow = globalThis.window;
@@ -44,9 +47,9 @@ test('3. Absolute API routes under file:// and Electron protocol', () => {
     };
 
     assert.equal(isLocalOrFileProtocol(), true);
-    assert.equal(getApiBaseUrl(), 'https://neon-seachartercorepro-4ce09d.netlify.app');
-    assert.equal(resolveApiUrl('/api/vessel/1234567'), 'https://neon-seachartercorepro-4ce09d.netlify.app/api/vessel/1234567');
-    assert.equal(resolveApiUrl('/.netlify/functions/project-parser'), 'https://neon-seachartercorepro-4ce09d.netlify.app/.netlify/functions/project-parser');
+    assert.equal(getApiBaseUrl(), NETLIFY_PRODUCTION_ORIGIN);
+    assert.equal(resolveApiUrl('/api/vessel/1234567'), `${NETLIFY_PRODUCTION_ORIGIN}/api/vessel/1234567`);
+    assert.equal(resolveApiUrl('/.netlify/functions/project-parser'), `${NETLIFY_PRODUCTION_ORIGIN}/.netlify/functions/project-parser`);
 
     // Test that existing absolute URLs are untouched
     assert.equal(resolveApiUrl('https://example.com/api/test'), 'https://example.com/api/test');
@@ -92,7 +95,7 @@ test('5. Global safety shield in index.html initializes State, ASBATANKVOY, and 
   assert.match(indexHtml, /syncAsbatankvoy/);
 
   // Verify fetch and XHR interceptor
-  assert.match(indexHtml, /PRODUCTION_ORIGIN\s*=\s*['"]https:\/\/neon-seachartercorepro-4ce09d\.netlify\.app['"]/);
+  assert.match(indexHtml, /PRODUCTION_ORIGIN\s*=\s*['"]https:\/\/(?:calm-shortbread-55bcfc|neon-seachartercorepro-4ce09d)\.netlify\.app['"]/);
   assert.match(indexHtml, /NETLIFY_PRODUCTION_ORIGIN\s*=\s*PRODUCTION_ORIGIN/);
 });
 

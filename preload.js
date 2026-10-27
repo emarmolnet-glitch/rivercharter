@@ -68,13 +68,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
 // Expose apiConfig to provide absolute API routes in Electron file:// runtime
 contextBridge.exposeInMainWorld('apiConfig', {
-  productionOrigin: 'https://neon-seachartercorepro-4ce09d.netlify.app',
+  productionOrigin: 'https://calm-shortbread-55bcfc.netlify.app',
   isElectron: true,
   resolveApiUrl: (path) => {
     if (!path || typeof path !== 'string') return path;
     if (path.startsWith('http://') || path.startsWith('https://')) return path;
     const cleanPath = path.startsWith('/') ? path : `/${path}`;
-    return `https://neon-seachartercorepro-4ce09d.netlify.app${cleanPath}`;
+    return `https://calm-shortbread-55bcfc.netlify.app${cleanPath}`;
   }
 });
 
