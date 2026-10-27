@@ -78254,6 +78254,22 @@ window.actualizarGrabCapacityVisibility = function() {
                 setInputValue('input-pod', p.pod);
                 window.State.pod = p.pod;
             }
+
+            // Despachar eventos de selección de puerto usando las coordenadas de Cerebro
+            if (payload.pol && payload.coordinates && payload.coordinates.length > 0) {
+                const polNode = payload.coordinates[0];
+                window.dispatchEvent(new CustomEvent('port-selected', { detail: { type: 'pol', name: payload.pol, lat: polNode.lat, lon: polNode.lon, source: 'cerebro' } }));
+            } else if (p.pol && p.coordinates && p.coordinates.length > 0) {
+                const polNode = p.coordinates[0];
+                window.dispatchEvent(new CustomEvent('port-selected', { detail: { type: 'pol', name: p.pol, lat: polNode.lat, lon: polNode.lon, source: 'cerebro' } }));
+            }
+            if (payload.pod && payload.coordinates && payload.coordinates.length > 1) {
+                const podNode = payload.coordinates[payload.coordinates.length - 1];
+                window.dispatchEvent(new CustomEvent('port-selected', { detail: { type: 'pod', name: payload.pod, lat: podNode.lat, lon: podNode.lon, source: 'cerebro' } }));
+            } else if (p.pod && p.coordinates && p.coordinates.length > 1) {
+                const podNode = p.coordinates[p.coordinates.length - 1];
+                window.dispatchEvent(new CustomEvent('port-selected', { detail: { type: 'pod', name: p.pod, lat: podNode.lat, lon: podNode.lon, source: 'cerebro' } }));
+            }
             if (p.cargo_type || p.commodity || p.product || p.category) {
                 const comm = p.cargo_type || p.commodity || p.product || p.category;
                 setInputValue('cargo-type', comm);
