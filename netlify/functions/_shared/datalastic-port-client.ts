@@ -1,6 +1,6 @@
 const DEFAULT_DATALASTIC_BASE_URL = "https://api.datalastic.com/api/v0";
 const DEFAULT_NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org";
-export const NOMINATIM_USER_AGENT = "SeaCharterCorePRO/1.0";
+export const NOMINATIM_USER_AGENT = "RiverCharter-Bot/1.0";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -28,11 +28,13 @@ export type DatalasticPortRecord = GeoResolutionRecord;
 
 export class DatalasticPortError extends Error {
   status: number;
+  code?: string;
 
-  constructor(message: string, status = 502) {
+  constructor(message: string, status = 502, code?: string) {
     super(message);
     this.name = "DatalasticPortError";
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -50,7 +52,7 @@ function environmentValue(name: string) {
 
 function getApiKey() {
   const apiKey = environmentValue("DATALASTIC_API_KEY");
-  if (!apiKey) throw new DatalasticPortError("La integración de Datalastic no está configurada.", 503);
+  if (!apiKey) throw new DatalasticPortError("API_KEY_NOT_CONFIGURED: La integración de Datalastic no está configurada.", 503, "API_KEY_NOT_CONFIGURED");
   return apiKey;
 }
 
@@ -192,6 +194,7 @@ async function requestDatalastic(path: string, parameters: Record<string, string
     throw new DatalasticPortError(
       `No fue posible conectar con Datalastic: ${error instanceof Error ? error.message : String(error)}`,
       502,
+      "NETWORK_ERROR"
     );
   }
 
@@ -253,7 +256,7 @@ export async function resolvePortsWithFailover(query: string, limit = 12): Promi
   const trimmed = cleanText(query);
   if (trimmed.length < 2) return [];
 
-  // Proveedor Primario: Datalastic
+  // Proveedor Primario: Datalastic (envuelto en try-catch)
   try {
     const datalasticResults = await findDatalasticPorts(trimmed, limit);
     if (datalasticResults.length > 0) {
@@ -261,12 +264,21 @@ export async function resolvePortsWithFailover(query: string, limit = 12): Promi
     }
     console.warn(`[geo-resolver] Datalastic devolvió 0 resultados para "${trimmed}". Conmutando automáticamente a Nominatim.`);
   } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    const isApiKeyError = (error instanceof DatalasticPortError && error.code === "API_KEY_NOT_CONFIGURED") ||
+      errorMsg.includes("API_KEY_NOT_CONFIGURED") ||
+      errorMsg.includes("no está configurada");
+    const isNetworkError = (error instanceof DatalasticPortError && error.code === "NETWORK_ERROR") ||
+      /network|timeout|connect|fetch failed/i.test(errorMsg);
+
     console.warn(
-      `[geo-resolver] Datalastic falló para "${trimmed}" (${error instanceof Error ? error.message : String(error)}). Conmutando automáticamente a Nominatim (OpenStreetMap).`,
+      `[geo-resolver] Datalastic falló para "${trimmed}" (${isApiKeyError ? "API_KEY_NOT_CONFIGURED" : isNetworkError ? "Error de red" : errorMsg}). Conmutando inmediatamente a Nominatim (OpenStreetMap).`,
     );
   }
 
-  // Proveedor Secundario Gratuito: Nominatim (OpenStreetMap)
+  // Proveedor Secundario Gratuito (Fallback): Nominatim (OpenStreetMap)
+  // Endpoint: https://nominatim.openstreetmap.org/search?q={NOMBRE_DEL_PUERTO}&format=json&limit=1
+  // Extrae lat y lon del primer resultado con User-Agent: RiverCharter-Bot/1.0
   try {
     return await findNominatimLocations(trimmed, limit);
   } catch (osmError) {
@@ -276,6 +288,47 @@ export async function resolvePortsWithFailover(query: string, limit = 12): Promi
     );
     return [];
   }
+}
+
+/**
+ * Geocodificación directa de un puerto con fallback a Nominatim (OpenStreetMap).
+ * Si la llamada a Datalastic falla por falta de configuración (API_KEY_NOT_CONFIGURED)
+ * o error de red, ejecuta inmediatamente fallback a Nominatim extrayendo lat y lon del primer resultado.
+ */
+export async function geocodePort(portName: string): Promise<{ lat: number; lon: number; displayName: string; source: string } | null> {
+  const trimmed = cleanText(portName);
+  if (!trimmed) return null;
+
+  try {
+    const results = await findDatalasticPorts(trimmed, 1);
+    if (results.length > 0 && Number.isFinite(results[0].lat) && Number.isFinite(results[0].lon)) {
+      return {
+        lat: results[0].lat,
+        lon: results[0].lon,
+        displayName: results[0].displayName,
+        source: results[0].source,
+      };
+    }
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.warn(`[geocodePort] Datalastic falló (${errorMsg}). Ejecutando fallback inmediato a Nominatim.`);
+  }
+
+  try {
+    const osmResults = await findNominatimLocations(trimmed, 1);
+    if (osmResults.length > 0 && Number.isFinite(osmResults[0].lat) && Number.isFinite(osmResults[0].lon)) {
+      return {
+        lat: osmResults[0].lat,
+        lon: osmResults[0].lon,
+        displayName: osmResults[0].displayName,
+        source: osmResults[0].source,
+      };
+    }
+  } catch (osmError) {
+    console.error(`[geocodePort] Fallback a Nominatim falló:`, osmError);
+  }
+
+  return null;
 }
 
 export const resolveGeographicPoints = resolvePortsWithFailover;

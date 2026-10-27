@@ -5,7 +5,7 @@
  * point to the isolated DataBridge environment (https://calm-shortbread-55bcfc.netlify.app).
  */
 
-export const DATA_BRIDGE_DEFAULT_ORIGIN = 'https://calm-shortbread-55bcfc.netlify.app';
+export const DATA_BRIDGE_DEFAULT_ORIGIN = '';
 
 export function getDataBridgeBaseUrl(): string {
   if (typeof process !== 'undefined' && process.env) {
@@ -21,6 +21,9 @@ export function getDataBridgeBaseUrl(): string {
   if (typeof window !== 'undefined') {
     if ((window as any).DATA_BRIDGE_API_URL) return String((window as any).DATA_BRIDGE_API_URL).replace(/\/+$/, '');
     if ((window as any).CORE_PRO_API_ORIGIN) return String((window as any).CORE_PRO_API_ORIGIN).replace(/\/+$/, '');
+    if (window.location && window.location.protocol !== 'file:') {
+      return '';
+    }
   }
   return DATA_BRIDGE_DEFAULT_ORIGIN;
 }
@@ -33,7 +36,7 @@ export function resolveDataBridgeUrl(path: string): string {
   if (path.startsWith('http://') || path.startsWith('https://')) return path;
   const base = getDataBridgeBaseUrl();
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  return `${base}${cleanPath}`;
+  return base ? `${base}${cleanPath}` : cleanPath;
 }
 
 export async function fetchDataBridgeApi(
