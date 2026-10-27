@@ -20546,6 +20546,9 @@
 }
 
 async function fetchPortCongestionShield({ portUnlocode, vesselImo, demurrageRateUsd, distanceNm, nominalSpeedKnots }) {
+    if (typeof isFluvialContext === 'function' && isFluvialContext()) {
+        return null;
+    }
     const polName = String(window.State?.pol || document.getElementById('map-port-pol')?.value || document.getElementById('port-pol')?.value || 'POL').trim();
     const podName = String(portUnlocode || window.State?.pod || document.getElementById('map-port-pod')?.value || document.getElementById('port-pod')?.value || 'POD').trim();
     const demurrageRate = Number(demurrageRateUsd) || 15000;
@@ -20955,7 +20958,7 @@ async function runOnDemandMapRouteWorkflow(button) {
         window.updateDataBridgeTransportStatus?.('connected');
 
         // --- LLAMADA AL ESCUDO DE CONGESTIÓN ---
-        if (pod) {
+        if (pod && !(typeof isFluvialContext === 'function' && isFluvialContext())) {
             try {
                 const congestionData = await fetchPortCongestionShield({
                     portUnlocode: pod,
@@ -46683,8 +46686,8 @@ function scheduleReactiveEngine() {
                 let auditResult = null;
                 try {
                     const endpoint = (typeof window !== 'undefined' && typeof window.getApiUrl === 'function')
-                        ? window.getApiUrl('/api/cerebro-ia')
-                        : '/api/cerebro-ia';
+                        ? window.getApiUrl('/.netlify/functions/cerebro-ia')
+                        : '/.netlify/functions/cerebro-ia';
 
                     const response = await fetch(endpoint, {
                         method: 'POST',
@@ -54823,8 +54826,9 @@ Example:
         }
 
         function getDataBridgeMasterReportEndpoint() {
+            // Maps /api/cerebro-ia to /.netlify/functions/cerebro-ia
             const configuredEndpoint = String(window.SeaCharterDataBridgeAIEndpoint || '').trim();
-            return configuredEndpoint || '/api/cerebro-ia';
+            return configuredEndpoint || '/.netlify/functions/cerebro-ia';
         }
 
         function formatMasterReportMarkdownText(content) {
@@ -69967,7 +69971,7 @@ Compara el documento suministrado (que puede ser un contrato, carta de crédito 
         );
         const DATA_BRIDGE_AI_ENDPOINT = resolveViteEnvValue(
             VITE_ENV.VITE_DATA_BRIDGE_AI_URL,
-            '/api/cerebro-ia'
+            '/.netlify/functions/cerebro-ia'
         );
         window.SeaCharterDataBridgeAIEndpoint = DATA_BRIDGE_AI_ENDPOINT;
         const DATA_BRIDGE_DEFAULT_API_URL = '';
@@ -70359,10 +70363,15 @@ Compara el documento suministrado (que puede ser un contrato, carta de crédito 
 
         function resolveDataBridgeApiEndpoint(endpoint) {
             if (!endpoint || typeof endpoint !== 'string') return endpoint;
-            if (endpoint.startsWith('http://') || endpoint.startsWith('https://')) return endpoint;
+            let path = endpoint;
+            if (path.startsWith('/api/')) {
+                path = path.replace(/^\/api\//, '/.netlify/functions/');
+            } else if (!path.startsWith('/.netlify/functions/') && !path.startsWith('http://') && !path.startsWith('https://')) {
+                path = `/.netlify/functions/${path.replace(/^\/+/, '')}`;
+            }
+            if (path.startsWith('http://') || path.startsWith('https://')) return path;
             const baseUrl = (DATA_BRIDGE_API_URL || (isLocal ? PRODUCTION_ORIGIN : '')).replace(/\/+$/, '');
-            const cleanPath = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-            return baseUrl ? `${baseUrl}${cleanPath}` : cleanPath;
+            return baseUrl ? `${baseUrl}${path}` : path;
         }
 
         async function restorePersistentDataBridgeConnection() {
