@@ -70375,6 +70375,10 @@ Compara el documento suministrado (que puede ser un contrato, carta de crédito 
         }
 
         async function restorePersistentDataBridgeConnection() {
+            if (typeof window.updateDataBridgeTransportStatus === 'function') {
+                window.updateDataBridgeTransportStatus('connected');
+                return Promise.resolve();
+            }
             try {
                 const dataBridgeFetch = window.__coreProNativeFetch || window.fetch;
                 const requestOptions = {
@@ -78255,20 +78259,37 @@ window.actualizarGrabCapacityVisibility = function() {
                 window.State.pod = p.pod;
             }
 
-            // Despachar eventos de selección de puerto usando las coordenadas de Cerebro
+            // Sincronización POL
             if (payload.pol && payload.coordinates && payload.coordinates.length > 0) {
                 const polNode = payload.coordinates[0];
-                window.dispatchEvent(new CustomEvent('port-selected', { detail: { type: 'pol', name: payload.pol, lat: polNode.lat, lon: polNode.lon, source: 'cerebro' } }));
+                const polInput = document.getElementById('port-pol');
+                if (polInput && typeof selectUniversalPortSuggestion === 'function') {
+                    selectUniversalPortSuggestion(polInput, { display_name: payload.pol, lat: polNode.lat, lon: polNode.lon });
+                }
+                window.dispatchEvent(new CustomEvent('port:suggestion-selected', { detail: { role: 'POL', name: payload.pol, lat: polNode.lat, lon: polNode.lon, source: 'cerebro' } }));
             } else if (p.pol && p.coordinates && p.coordinates.length > 0) {
                 const polNode = p.coordinates[0];
-                window.dispatchEvent(new CustomEvent('port-selected', { detail: { type: 'pol', name: p.pol, lat: polNode.lat, lon: polNode.lon, source: 'cerebro' } }));
+                const polInput = document.getElementById('port-pol');
+                if (polInput && typeof selectUniversalPortSuggestion === 'function') {
+                    selectUniversalPortSuggestion(polInput, { display_name: p.pol, lat: polNode.lat, lon: polNode.lon });
+                }
+                window.dispatchEvent(new CustomEvent('port:suggestion-selected', { detail: { role: 'POL', name: p.pol, lat: polNode.lat, lon: polNode.lon, source: 'cerebro' } }));
             }
+            // Sincronización POD
             if (payload.pod && payload.coordinates && payload.coordinates.length > 1) {
                 const podNode = payload.coordinates[payload.coordinates.length - 1];
-                window.dispatchEvent(new CustomEvent('port-selected', { detail: { type: 'pod', name: payload.pod, lat: podNode.lat, lon: podNode.lon, source: 'cerebro' } }));
+                const podInput = document.getElementById('port-pod');
+                if (podInput && typeof selectUniversalPortSuggestion === 'function') {
+                    selectUniversalPortSuggestion(podInput, { display_name: payload.pod, lat: podNode.lat, lon: podNode.lon });
+                }
+                window.dispatchEvent(new CustomEvent('port:suggestion-selected', { detail: { role: 'POD', name: payload.pod, lat: podNode.lat, lon: podNode.lon, source: 'cerebro' } }));
             } else if (p.pod && p.coordinates && p.coordinates.length > 1) {
                 const podNode = p.coordinates[p.coordinates.length - 1];
-                window.dispatchEvent(new CustomEvent('port-selected', { detail: { type: 'pod', name: p.pod, lat: podNode.lat, lon: podNode.lon, source: 'cerebro' } }));
+                const podInput = document.getElementById('port-pod');
+                if (podInput && typeof selectUniversalPortSuggestion === 'function') {
+                    selectUniversalPortSuggestion(podInput, { display_name: p.pod, lat: podNode.lat, lon: podNode.lon });
+                }
+                window.dispatchEvent(new CustomEvent('port:suggestion-selected', { detail: { role: 'POD', name: p.pod, lat: podNode.lat, lon: podNode.lon, source: 'cerebro' } }));
             }
             if (p.cargo_type || p.commodity || p.product || p.category) {
                 const comm = p.cargo_type || p.commodity || p.product || p.category;
